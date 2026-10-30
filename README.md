@@ -22,14 +22,16 @@
 <div align="center">
 
 <!-- SCREENSHOTS -->
-<img src="assets/screenshots/chat.svg" alt="聊天界面示意" width="760" />
+<img src="assets/screenshots/chat.jpg" alt="聊天界面实机截图" width="760" />
+<br/>
+<sub>实机截图（名字、消息、头像为演示内容）</sub>
 
 <br/><br/>
 
 <img src="assets/screenshots/settings.svg" alt="设置页示意" width="760" />
 
 <br/>
-<sub>示意图，非实机截图</sub>
+<sub>设置页为示意图</sub>
 
 </div>
 
