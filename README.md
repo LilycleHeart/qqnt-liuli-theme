@@ -31,7 +31,7 @@ manifest.json
 main/index.js        主进程：日志、自己的 uid（给 @ 高亮用）
 preload/index.js     暴露 selfUid 给界面
 renderer/index.js    注入 CSS、路由作用域、动态色板、布局修补、Markdown、@ 高亮、入场动画、设置页
-assets/              各层 CSS、MCU（mcu.js）、默认壁纸、图标
+assets/              各层 CSS、MCU（mcu.js）、图标
 ```
 
 ## 踩过的坑（改之前必看）
@@ -45,9 +45,15 @@ assets/              各层 CSS、MCU（mcu.js）、默认壁纸、图标
 7. **滚动时不要读 `innerText`**：会强制排版。DOM 观察回调要合并（150ms），只读 `textContent`。
 8. **消息数据**：`.message` 元素上的 `__VUE__[0].props.msgRecord`。
 
-## 关于默认壁纸
+## 壁纸
 
-`assets/wallpaper.jpg` 与 `assets/wallpaper.css` 里内联的是默认壁纸插画，版权归原作者，仅作主题演示。可以在设置页换成自己的图。
+插件不带默认壁纸。装好后在设置页「琉璃 · 电波推送」里选一张图，主题色会从这张图取。
+
+也可以放一张本地默认壁纸（不会被提交）：
+- `assets/wallpaper.jpg`：取色用
+- `assets/wallpaper.css`：内联成 base64 的 `#app::before` 背景（CSS 里不能用 `local://`，见坑 3）
+
+没有壁纸时取色回退到 `#1d9bf0`。
 
 ## 待办
 

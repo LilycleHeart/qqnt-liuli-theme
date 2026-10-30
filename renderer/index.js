@@ -9,6 +9,9 @@ const ASSET_BASE = "local://profile/plugins/" + SLUG + "/assets/";
 const FILES = ["wallpaper.css", "qq-tokens.css", "palette.css", "liuli.css", "typography.css", "panel.css", "settings-page.css", "details.css", "no-dividers.css", "input-bar.css", "bubbles.css", "layout.css", "lists.css", "motion.css", "markdown.css"];
 const STYLE_ID = "liuli-dsh-theme";
 const WALLPAPER = ASSET_BASE + "wallpaper.jpg";
+// 默认壁纸不随插件发布：assets/wallpaper.css（内联壁纸）和 assets/wallpaper.jpg（取色用）
+// 都是可选的本地文件。没有时没有默认壁纸，取色回退 DEFAULT_SOURCE，在设置页选图即可。
+const OPTIONAL_FILES = new Set(["wallpaper.css"]);
 const DEFAULT_SOURCE = "#1d9bf0";
 
 /* ---------- 路由作用域 ---------- */
@@ -2039,7 +2042,11 @@ async function initPanel() {
     installRouteScope();
     try {
         const chunks = [];
-        for (const file of FILES) chunks.push(await loadText(file));
+        for (const file of FILES) {
+            // wallpaper.css 是可选的本地默认壁纸（不随仓库发布），没有就跳过
+            try { chunks.push(await loadText(file)); }
+            catch (e) { if (!OPTIONAL_FILES.has(file)) throw e; }
+        }
         ensureStyle().textContent = chunks.join("\n");
         document.body.dataset.liuliTheme = "dsh";
         llApplyFont();

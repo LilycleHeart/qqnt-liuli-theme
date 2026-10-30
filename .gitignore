@@ -2,3 +2,6 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+# 本地默认壁纸，不发布
+assets/wallpaper.css
+assets/wallpaper.jpg
