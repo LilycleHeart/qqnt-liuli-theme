@@ -1,0 +1,179 @@
+/* ============================================================
+ * 琉璃 · 动效（2026-10-29）
+ * ------------------------------------------------------------
+ * 统一一套缓动与时长，和 DSH 的手感一致：
+ *   --ll-ease        出现/展开：cubic-bezier(0.22, 1, 0.36, 1)
+ *   --ll-ease-spring 点按回弹：cubic-bezier(0.3, 1.35, 0.45, 1)
+ * 新消息出现、切换会话的动画在 renderer（llMotionPass）里用 WAAPI 做，
+ * 这里只放纯 CSS 能完成的：弹层入场、按钮按压、聚焦光晕、工具栏错落展开。
+ * prefers-reduced-motion 时全部关闭。
+ * ============================================================ */
+body {
+  --ll-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ll-ease-spring: cubic-bezier(0.3, 1.35, 0.45, 1);
+  --ll-dur-fast: 140ms;
+  --ll-dur: 220ms;
+}
+
+/* ── 1. 弹层入场：右键菜单、下拉、对话框、提示、资料卡等 ── */
+@keyframes liuli-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes liuli-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+body .q-context-sub-menu__container,
+body .q-menu,
+body .q-pulldown-menu .q-pulldown-menu-wrapper,
+body .pulldown-menu,
+body .q-tooltips__content,
+body .q-tooltips-v2,
+body .sidebar-tooltips__content,
+body .menu-stickers-panel,
+body .q-float-card {
+  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) both;
+  transform-origin: top left;
+}
+/* 右键菜单只淡入：位移/缩放动画会让父菜单变成内嵌 fixed 子菜单的定位参照（见 layout.css） */
+body .q-context-menu:not(.is-pure) {
+  animation: liuli-fade-in var(--ll-dur) var(--ll-ease) both;
+}
+/* @ 面板、快捷表情面板：QQ 用 translateY(-100%) 把它们顶到输入框上方，
+ * 动画终点不能是 transform:none（fill:both 会盖掉定位，面板掉到输入框上）。 */
+@keyframes liuli-pop-up-anchored {
+  from { opacity: 0; transform: translateY(calc(-100% + 6px)) scale(0.96); }
+  to { opacity: 1; transform: translateY(-100%); }
+}
+body .editor-at-panel,
+body .editor-qqface-short-panel {
+  animation: liuli-pop-up-anchored var(--ll-dur) var(--ll-ease) both;
+  transform-origin: bottom left;
+}
+body .q-popup__main,
+body .q-dialog-main,
+body .form-modal {
+  animation: liuli-pop-in 260ms var(--ll-ease) both;
+  transform-origin: center;
+}
+body .q-popup__modal {
+  animation: liuli-fade-in var(--ll-dur) ease both;
+}
+/* 表情面板：从输入框处向上长出来 */
+body .expression-panel .sticker-panel {
+  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) both;
+  transform-origin: bottom left;
+}
+
+/* ── 2. 工具栏面板：整体上浮 + 按钮错落出现 ── */
+@keyframes liuli-tool-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.85); }
+  to { opacity: 1; transform: none; }
+}
+body .chat-input-area > .chat-func-bar.liuli-expanded {
+  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) both;
+  transform-origin: bottom left;
+}
+body .chat-func-bar.liuli-expanded .icon-item {
+  animation: liuli-tool-in 260ms var(--ll-ease-spring) both;
+}
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(1) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(1) { animation-delay: 0ms; }
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(2) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(2) { animation-delay: 20ms; }
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(3) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(3) { animation-delay: 40ms; }
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(4) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(4) { animation-delay: 60ms; }
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(5) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(5) { animation-delay: 80ms; }
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(6) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(6) { animation-delay: 100ms; }
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(7) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(7) { animation-delay: 120ms; }
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > :nth-child(n+8) .icon-item,
+body .chat-func-bar.liuli-expanded .chat-func-bar__left > .icon-item:nth-child(n+8) { animation-delay: 140ms; }
+
+/* ── 3. 按压回弹：图标按钮、发送键、窗口按钮、导航 ── */
+body .icon-item,
+body #liuli-emoji-btn,
+body #liuli-func-toggle,
+body .chat-input-area > .operation .send-btn-wrap,
+body .window-control-area > *,
+body .tab-item,
+body .q-button,
+body .liuli-wp-btn,
+body .liuli-seg__item {
+  transition: background-color var(--ll-dur-fast) ease, color var(--ll-dur-fast) ease,
+    transform 180ms var(--ll-ease-spring) !important;
+}
+body .icon-item:active,
+body #liuli-emoji-btn:active,
+body #liuli-func-toggle:active,
+body .window-control-area > *:active,
+body .tab-item:active,
+body .q-button:active,
+body .liuli-wp-btn:active,
+body .liuli-seg__item:active {
+  transform: scale(0.9) !important;
+  transition-duration: 80ms !important;
+}
+body .chat-input-area > .operation .send-btn-wrap:active {
+  transform: scale(0.86) rotate(-12deg) !important;
+  transition-duration: 80ms !important;
+}
+
+/* ── 4. 输入卡聚焦：品牌色光晕缓缓亮起 ── */
+body .aio .chat-input-area {
+  transition: box-shadow var(--ll-dur) var(--ll-ease) !important;
+}
+body .aio .chat-input-area:focus-within {
+  box-shadow: 0 0 0 1px rgba(var(--ll-brand-rgb), 0.28),
+    0 0 18px rgba(var(--ll-brand-rgb), calc(var(--ll-glow-strength, 0.15) * 0.9 + 0.08)),
+    var(--ll-shadow) !important;
+}
+
+/* ── 5. 列表项悬停：底色淡入，不再生硬切换 ── */
+body .recent-contact-item,
+body .group-user,
+body .q-context-menu-item,
+body .sys-status-option,
+body .contact-list .q-collapse-item__header,
+body .nav-item {
+  transition: background-color 160ms ease, color 160ms ease !important;
+}
+
+/* ── 6. 侧栏导航选中：图标轻弹一下 ── */
+@keyframes liuli-tab-bounce {
+  0% { transform: scale(0.8); }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+body .tab-item-mask.is-active {
+  animation: liuli-tab-bounce 320ms var(--ll-ease-spring) both;
+}
+
+/* ── 7. 设置页琉璃面板入场 ── */
+body .liuli-embedded > * {
+  animation: liuli-pop-in 360ms var(--ll-ease) both;
+}
+body .liuli-embedded > :nth-child(2) { animation-delay: 20ms; }
+body .liuli-embedded > :nth-child(3) { animation-delay: 40ms; }
+body .liuli-embedded > :nth-child(4) { animation-delay: 60ms; }
+body .liuli-embedded > :nth-child(5) { animation-delay: 80ms; }
+body .liuli-embedded > :nth-child(6) { animation-delay: 100ms; }
+body .liuli-embedded > :nth-child(n+7) { animation-delay: 120ms; }
+
+/* ── 8. 独立窗口（群公告/状态/资料卡）内容入场 ── */
+body:not([data-liuli-scope="main"]):not([data-liuli-scope="boot"]) #app > *:not(.app-border) {
+  animation: liuli-fade-in 240ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body *, body *::before, body *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

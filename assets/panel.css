@@ -1,0 +1,597 @@
+/* ============================================================
+ * 琉璃 · 设置面板
+ * ------------------------------------------------------------
+ * 不用 QQ 自带的 #/setting/settings（实测直接改 hash 会让前端应用
+ * 卸载成白屏），改为自绘的浮动面板：
+ *   右下角齿轮按钮 → 右侧滑出玻璃卡片
+ * 可调：材质模糊 / 不透明度 / 泛光 / 阴影，全部实时写 CSS 变量。
+ * ============================================================ */
+
+/* ── 浮动开关按钮 ── */
+#liuli-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 84px;
+  z-index: 2147483001;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--ll-on-glass);
+  background: rgba(var(--ll-acrylic-high), 0.72);
+  backdrop-filter: var(--ll-material-blur);
+  -webkit-backdrop-filter: var(--ll-material-blur);
+  border: 1px solid rgba(var(--ll-specular), 0.12);
+  box-shadow: var(--ll-shadow);
+  transition: transform 160ms cubic-bezier(.2,0,0,1), background 160ms;
+  user-select: none;
+}
+#liuli-fab:hover {
+  background: rgba(var(--ll-acrylic-high), 0.9);
+  transform: scale(1.06);
+}
+#liuli-fab:active { transform: scale(0.96); }
+#liuli-fab svg { width: 20px; height: 20px; }
+
+/* ── 面板 ── */
+#liuli-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 138px;
+  z-index: 2147483002;
+  width: 328px;
+  max-height: calc(100vh - 200px);
+  overflow: auto;
+  padding: 20px;
+  border-radius: 20px;
+  color: var(--ll-on-glass);
+  background: rgba(var(--ll-acrylic-high), 0.86);
+  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  border: 1px solid rgba(var(--ll-specular), 0.1);
+  box-shadow: var(--ll-shadow-float);
+  font-family: "MiSans", "Inter", system-ui, sans-serif;
+  transform-origin: bottom right;
+  transition: opacity 180ms cubic-bezier(.2,0,0,1), transform 180ms cubic-bezier(.2,0,0,1);
+}
+#liuli-panel[hidden] {
+  display: block;
+  opacity: 0;
+  transform: scale(0.94) translateY(8px);
+  pointer-events: none;
+}
+
+/* 标题区 */
+.liuli-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.liuli-panel__title {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.15px;
+  line-height: 24px;
+}
+.liuli-panel__close {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: background 140ms, opacity 140ms;
+}
+.liuli-panel__close:hover { background: rgba(var(--ll-specular), 0.1); opacity: 1; }
+.liuli-panel__sub {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.2px;
+  color: var(--ll-on-glass-2);
+  margin-bottom: 18px;
+}
+
+/* 分组标题 */
+.liuli-panel__group {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ll-on-glass-3);
+  margin: 18px 0 10px;
+}
+
+/* ── 滑条 ── */
+.liuli-field { margin-bottom: 16px; }
+.liuli-field__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.liuli-field__label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  line-height: 18px;
+}
+.liuli-field__value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ll-brand);
+  letter-spacing: 0.2px;
+}
+.liuli-field__hint {
+  font-size: 11px;
+  line-height: 15px;
+  letter-spacing: 0.2px;
+  color: var(--ll-on-glass-3);
+  margin-top: 5px;
+}
+
+.liuli-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+}
+/* M3 滑条：细轨 + 大圆点 */
+.liuli-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--ll-brand) 0%,
+    var(--ll-brand) var(--liuli-pct, 50%),
+    rgba(var(--ll-on-glass-rgb), 0.14) var(--liuli-pct, 50%),
+    rgba(var(--ll-on-glass-rgb), 0.14) 100%
+  );
+}
+.liuli-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px; height: 16px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: var(--ll-brand);
+  border: 2px solid rgba(var(--ll-acrylic-high), 0.9);
+  box-shadow: 0 1px 4px rgba(var(--ll-shadow-rgb), 0.4);
+  transition: transform 120ms;
+}
+.liuli-slider:hover::-webkit-slider-thumb { transform: scale(1.12); }
+.liuli-slider:active::-webkit-slider-thumb { transform: scale(1.2); }
+
+/* ── 信息行（取色结果等）── */
+.liuli-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(var(--ll-on-glass-rgb), 0.06);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.2px;
+  color: var(--ll-on-glass-2);
+}
+.liuli-swatch {
+  width: 16px; height: 16px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(var(--ll-specular), 0.18);
+}
+
+/* ── 按下效果 / 轻提示 ── */
+#liuli-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%) translateY(10px);
+  z-index: 2147483003;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-family: "MiSans", "Inter", system-ui, sans-serif;
+  color: var(--ll-on-brand);
+  background: var(--ll-brand);
+  box-shadow: var(--ll-shadow-float);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms, transform 200ms;
+}
+#liuli-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── 设置页内嵌形态 ──
+ * 之前是裸铺在主区上：贴顶、无内边距、无卡片底、横跨全宽，
+ * 和 QQ 原生设置页的卡片式布局完全不搭。
+ * 这里补上内边距 + 限宽 + 卡片底，让它像一个真正的设置分区。 */
+.liuli-embedded {
+  display: block;
+  position: static;
+  width: auto !important;
+  box-sizing: border-box !important;
+
+  /* 布局必须对齐原生设置页：
+   *   宽度   —— 铺满主区（之前 max-width:760px 把卡片卡窄了 250px）
+   *   左右   —— 主区那圈留白（之前 margin 左右是 0，内容贴边）
+   *   顶部   —— 让开标题栏高度（之前 margin-top:12px 直接顶到窗口边） */
+  margin: 44px 24px 28px !important;
+  padding: 24px 30px 30px !important;
+  width: auto !important;
+  max-width: none !important;
+  min-height: 60vh !important;
+
+  /* 与原生卡片同一套语言：同色系深底（不是纯黑）+ 同半径 + 同描边 */
+  /* 右侧不再自加材质：设置页整层已有一层模糊（settingsPageBlur），
+   * 面板自己再套一层就是叠玻璃。这里只保留排版与边距。 */
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+
+  color: var(--ll-on-glass);
+  font-family: "MiSans", "Inter", system-ui, sans-serif;
+}
+
+/* 卡片内的首个子元素不要顶边 */
+.liuli-embedded > .liuli-panel__head { margin-top: 0; }
+
+/* 滑条区两侧留白，避免贴到卡片边缘 */
+.liuli-embedded .liuli-field { padding-right: 4px; }
+
+/* 取色信息条在卡片里也收一点宽度 */
+.liuli-embedded .liuli-info { max-width: 520px; }
+
+/* ── 悬浮齿轮已下线 ──
+ * 面板改成「设置页内嵌」形态后，不再需要右下角的浮动入口。
+ * 保留 DOM（旧代码仍会创建）但隐藏。 */
+#liuli-fab {
+  display: none !important;
+}
+
+
+
+
+
+
+
+/* ── 壁纸选择按钮 ── */
+.liuli-wp-row {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+
+.liuli-wp-btn {
+  flex: 1 1 auto;
+  padding: 9px 12px;
+  border-radius: var(--ll-radius-sm);
+  background: rgba(var(--ll-brand-rgb), 0.16);
+  color: var(--ll-brand);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 140ms ease;
+  border: 1px solid rgba(var(--ll-brand-rgb), 0.24);
+}
+
+.liuli-wp-btn:hover {
+  background: rgba(var(--ll-brand-rgb), 0.28);
+}
+
+.liuli-wp-btn--ghost {
+  background: rgba(var(--ll-on-glass-rgb), 0.07);
+  color: var(--ll-on-glass-2);
+  border-color: rgba(var(--ll-specular), 0.1);
+}
+
+.liuli-wp-btn--ghost:hover {
+  background: rgba(var(--ll-on-glass-rgb), 0.13);
+}
+
+
+/* ── 壁纸预览 ── */
+.liuli-wp-preview-row {
+  margin-bottom: 10px;
+}
+
+.liuli-wp-preview {
+  width: 100%;
+  height: 132px;
+  border-radius: var(--ll-radius-sm);
+  background-color: rgba(var(--ll-on-glass-rgb), 0.06);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 1px dashed rgba(var(--ll-specular), 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: var(--ll-on-glass-3);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 140ms ease;
+}
+
+.liuli-wp-preview:hover {
+  border-color: rgba(var(--ll-brand-rgb), 0.5);
+}
+
+/* ── 壁纸编辑器 ── */
+#liuli-wp-editor {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2147483010;
+  width: 520px;
+  max-width: calc(100vw - 64px);
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  padding: 22px 24px 20px;
+  border-radius: 20px;
+  background: rgba(var(--ll-acrylic-high), 0.96);
+  backdrop-filter: blur(30px) saturate(1.8);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  border: 1px solid rgba(var(--ll-specular), 0.1);
+  box-shadow: var(--ll-shadow-float);
+  color: var(--ll-on-glass);
+  font-family: "MiSans", "Inter", system-ui, sans-serif;
+}
+
+#liuli-wp-editor .liuli-panel__head {
+  margin-bottom: 14px;
+}
+
+/* 旧的缩放滑条画布已改为框选舞台，规则见下方 .liuli-wp-stage */
+
+
+/* ════════════════════════════════════════════════════════════
+ * 壁纸框选舞台
+ * ------------------------------------------------------------
+ * 选择态下容器按图片原比例展开，归一化坐标与图片 1:1 对应，
+ * 这样 createArea / resizeArea 用同一套坐标就不用做换算。
+ * ════════════════════════════════════════════════════════════ */
+.liuli-wp-stage {
+  position: relative;
+  width: 100%;
+  max-height: 52vh;
+  margin-bottom: 16px;
+  border-radius: var(--ll-radius-sm);
+  background-color: rgba(var(--ll-on-glass-rgb), 0.08);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 1px solid rgba(var(--ll-specular), 0.12);
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+  user-select: none;
+}
+
+/* 选框：选区外的遮罩用一个超大 box-shadow 铺出去，省一层 DOM */
+.liuli-wp-box {
+  position: absolute;
+  border: 1.5px solid var(--ll-brand);
+  border-radius: 4px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  cursor: move;
+  box-sizing: border-box;
+}
+
+/* 三分线：构图参考 */
+.liuli-wp-box::before {
+  content: "";
+  position: absolute;
+  left: 33.33%;
+  right: 33.33%;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  border-right: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.liuli-wp-box::after {
+  content: "";
+  position: absolute;
+  top: 33.33%;
+  bottom: 33.33%;
+  left: 0;
+  right: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+/* 四角手柄 */
+.liuli-wp-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--ll-brand);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-sizing: border-box;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.liuli-wp-handle--tl { left: -6px; top: -6px; cursor: nwse-resize; }
+.liuli-wp-handle--tr { right: -6px; top: -6px; cursor: nesw-resize; }
+.liuli-wp-handle--bl { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.liuli-wp-handle--br { right: -6px; bottom: -6px; cursor: nwse-resize; }
+
+/* ════════════════════════════════════════════════════════════
+ * 壁纸设置卡片（照搬 DSH LiuliAppearance.module.css）
+ * ════════════════════════════════════════════════════════════ */
+.liuli-wp-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: var(--ll-radius);
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-material-opacity));
+  backdrop-filter: var(--ll-material-blur);
+  -webkit-backdrop-filter: var(--ll-material-blur);
+}
+.liuli-wp-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ll-on-glass-2);
+}
+.liuli-wp-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.liuli-wp-filename {
+  font-size: 12px;
+  color: var(--ll-on-glass-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.liuli-btn {
+  appearance: none;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+.liuli-btn:disabled { opacity: 0.45; cursor: default; }
+.liuli-btn--primary {
+  background: var(--ll-brand);
+  color: var(--ll-on-brand);
+}
+.liuli-btn--primary:hover:not(:disabled) { background: var(--ll-brand-hover, var(--ll-brand)); }
+.liuli-btn--ghost {
+  background: transparent;
+  color: var(--ll-on-glass);
+  border-color: rgba(var(--ll-on-glass-rgb), 0.18);
+}
+.liuli-btn--ghost:hover:not(:disabled) { background: rgba(var(--ll-brand-rgb), 0.1); }
+
+.liuli-wp-fit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--ll-on-glass);
+}
+.liuli-mode-row { margin: 14px 0 4px; }
+.liuli-seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 12px;
+  background: rgba(var(--ll-on-glass-rgb), 0.08);
+}
+.liuli-seg__item {
+  appearance: none;
+  border: none;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ll-on-glass-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.liuli-seg__item:hover { color: var(--ll-on-glass); }
+.liuli-seg__item.is-active {
+  background: var(--ll-primary-container, rgba(var(--ll-brand-rgb), 0.24));
+  color: var(--ll-on-primary-container, var(--ll-on-glass));
+}
+
+.liuli-wp-preview-host { display: flex; }
+.liuli-wp-stage2,
+.liuli-wp-context {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--ll-radius-sm);
+  background: #000;
+  touch-action: none;
+}
+.liuli-wp-context.is-selecting {
+  cursor: crosshair;
+  outline: 1.5px solid var(--ll-brand);
+}
+.liuli-wp-effect,
+.liuli-wp-full {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+}
+.liuli-wp-full { background-size: 100% 100%; }
+.liuli-wp-effect::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--ll-scrim-rgb), var(--ll-wallpaper-dim, 0.18));
+}
+.liuli-wp-crop {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--ll-brand);
+  background: rgba(var(--ll-brand-rgb), 0.12);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+  cursor: move;
+}
+.liuli-wp-crop--static { pointer-events: none; }
+.liuli-wp-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--ll-brand);
+  background: var(--ll-app-bg, #fff);
+  border-radius: 2px;
+}
+.liuli-wp-handle--tl { top: -4px; left: -4px; cursor: nwse-resize; }
+.liuli-wp-handle--tr { top: -4px; right: -4px; cursor: nesw-resize; }
+.liuli-wp-handle--bl { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.liuli-wp-handle--br { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.liuli-wp-note {
+  font-size: 12px;
+  color: var(--ll-warn, var(--ll-on-glass-3));
+}
+
+/* 明暗切换：DSH 的圆形遮罩过渡 */
+::view-transition-old(root) { animation: none; z-index: 1; }
+::view-transition-new(root) {
+  z-index: 2;
+  animation: liuli-vt-circle 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes liuli-vt-circle {
+  from { clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%)); }
+  to { clip-path: circle(var(--vt-r, 150%) at var(--vt-x, 50%) var(--vt-y, 50%)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root) { animation: none; }
+}

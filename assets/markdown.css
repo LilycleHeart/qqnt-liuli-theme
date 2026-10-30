@@ -1,0 +1,102 @@
+/* ============================================================
+ * 琉璃 · Markdown 行内渲染（移植自 BetterQQNT 的 .inline-md）
+ * 对应 renderer/index.js 里的 llMarkdownPass()
+ * ============================================================ */
+.ll-inline-md .text-normal code {
+  margin: 0 2px;
+  padding: 1px 5px;
+  font-family: "Cascadia Code", Consolas, "MiSans", monospace !important;
+  font-size: 0.92em;
+  border-radius: var(--ll-radius-sm, 6px);
+  background: rgba(var(--ll-specular), 0.14);
+  color: inherit;
+}
+
+.ll-inline-md .text-normal strong { font-weight: 600; }
+.ll-inline-md .text-normal em { font-style: italic; }
+.ll-inline-md .text-normal del { opacity: 0.7; }
+
+/* 剧透：模糊，悬停或按住时显示 */
+.ll-inline-md .text-normal .ll-spoiler {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(var(--ll-specular), 0.12);
+  filter: blur(4px);
+  transition: filter 120ms ease;
+  cursor: pointer;
+}
+.ll-inline-md .text-normal .ll-spoiler:hover,
+.ll-inline-md .text-normal .ll-spoiler:active {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ll-inline-md .text-normal .ll-spoiler { transition: none; }
+}
+
+
+/* ============================================================
+ * @ 高亮（renderer 的 llAtPass 写 data-ll-at）
+ *   other：@别人，品牌色
+ *   me：   @我 / @全体成员，暖橙色 + 淡底，一眼能看到
+ * ============================================================ */
+body {
+  --ll-at-me: #ffb057;
+  --ll-at-me-rgb: 255, 176, 87;
+}
+body[data-liuli-dark="0"] {
+  --ll-at-me: #b35c00;
+  --ll-at-me-rgb: 179, 92, 0;
+}
+.ml-item .text-element--at[data-ll-at="other"] {
+  color: var(--ll-brand) !important;
+  font-weight: 500;
+}
+.ml-item .text-element--at[data-ll-at="me"] {
+  color: var(--ll-at-me) !important;
+  font-weight: 600;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: rgba(var(--ll-at-me-rgb), 0.16);
+}
+
+
+/* ============================================================
+ * 名字颜色：统一用 MCU 从壁纸派生的 tertiary（第三色），和品牌色区分开
+ * 身份标签（群主/管理员）同色淡底。
+ * ============================================================ */
+.ml-item .msg-content-container .user-name,
+.ml-item .msg-content-container .user-name * {
+  color: var(--ll-tertiary, var(--ll-brand)) !important;
+}
+.ml-item .msg-content-container .user-name .q-tag,
+.ml-item .msg-content-container .user-name .group-member-label {
+  background: color-mix(in srgb, var(--ll-tertiary, var(--ll-brand)) 18%, transparent) !important;
+}
+/* ============================================================
+ * 消息入场：级联（renderer 的 llAnimateEnter 加 .ll-enter 和 --ll-enter-i）
+ * 只动 opacity / transform，不碰排版。
+ * ============================================================ */
+@keyframes ll-msg-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.ml-item.ll-enter {
+  animation: ll-msg-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--ll-enter-i, 0) * 28ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ml-item.ll-enter { animation: none; }
+}
+
+
+/* ============================================================
+ * 字体（renderer 的 llApplyFont 写 --ll-font 和 data-ll-font）
+ * 没选字体时整段不生效，保持原来的 MiSans。
+ * 代码块、图标字体不换：前者规则选择器更具体，后者 QQ 用的是 SVG。
+ * ============================================================ */
+body[data-ll-font],
+body[data-ll-font] *:not(code):not(pre):not(kbd) {
+  font-family: var(--ll-font) !important;
+}

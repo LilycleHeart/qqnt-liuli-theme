@@ -1,0 +1,207 @@
+/* ============================================================
+ * 琉璃 · QQ token 全量语义化
+ * ------------------------------------------------------------
+ * QQ 的每个容器背景、文字、图标、标签、气泡、描边都来自它自己的
+ * token 变量（#color-tokens / #mix-tokens 里共 360 个）。上一版只覆盖
+ * 了 --bg_*（15 个），所以页面颜色仍然五花八门。
+ *
+ * 本文件把 96 个语义 token 全部按 M3 角色重新分配，
+ * 值全部指向 --ll-*（由 MCU 从壁纸源色实时派生）：
+ *
+ *   text_primary      → onSurface
+ *   text_secondary    → onSurfaceVariant
+ *   text_tertiary     → outlineVariant
+ *   text_link / brand → primary
+ *   tag_blue          → primary / primaryContainer
+ *   tag_orange        → tertiary
+ *   tag_red / error   → error
+ *   feedback_success  → tertiary
+ *   bubble_*          → acrylic / primary 容器
+ *   border / divider  → outlineVariant
+ *   overlay_*         → onSurface 低 alpha
+ *
+ * ─── 为什么放 body 而不是 :root ───────────────────────────
+ * QQ 在 :root 定义这些值；body 特异性更高，且能覆盖
+ * body[q-theme="dark"] 下的暗色定义。
+ * ============================================================ */
+
+body {
+  /* ── 文字 ── */
+  --text_primary: var(--ll-on-glass) !important;
+  --text_primary_light: var(--ll-on-glass-2) !important;
+  --text_secondary: var(--ll-on-glass-2) !important;
+  --text_secondary_01: var(--ll-on-glass-2) !important;
+  --text_secondary_02: var(--ll-on-glass-3) !important;
+  --text_tertiary: var(--ll-on-glass-3) !important; /* 原来是 on-glass-4（outlineVariant，描边色），三级文字几乎看不见 */
+  --text_link: var(--ll-brand) !important;
+  --text_black: var(--ll-on-glass) !important;
+  /* 反色文字（在品牌色实底上）保持白 */
+  --text_white: var(--ll-on-brand) !important;
+  --text_allwhite_primary: var(--ll-on-brand) !important;
+
+  /* ── 图标 ── */
+  --icon_primary: var(--ll-on-glass) !important;
+  --icon_black: var(--ll-on-glass) !important;
+  --icon_secondary: var(--ll-on-glass-2) !important;
+  --icon_secondary_01: var(--ll-on-glass-2) !important;
+  --icon_secondary_02: var(--ll-on-glass-3) !important;
+  --icon_tertiary: var(--ll-on-glass-3) !important;
+  --icon_brand: var(--ll-brand) !important;
+  --icon_red: var(--ll-danger) !important;
+  --icon_success: var(--ll-success) !important;
+  --icon_warning: var(--ll-warn) !important;
+  --icon_error: var(--ll-danger) !important;
+  --icon_white: var(--ll-on-brand) !important;
+
+  /* ── 品牌 ── */
+  --brand_standard: var(--ll-brand) !important;
+  --brand_text: var(--ll-brand) !important;
+  --brand_light: rgba(var(--ll-brand-rgb), 0.2) !important;
+  --on_brand_primary: var(--ll-on-brand) !important;
+  --on_brand_secondary: var(--ll-on-brand) !important;
+
+  /* ── 填充 ── */
+  --fill_standard_primary: rgba(var(--ll-on-glass-rgb), 0.2) !important;
+  --fill_standard_secondary: rgba(var(--ll-on-glass-rgb), 0.08) !important;
+  --fill_light_primary: transparent !important;
+  --fill_light_secondary: transparent !important;
+  --fill_search_light: rgba(var(--ll-on-glass-rgb), 0.1) !important;
+  --fill_search_dark: rgba(var(--ll-on-glass-rgb), 0.1) !important;
+
+  /* ── 描边与分隔 ── */
+  --border_primary: var(--ll-stroke-2) !important;
+  --border_standard: var(--ll-stroke-2) !important;
+  --border_secondary: var(--ll-stroke-2) !important;
+  --border_dark: var(--ll-stroke-1) !important;
+  --border_light: var(--ll-stroke-2) !important;
+  --border_white: transparent !important;
+  --divider_standard: var(--ll-stroke-2) !important;
+  --divider_dark: var(--ll-stroke-1) !important;
+  --divider_brand: var(--ll-brand-line) !important;
+
+  /* ── 交互遮罩 ── */
+  --overlay_hover: rgba(var(--ll-on-glass-rgb), 0.07) !important;
+  --overlay_active: rgba(var(--ll-on-glass-rgb), 0.12) !important;
+  --overlay_pressed: rgba(var(--ll-on-glass-rgb), 0.16) !important;
+  --overlay_top: rgba(var(--ll-on-glass-rgb), 0.06) !important;
+  --overlay_hover_brand: rgba(var(--ll-brand-rgb), 0.1) !important;
+  --overlay_active_brand: var(--ll-brand) !important;
+  --overlay_pressed_brand: rgba(var(--ll-brand-rgb), 0.24) !important;
+  --overlay_allblack_hover: rgba(var(--ll-specular), 0.06) !important;
+  --overlay_allblack_pressed: rgba(var(--ll-specular), 0.1) !important;
+  --overlay_mask_standard: rgba(var(--ll-scrim-rgb), 0.5) !important;
+  --overlay_mask_dark: rgba(var(--ll-scrim-rgb), 0.6) !important;
+  --overlay_mask_aio: transparent !important;
+
+  /* ── 列表悬停 ── */
+  --hover-list: rgba(var(--ll-on-glass-rgb), 0.07) !important;
+  --press-list: rgba(var(--ll-on-glass-rgb), 0.12) !important;
+  --hover-icon: rgba(var(--ll-on-glass-rgb), 0.08) !important;
+  --press-icon: rgba(var(--ll-on-glass-rgb), 0.14) !important;
+  --hover-link: var(--ll-brand-hover) !important;
+  --press-link: var(--ll-brand-pressed) !important;
+
+  /* ── 背景：全部打透，让壁纸透出 ── */
+  --bg_grey_standard: transparent !important;
+  --bg_white: transparent !important;
+  --bg_list: transparent !important;
+  --bg_nav: transparent !important;
+  --bg_nav_secondary: transparent !important;
+  --bg_bottom_standard: transparent !important;
+  --bg_bottom_light: transparent !important;
+  --bg_middle_standard: transparent !important;
+  --bg_middle_light: transparent !important;
+  --bg_top_standard: transparent !important;
+  --bg_top_light: transparent !important;
+  --bg_aio_1: transparent !important;
+  --bg_aio_2: transparent !important;
+  --bg_aio_3: transparent !important;
+  --bg_aio_4: transparent !important;
+  --sidebar_win: transparent !important;
+  --sidebar_mac: transparent !important;
+
+  /* ── 旧式 background-0x ── */
+  --background-01: transparent !important;
+  --background-02: transparent !important;
+  --background-03: transparent !important;
+  --background-04: transparent !important;
+  --background-05: transparent !important;
+  --background-dialogue: transparent !important;
+
+  /* ── 气泡：亚克力 / 品牌容器 ── */
+  --bubble_guest: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
+  --bubble_guest_text: var(--ll-on-glass) !important;
+  --bubble_host: rgba(var(--ll-brand-rgb), 0.22) !important;
+  --bubble_host_text: var(--ll-on-glass) !important;
+  --bubble_host_1: var(--ll-brand) !important;
+  --bubble_host_2: var(--ll-brand) !important;
+  --on_bubble_host_text: var(--ll-on-glass) !important;
+  --on_bg_text: var(--ll-on-glass-2) !important;
+
+  /* ── 徽标 ── */
+  --badge-brand: var(--ll-brand) !important;
+  --badge-red: var(--ll-danger) !important;
+  --badge-grey: var(--ll-on-glass-2) !important;
+
+  /* ── 状态反馈 ── */
+  --feedback_error: var(--ll-danger) !important;
+  --feedback_success: var(--ll-success) !important;
+  --feedback_warning: var(--ll-warn) !important;
+  --el-color-success: var(--ll-success) !important;
+  --el-color-warning: var(--ll-warn) !important;
+  --el-color-danger: var(--ll-danger) !important;
+  --el-color-error: var(--ll-danger) !important;
+
+  /* ── 标签：按 M3 container / onContainer 配对 ── */
+  --tag_blue_bg: rgba(var(--ll-brand-rgb), 0.2) !important;
+  --tag_blue_text: var(--ll-brand) !important;
+  --tag_blue: rgba(var(--ll-brand-rgb), 0.2) !important;
+  --tag_orange_bg: rgba(var(--ll-brand-rgb), 0.14) !important;
+  --tag_orange_text: var(--ll-tertiary) !important;
+  --tag_purple_bg: rgba(var(--ll-brand-rgb), 0.12) !important;
+  --tag_purple_text: var(--ll-secondary) !important;
+  --tag_red_bg: rgba(var(--ll-danger-rgb), 0.2) !important;
+  --tag_red_text: var(--ll-danger) !important;
+  --tag_red: rgba(var(--ll-danger-rgb), 0.2) !important;
+  --tag_gray_bg: rgba(var(--ll-on-glass-rgb), 0.12) !important;
+  --tag_gray_text: var(--ll-on-glass-2) !important;
+  --tag_sage_green_bg: rgba(var(--ll-on-glass-rgb), 0.12) !important;
+  --tag_sage_green_text: var(--ll-on-glass-2) !important;
+
+  /* ── 按钮 ── */
+  --button-primary-default: var(--ll-brand) !important;
+  --button-primary-hover: var(--ll-brand-hover) !important;
+  --button-primary-pressed: var(--ll-brand-pressed) !important;
+  --button-primary-disable: rgba(var(--ll-brand-rgb), 0.32) !important;
+  --button-secondary-default: rgba(var(--ll-on-glass-rgb), 0.1) !important;
+  --button-secondary-hover: rgba(var(--ll-on-glass-rgb), 0.16) !important;
+  --button-secondary-pressed: rgba(var(--ll-on-glass-rgb), 0.22) !important;
+  --button-secondary-disable: rgba(var(--ll-on-glass-rgb), 0.05) !important;
+  --button-white-default: rgba(var(--ll-specular), 0.12) !important;
+  --button-white-hover: rgba(var(--ll-specular), 0.18) !important;
+  --button-white-pressed: rgba(var(--ll-specular), 0.24) !important;
+  --button-white-disable: rgba(var(--ll-specular), 0.06) !important;
+  --button-error-default: var(--ll-danger) !important;
+  --button-error-hover: var(--ll-danger-bg) !important;
+  --button-error-pressed: var(--ll-danger) !important;
+  --button-error-disable: rgba(var(--ll-danger-rgb), 0.32) !important;
+
+  /* ── 线 ── */
+  --line_light: var(--ll-stroke-2) !important;
+  --line_standard: var(--ll-stroke-2) !important;
+  --line_dark: var(--ll-stroke-1) !important;
+  --line_brand: var(--ll-brand-line) !important;
+}
+
+/* 暗色下只需调整「反色」语义：亮底 → 暗字，暗底 → 亮字 */
+body[q-theme="dark"],
+body.q-theme-tokens-dark {
+  --text_black: var(--ll-on-glass) !important;
+  --icon_black: var(--ll-on-glass) !important;
+  --bubble_guest: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
+  --bubble_guest_text: var(--ll-on-glass) !important;
+  --bubble_host: rgba(var(--ll-brand-rgb), 0.22) !important;
+  --bubble_host_text: var(--ll-on-glass) !important;
+  --on_bubble_host_text: var(--ll-on-glass) !important;
+  --overlay_mask_standard: rgba(var(--ll-scrim-rgb), 0.55) !important;
+}

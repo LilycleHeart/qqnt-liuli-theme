@@ -1,0 +1,120 @@
+/* ============================================================
+ * 琉璃 · 去分割线（竖线 / 横线）
+ * ------------------------------------------------------------
+ * 排查结论：这两条线在 DOM 里找不到对应元素（无 border、无伪元素、
+ * 无细条 div）。真正原因是**两个玻璃层之间留了缝**：
+ *   .recent-contact 有外边距、各承载层各自圆角 → 中间漏出壁纸，
+ *   在深色玻璃之间就表现为一条 1~2px 的深线。
+ * 另外 .resize-handler（5px 宽的拖动条）本身也可能画出可见边。
+ * ============================================================ */
+
+/* 1. 拖动条：保留拖拽功能，视觉上彻底透明 */
+.resize-handler,
+.resize-handler.ew,
+.resize-handler.ns,
+[class*="resize-handler"] {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+/* 悬停时给一点点提示，避免用户找不到拖拽位置 */
+.resize-handler:hover,
+[class*="resize-handler"]:hover {
+  opacity: 1 !important;
+  background: rgba(var(--ll-brand-rgb), 0.25) !important;
+}
+
+/* 2. 玻璃层之间不留缝：缝隙会漏出壁纸，形成"假分割线" */
+.recent-contact {
+  margin: 0 !important;
+}
+
+.chat-header {
+  margin-bottom: 0 !important;
+}
+
+.chat-input-area {
+  margin: 0 !important;
+}
+
+.group-box {
+  margin: 0 !important;
+}
+
+/* 3. 所有中间容器：去掉任何边框、描边、投影 */
+.two-col-layout,
+.two-col-layout__aside,
+.two-col-layout__main,
+.container-content,
+.message-panel,
+.aio,
+.group-chat,
+.chat-msg-area,
+.container-content-view {
+  border: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* 4. 承载层之间如果是相邻的，让圆角贴合而不是露出缝隙 */
+.two-col-layout__aside,
+.two-col-layout__main {
+  border-radius: 0 !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 5. 真正的两条分隔线（实测找到）
+ * ------------------------------------------------------------
+ * 横线：.chat-header 的 box-shadow 里藏了一条 QQ 内阴影线
+ *       box-shadow: rgb(81,67,71) 0px -1px 0px 0px inset;
+ * 竖线：.recent-contact 的 box-shadow（我给的 --ll-shadow）
+ *       0 2px 10px rgba(0,0,0,.26) 在右边缘形成暗边。
+ *
+ * 两个都清掉。泛光也一并去掉 —— 这两处不需要外发光，
+ * 留着只会让边缘更脏。
+ * ════════════════════════════════════════════════════════════ */
+.chat-header {
+  /* 横线是 QQ 自己 inset 0 -1px 的内阴影，标题栏本来也不需要泛光 */
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* 泛光只在"独立浮起来"的层上保留，相邻拼接的层一律去掉。
+ *
+ * 原因：相邻玻璃层之间本来就有 8~12px 间隙，泛光（0 0 20px 四周均匀发光）
+ * 会渗进这条缝里，在壁纸上叠出一道 2~4px 的深色带 —— 就是用户看到的
+ * "左栏和会话列表之间那道痕，时隐时现"（滚动/重绘时跟着闪）。
+ *
+ * 现在：
+ *   .group-box（群成员面板，独立浮层）→ 保留泛光
+ *   .recent-contact / .container-sidebar / .chat-input-area（相邻拼接）→ 去掉泛光
+ */
+.group-box,
+.user-profile-card:not(.topbar-profile) {
+  box-shadow:
+    0 0 calc(8px + 26px * var(--ll-glow-strength, 0.15))
+        rgba(var(--ll-brand-rgb), calc(var(--ll-glow-strength, 0.15) * 0.55)) !important;
+}
+
+/* 相邻拼接的层：完全不要外发光，避免在接缝处留下暗带 */
+.recent-contact,
+.container-sidebar,
+.chat-input-area {
+  box-shadow: none !important;
+}
+
+/* 接缝本身也不要留空隙，否则壁纸会从缝里透出来变成线 */
+.recent-contact {
+  margin-left: 6px !important;
+  margin-right: 0 !important;
+}
+
+.container-sidebar {
+  margin-right: 0 !important;
+}
+

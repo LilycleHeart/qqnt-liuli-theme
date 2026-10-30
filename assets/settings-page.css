@@ -1,0 +1,127 @@
+/* ============================================================
+ * 琉璃 · 设置页（基于实测 DOM）
+ * ------------------------------------------------------------
+ * 真实结构（读自设置页窗口 #/setting/settings/common）：
+ *   #app → DIV → .setting-layout
+ *                    ├ .setting-tab → .nav-bar → .nav-item / .nav-item-active
+ *                    └ .setting-main → .setting-title
+ *
+ * 目标：整层一层模糊，内部导航与内容都透明。
+ * ============================================================ */
+
+/* 1. 整层：唯一一层模糊 */
+.setting-layout {
+  /* 底色必须跟随 --ll-material-opacity，否则设置面板里的"不透明度"滑条
+   * 改不到设置页（之前这里写死 0.66，拖动滑条这个页面纹丝不动）。
+   * +0.16 是给壁纸亮度留的一点余量，保证浅色文字可读。 */
+  /* 必须与主界面的承载层用同一个 alpha，否则同一个滑条在两处观感不同 */
+  background: rgba(var(--ll-acrylic), var(--ll-material-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+}
+
+/* 2. 内部：全部透明，去掉叠玻璃 */
+.setting-tab,
+.setting-main,
+.nav-bar,
+.setting-layout > div {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* 3. 导航项 */
+.nav-item {
+  border-radius: var(--ll-radius-sm) !important;
+  background: transparent !important;
+  border: none !important;
+  transition: background-color 160ms ease !important;
+}
+.nav-item:hover { background: rgba(var(--ll-specular), 0.07) !important; }
+.nav-item-active {
+  background: rgba(var(--ll-brand-rgb), 0.18) !important;
+  color: var(--ll-on-glass) !important;
+}
+.nav-item .name {
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 20px !important;
+  color: var(--ll-on-glass-2) !important;
+}
+.nav-item-active .name {
+  color: var(--ll-on-glass) !important;
+  font-weight: 500 !important;
+}
+
+/* 4. 内容区 */
+.setting-title {
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  line-height: 24px !important;
+  letter-spacing: 0.15px !important;
+  color: var(--ll-on-glass) !important;
+  background: transparent !important;
+}
+
+/* ── 去导航分隔线 ──
+ * M3 用间距和表面色区分，不用 1px 线。QQ 的导航项之间是用 border/伪元素画的。 */
+.nav-item,
+.nav-bar,
+.setting-tab,
+.setting-main {
+  border: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+.nav-item::before,
+.nav-item::after,
+.nav-bar::before,
+.nav-bar::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* 导航项之间用高度呼吸感代替分隔线 */
+.nav-item + .nav-item {
+  margin-top: 2px !important;
+}
+
+/* 右侧设置项之间的线也去掉 */
+.setting-main [class*="item"],
+.setting-main [class*="row"],
+.setting-main [class*="cell"] {
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* 文字加深一档，保证在模糊壁纸上的对比度 */
+.setting-main,
+.setting-main [class*="label"],
+.setting-main [class*="name"],
+.setting-main [class*="title"] {
+  color: var(--ll-on-glass) !important;
+}
+
+.setting-main [class*="desc"],
+.setting-main [class*="hint"] {
+  color: var(--ll-on-glass-2) !important;
+}
+
+
+/* ── 设置页主区可滚动（2026-10-29）──
+ * 实测：.setting-main 是 overflow:visible，上层 #app 是 overflow:hidden，
+ * 琉璃面板高出窗口的部分（壁纸按钮、恢复默认）被裁掉，也滚不动。
+ * 主区自己做滚动容器；底部留白让最后一行不贴窗口边。 */
+.setting-layout .setting-main {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+.liuli-embedded {
+  min-height: 0 !important;
+  margin-bottom: 32px !important;
+}
