@@ -51,11 +51,19 @@
 
 ## 📦 安装
 
-### 第一步：装好 LiteLoaderQQNT
+### 方式一：一键安装器（推荐）
+
+到 **[Releases](https://github.com/LilycleHeart/qqnt-liuli-theme/releases/latest)** 下载 `QQNT-LiteLoader-Installer.exe`，双击点「一键安装」，它会自动装好 LiteLoaderQQNT + 本主题并重开 QQ。「还原」按钮可一键回退。
+
+> 安装器只装 **LiteLoader + 琉璃主题**。功能插件（防撤回等）见 [QQ 增强](https://github.com/LilycleHeart/qqnt-enhance)。
+
+### 方式二：手动安装
+
+**第一步：装好 LiteLoaderQQNT**
 
 本插件是标准 [**LiteLoaderQQNT**](https://github.com/LiteLoaderQQNT/LiteLoaderQQNT) 插件，先按官方方式让 QQ 加载 LiteLoader。
 
-QQ 9.9.x 会校验自身文件，直接改会被拦。用**文件校验补丁**绕过（本仓库 `docs/patch/` 下，或向作者索取）：
+QQ 9.9.x 会校验自身文件，直接改会被拦。用**文件校验补丁**绕过（向作者索取，或从上面的安装器里解出）：
 
 | 文件 | 放到哪里 | 作用 |
 |---|---|---|
@@ -64,13 +72,11 @@ QQ 9.9.x 会校验自身文件，直接改会被拦。用**文件校验补丁**�
 
 > **先备份**原来的 `dbghelp.dll` 和 `QQ.exe` 再覆盖。完整步骤见 [LiteLoaderQQNT 官方文档](https://liteloaderqqnt.github.io/guide/install.html)。
 
-### 第二步：装插件
+**第二步：装插件**
 
 1. 把本仓库放到 `LiteLoaderQQNT\plugins\liuli-dsh-theme\`
 2. 重启 QQ
 3. QQ 设置左栏找到「**琉璃**」，选一张壁纸，主题色就从它取
-
-> 💡 **懒人包**：仓库还提供一个一键安装器（exe），双击点「一键安装」自动做完上面所有步骤。见 `installer/`。
 
 ### 兼容性提示
 
