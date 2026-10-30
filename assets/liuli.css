@@ -336,17 +336,28 @@ a,
   height: 8px;
 }
 
+/* 滚动条用主题色（品牌色，随壁纸取色变） */
 ::-webkit-scrollbar-thumb {
-  background: rgba(var(--ll-acrylic-high), 0.6);
+  background: color-mix(in srgb, var(--ll-brand) 55%, transparent);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--ll-acrylic-high), 0.85);
+  background: color-mix(in srgb, var(--ll-brand) 85%, transparent);
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* 消息区的滚动条不是原生的：QQ 用 .v-scrollbar-thumb 的内阴影画成灰色 */
+.v-scrollbar-thumb {
+  box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 55%, transparent) !important;
+  border-radius: 999px !important;
+}
+.v-scrollbar-thumb:hover,
+.v-scrollbar-track:hover .v-scrollbar-thumb {
+  box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 85%, transparent) !important;
 }
 
 /* ════════════════════════════════════════════════════════════
