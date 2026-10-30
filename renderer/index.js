@@ -453,7 +453,7 @@ function keepWindowControlsVisible() {
  * 只给那一层加材质，并把中间层的材质清掉。
  */
 const NAV_LABELS = ["通用", "消息通知", "存储管理", "快捷键", "权限设置", "登录设置",
-    "账号绑定与授权", "超级调色盘", "关于QQ", "琉璃 · 电波推送", "LiteLoaderQQNT"];
+    "账号绑定与授权", "超级调色盘", "关于QQ", "琉璃", "LiteLoaderQQNT"];
 
 function applyNavCard() {
     if (!location.hash || location.hash.indexOf("#/setting") !== 0) return;
@@ -527,7 +527,7 @@ function applyNavCard() {
  * 内部容器一律不动 —— 保留 QQ 自己的深色卡片，保证文字可读。
  */
 const SETTINGS_NAV_LABELS = ["通用", "消息通知", "存储管理", "快捷键", "权限设置",
-    "登录设置", "账号绑定与授权", "超级调色盘", "关于QQ", "琉璃 · 电波推送", "LiteLoaderQQNT"];
+    "登录设置", "账号绑定与授权", "超级调色盘", "关于QQ", "琉璃", "LiteLoaderQQNT"];
 
 function settingsPageBlur() {
     if (!location.hash || location.hash.indexOf("#/setting") !== 0) return;
@@ -1919,7 +1919,7 @@ function buildPanelContent(host, settings) {
 
     const head = document.createElement("div");
     head.className = "liuli-panel__head";
-    head.innerHTML = '<div class="liuli-panel__title">琉璃 · 电波推送</div>';
+    head.innerHTML = '<div class="liuli-panel__title">琉璃</div>';
     host.appendChild(head);
 
     const sub = document.createElement("div");

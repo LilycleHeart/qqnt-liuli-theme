@@ -1,4 +1,4 @@
-# 琉璃 · 电波推送 — QQNT 主题插件（LiteLoaderQQNT）
+# 琉璃 — QQNT 主题插件（LiteLoaderQQNT）
 
 把 [dsh-liuli-ui-enhance](https://github.com/LilycleHeart/dsh-liuli-ui-enhance)（DSH 客户端的琉璃 UI）的设计语言搬到 QQNT 上，做成标准 LiteLoaderQQNT 插件。不依赖 BetterQQNT。
 
@@ -14,7 +14,7 @@
 - **名字颜色**：统一用 MCU 派生的第三色（tertiary）
 - **消息入场**：打开会话时级联浮入，新消息单条浮入（遵守系统「减少动画」）
 - **自定义字体**：设置页里选本机已安装的字体
-- **设置页**：QQ 设置左栏「琉璃 · 电波推送」：材质模糊/透明度/泛光/阴影/壁纸压暗、自定义壁纸、明暗模式、Markdown 开关、字体
+- **设置页**：QQ 设置左栏「琉璃」：材质模糊/透明度/泛光/阴影/壁纸压暗、自定义壁纸、明暗模式、Markdown 开关、字体
 
 ## 安装
 
@@ -47,7 +47,7 @@ assets/              各层 CSS、MCU（mcu.js）、图标
 
 ## 壁纸
 
-插件不带默认壁纸。装好后在设置页「琉璃 · 电波推送」里选一张图，主题色会从这张图取。
+插件不带默认壁纸。装好后在设置页「琉璃」里选一张图，主题色会从这张图取。
 
 也可以放一张本地默认壁纸（不会被提交）：
 - `assets/wallpaper.jpg`：取色用
