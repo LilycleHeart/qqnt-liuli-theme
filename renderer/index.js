@@ -25,8 +25,9 @@ function installRouteScope() {
         const path = location.pathname || "";
         if (body.dataset.hash !== hash) body.dataset.hash = hash;
         if (body.dataset.pathname !== path) body.dataset.pathname = path;
-        body.style.setProperty("--hash", hash);
-        body.style.setProperty("--pathname", path);
+        // 值不变就不写：body 上的自定义属性一写，整页样式都要重算
+        if (body.style.getPropertyValue("--hash") !== hash) body.style.setProperty("--hash", hash);
+        if (body.style.getPropertyValue("--pathname") !== path) body.style.setProperty("--pathname", path);
         const scope = hash.indexOf("#/setting") === 0 ? "setting"
             : hash.indexOf("#/main") === 0 ? "main"
             : (hash === "" || hash === "#/blank") ? "boot" : "aux";
@@ -851,22 +852,24 @@ function stickAvatars() {
         var vp = document.querySelector(".chat-msg-area__vlist") || document.querySelector(".chat-msg-area");
         if (!vp) return;
         var vr = vp.getBoundingClientRect();
-        var list = document.querySelectorAll(".message-container");
+        var list = vp.querySelectorAll(".message-container");
         var groupTop = null;
+        // 性能：先把要读的位置全部读完，再统一写 transform。
+        // 以前边读边写，每写一次下一次读都要重新排版，滚动时一帧排版十几次。
+        var writes = [];
         for (var i = 0; i < list.length; i++) {
             var mc = list[i];
             var g = mc.dataset.liuliG;
             // 用 wrapper 而不是 .msg-content-container：转发记录等卡片没有后者，
             // 而 wrapper 在普通消息里与气泡同框。
             var bubble = mc.querySelector(":scope > .message-content__wrapper") || mc.querySelector(".msg-content-container");
-            if (!bubble || bubble.getBoundingClientRect().height < 1) continue;
-            if (g === "first" || g === "single" || groupTop === null) {
-                groupTop = bubble.getBoundingClientRect().top;
-            }
+            if (!bubble) continue;
+            var br = bubble.getBoundingClientRect();
+            if (br.height < 1) continue;
+            if (g === "first" || g === "single" || groupTop === null) groupTop = br.top;
             if (g !== "last" && g !== "single") continue;
             var av = mc.querySelector(":scope > .avatar-span");
             if (!av) continue;
-            var br = bubble.getBoundingClientRect();
             var h = av.offsetHeight || 32;
             var natBottom = br.bottom;
             var natTop = natBottom - h;
@@ -875,29 +878,38 @@ function stickAvatars() {
             var minTy = groupTop - natTop;
             if (ty < minTy) ty = minTy;
             if (ty > 0) ty = 0;
-            ty = Math.round(ty);
-            if (av.dataset.liuliTy !== String(ty)) {
-                av.dataset.liuliTy = String(ty);
-                av.style.transform = ty ? "translateY(" + ty + "px)" : "";
-            }
+            writes.push([av, Math.round(ty)]);
             groupTop = null;
+        }
+        for (var w = 0; w < writes.length; w++) {
+            var a = writes[w][0], t = String(writes[w][1]);
+            if (a.dataset.liuliTy !== t) {
+                a.dataset.liuliTy = t;
+                a.style.transform = writes[w][1] ? "translateY(" + t + "px)" : "";
+            }
         }
     } catch (e) { /* 静默 */ }
 }
 
 var liuliStickRaf = 0;
+function scheduleStick() {
+    if (liuliStickRaf) return;
+    liuliStickRaf = requestAnimationFrame(function () {
+        liuliStickRaf = 0;
+        stickAvatars();
+    });
+}
 function installAvatarStick() {
     if (window.__liuliStickInstalled) return;
     window.__liuliStickInstalled = true;
-    // scroll 不冒泡，用捕获阶段监听所有滚动容器；rAF 合并
-    document.addEventListener("scroll", function () {
-        if (liuliStickRaf) return;
-        liuliStickRaf = requestAnimationFrame(function () {
-            liuliStickRaf = 0;
-            stickAvatars();
-        });
-    }, true);
-    window.addEventListener("resize", function () { stickAvatars(); });
+    // scroll 不冒泡，用捕获阶段监听；只管消息区的滚动，rAF 合并
+    document.addEventListener("scroll", function (e) {
+        var t = e.target;
+        window.__llScrollT = performance.now();
+        if (t && t.closest && !t.closest(".chat-msg-area")) return;
+        scheduleStick();
+    }, { capture: true, passive: true });
+    window.addEventListener("resize", scheduleStick);
 }
 
 
@@ -1101,7 +1113,7 @@ function liuliMessagePass() {
     moveSenderIntoBubble();
     groupMessages();
     markQuoteRoots();
-    stickAvatars();
+    scheduleStick();          // 读位置的活放到下一帧，不在 DOM 变动回调里强制排版
 }
 
 
@@ -1284,8 +1296,8 @@ function ensureHoverEntries() {
  */
 function markQuoteRoots() {
     try {
-        // 全部先归零
-        var all = document.querySelectorAll('[class*="reply"], [class*="quote"]');
+        // 全部先归零（只看消息区、只看还没标过的：以前每次 DOM 变动都扫全页的 [class*=…]，滚动时很重）
+        var all = document.querySelectorAll('.chat-msg-area :is([class*="reply"], [class*="quote"]):not([data-liuli-quote-root])');
         for (var i = 0; i < all.length; i++) {
             if (all[i].dataset.liuliQuoteRoot !== "0") all[i].dataset.liuliQuoteRoot = "0";
         }
@@ -1294,6 +1306,9 @@ function markQuoteRoots() {
         //   气泡根本身就叫 reply-message__container，
         //   那样会把每一层都判成嵌套，结果一条线都不画。
         var roots = document.querySelectorAll(".reply-element");
+        // 虚拟列表会复用节点：以前是根、现在不是的，改回 0
+        var stale = document.querySelectorAll('[data-liuli-quote-root="1"]:not(.reply-element)');
+        for (var s = 0; s < stale.length; s++) stale[s].dataset.liuliQuoteRoot = "0";
         for (var j = 0; j < roots.length; j++) {
             if (roots[j].dataset.liuliQuoteRoot !== "1") roots[j].dataset.liuliQuoteRoot = "1";
         }
@@ -2112,7 +2127,7 @@ async function initPanel() {
         applyOverrides();
         fixContrast();
         normalizeColors();
-        setInterval(() => { if (window.__liuliPause) return; if (document.querySelector(".q-dialog-modal")) { mountInputBar(); return; } applyOverrides(); fixContrast(); normalizeColors(); keepWindowControlsVisible(); mountInputBar(); groupMessages(); stickAvatars(); markQuoteRoots(); moveSenderIntoBubble(); ensureHoverEntries(); llWatchContactList(); llGroupMembersPass(); llMarkdownPass(); llLayoutPass(); }, 1500);
+        setInterval(() => { if (window.__liuliPause) return; if (performance.now() - (window.__llScrollT || 0) < 600) return; /* 正在滚动：这一轮跳过，免得滚动中卡一下 */ if (document.querySelector(".q-dialog-modal")) { mountInputBar(); return; } applyOverrides(); fixContrast(); normalizeColors(); keepWindowControlsVisible(); mountInputBar(); groupMessages(); stickAvatars(); markQuoteRoots(); moveSenderIntoBubble(); ensureHoverEntries(); llWatchContactList(); llGroupMembersPass(); llMarkdownPass(); llLayoutPass(); }, 1500);
         try { installLayout(function () { llSyncPins(); }); } catch (e) { console.warn("[liuli-dsh-theme] layout failed:", e && e.message); }
         installMarkdownObserver();
         installAvatarStick();
