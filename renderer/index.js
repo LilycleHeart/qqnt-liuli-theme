@@ -1400,7 +1400,11 @@ function renderWallpaper(state) {
     }
     const g = bgGeometry(state.area, getImageRatio(state.src), window.innerWidth / window.innerHeight, state.fit || "cover");
     el.textContent =
+        // 伪元素的骨架也写在这里：以前只在默认壁纸 wallpaper.css 里，
+        // 默认壁纸不再发布后，没有 content 的 ::before 不会画出来。
         "#app::before {" +
+        "  content: \"\" !important; position: absolute !important; inset: 0 !important;" +
+        "  z-index: 0 !important; pointer-events: none !important;" +
         "  background-image: linear-gradient(rgba(var(--ll-scrim-rgb), var(--ll-wallpaper-dim, 0.18))," +
         "    rgba(var(--ll-scrim-rgb), var(--ll-wallpaper-dim, 0.18))),\n" +
         "    url(\"" + state.src + "\") !important;" +
