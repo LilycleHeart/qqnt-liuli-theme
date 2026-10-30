@@ -5,8 +5,9 @@
 // 4) 顽固容器内联覆盖 + 对比度修复
 
 const SLUG = "liuli-dsh-theme";
+import { installLayout, applyBar, nativeBarItem, applyAll as llLayoutPass, buildLayoutSection } from "./layout-custom.js";
 const ASSET_BASE = "local://profile/plugins/" + SLUG + "/assets/";
-const FILES = ["wallpaper.css", "qq-tokens.css", "palette.css", "liuli.css", "typography.css", "panel.css", "settings-page.css", "details.css", "no-dividers.css", "input-bar.css", "bubbles.css", "layout.css", "lists.css", "motion.css", "markdown.css"];
+const FILES = ["wallpaper.css", "qq-tokens.css", "palette.css", "liuli.css", "typography.css", "panel.css", "settings-page.css", "details.css", "no-dividers.css", "input-bar.css", "bubbles.css", "layout.css", "lists.css", "motion.css", "markdown.css", "layout-custom.css"];
 const STYLE_ID = "liuli-dsh-theme";
 const WALLPAPER = ASSET_BASE + "wallpaper.jpg";
 // 默认壁纸不随插件发布：assets/wallpaper.css（内联壁纸）和 assets/wallpaper.jpg（取色用）
@@ -592,22 +593,11 @@ function buildInputOverlay() {
         "gap:4px", "pointer-events:none"
     ].join(";");
 
-    // 表情
-    var emoji = document.createElement("button");
-    emoji.id = "liuli-emoji-btn";
-    emoji.type = "button";
-    emoji.title = "表情";
-    emoji.setAttribute("aria-label", "表情");
-    emoji.innerHTML = ICON_EMOJI;
-    emoji.addEventListener("click", function (e) {
-        e.stopPropagation();
-        e.preventDefault();
-        var native = document.querySelector('.chat-func-bar .icon-item[aria-label="表情"], .chat-func-bar .icon-item[title="表情"]');
-        if (native) {
-            native.click();
-            emoji.dataset.open = emoji.dataset.open === "1" ? "0" : "1";
-        }
-    });
+    // 输入框里的按钮（数量和顺序在设置页「输入框按钮」里调，见 layout-custom.js）
+    var pins = document.createElement("div");
+    pins.id = "liuli-bar-pins";
+    pins.style.cssText = "display:flex;align-items:center;gap:4px";
+    var emoji = pins;
 
     // 更多
     var more = document.createElement("button");
@@ -625,7 +615,7 @@ function buildInputOverlay() {
 
     // 「更多」在左、「表情」在右（用户要求对调）
     overlay.appendChild(more);
-    overlay.appendChild(emoji);
+    overlay.appendChild(pins);
     document.body.appendChild(overlay);
 
     // 指向展开：悬停 + 打开工具栏；离开按钮和工具栏 250ms 后收起。
@@ -637,7 +627,7 @@ function buildInputOverlay() {
         // 按钮状态先同步：工具栏节点可能被 Vue 重建，下面提前 return 时按钮也不能停在 ×
         more.dataset.open = open ? "1" : "0";
         more.title = open ? "收起" : "更多";
-        if (open) llLabelFuncBar(bar);
+        if (open) { llLabelFuncBar(bar); applyBar(); }
         if (bar.classList.contains("liuli-expanded") === open) return;
         bar.classList.toggle("liuli-expanded", open);
         var area = document.querySelector(".chat-input-area");
@@ -724,11 +714,49 @@ function mountInputBar() {
         }
         var panel = document.querySelector(".expression-panel");
         var panelOpen = !!(panel && panel.getBoundingClientRect().height > 10);
+        llSyncPins(overlay);
         var emojiBtn = overlay.querySelector("#liuli-emoji-btn");
         if (emojiBtn && emojiBtn.dataset.open !== (panelOpen ? "1" : "0")) {
             emojiBtn.dataset.open = panelOpen ? "1" : "0";
         }
     } catch (e) { /* 静默 */ }
+}
+
+/* 输入框里的按钮：按布局设置建代理按钮，点了转给 QQ 原生的工具栏按钮。
+ * 名单没变就不重建（图标第一次没拿到时会补）。 */
+function llSyncPins(overlay) {
+    overlay = overlay || document.getElementById("liuli-input-overlay");
+    var pins = overlay && overlay.querySelector("#liuli-bar-pins");
+    if (!pins) return;
+    var labels = applyBar();
+    if (!labels.length && !document.querySelector(".chat-input-area .chat-func-bar")) return;
+    var key = labels.join("\u0001");
+    var complete = !pins.querySelector("[data-noicon]");
+    if (pins.dataset.key === key && complete) return;
+    pins.dataset.key = key;
+    pins.innerHTML = "";
+    labels.forEach(function (label) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "liuli-bar-btn";
+        if (label === "表情") b.id = "liuli-emoji-btn";
+        b.title = label;
+        b.setAttribute("aria-label", label);
+        var native = nativeBarItem(label);
+        var svg = native && native.querySelector("svg");
+        if (label === "表情") b.innerHTML = ICON_EMOJI;
+        else if (svg) b.innerHTML = svg.outerHTML;
+        else { b.innerHTML = ICON_PLUS; b.dataset.noicon = "1"; }
+        b.addEventListener("click", function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            var n = nativeBarItem(label);
+            if (n) n.click();
+        });
+        pins.appendChild(b);
+    });
+    // 输入框左边留出按钮的位置：每个按钮 28 + 间距 4，外加左右边距
+    document.body.style.setProperty("--liuli-bar-pad", (12 + (labels.length + 1) * 32) + "px");
 }
 
 
@@ -1394,6 +1422,7 @@ function ensureWallpaperStyle() {
 
 function renderWallpaper(state) {
     const el = ensureWallpaperStyle();
+    llWpLast = state;
     if (!state || !state.src) {
         el.textContent = "";
         return;
@@ -1413,6 +1442,20 @@ function renderWallpaper(state) {
         "  background-repeat: no-repeat !important;" +
         "}";
 }
+
+/* 窗口拉伸：选区算出的 background-size 是按当时的窗口比例定的，比例一变图就被拉歪。
+ * 每次尺寸变化按新比例重算一遍（每帧最多一次，用内存里的状态，不重复解析 localStorage 里的大图）。 */
+let llWpLast = null;
+let llWpResizeRaf = 0;
+try {
+    window.addEventListener("resize", function () {
+        if (llWpResizeRaf || !llWpLast || !llWpLast.src) return;
+        llWpResizeRaf = requestAnimationFrame(function () {
+            llWpResizeRaf = 0;
+            renderWallpaper(llWpLast);
+        });
+    });
+} catch (e) {}
 
 /* 跨窗口同步（设置页改 → 主界面跟着换） */
 try {
@@ -2001,6 +2044,7 @@ function buildPanelContent(host, settings) {
     }
 
     buildWallpaperControls(host);
+    buildLayoutSection(host);
 
     const reset = document.createElement("div");
     reset.className = "liuli-field__hint";
@@ -2068,7 +2112,8 @@ async function initPanel() {
         applyOverrides();
         fixContrast();
         normalizeColors();
-        setInterval(() => { if (window.__liuliPause) return; if (document.querySelector(".q-dialog-modal")) { mountInputBar(); return; } applyOverrides(); fixContrast(); normalizeColors(); keepWindowControlsVisible(); mountInputBar(); groupMessages(); stickAvatars(); markQuoteRoots(); moveSenderIntoBubble(); ensureHoverEntries(); llWatchContactList(); llGroupMembersPass(); llMarkdownPass(); }, 1500);
+        setInterval(() => { if (window.__liuliPause) return; if (document.querySelector(".q-dialog-modal")) { mountInputBar(); return; } applyOverrides(); fixContrast(); normalizeColors(); keepWindowControlsVisible(); mountInputBar(); groupMessages(); stickAvatars(); markQuoteRoots(); moveSenderIntoBubble(); ensureHoverEntries(); llWatchContactList(); llGroupMembersPass(); llMarkdownPass(); llLayoutPass(); }, 1500);
+        try { installLayout(function () { llSyncPins(); }); } catch (e) { console.warn("[liuli-dsh-theme] layout failed:", e && e.message); }
         installMarkdownObserver();
         installAvatarStick();
         ensureHoverEntries();

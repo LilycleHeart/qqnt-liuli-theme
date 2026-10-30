@@ -16,8 +16,6 @@
 ---
 
 > 从壁纸取色，用 Material Color Utilities 派生整套 M3 配色，给 QQNT 换上一层会跟着壁纸呼吸的磨砂玻璃外观。**不依赖 BetterQQNT。**
->
-> 功能性的改动（防撤回、复读、引用不带 @、记住浏览位置）在姊妹插件 **[QQ 增强 · qqnt-enhance](https://github.com/LilycleHeart/qqnt-enhance)** 里。
 
 ## 📸 预览
 
@@ -47,6 +45,7 @@
 | 🖌️ | **名字颜色** | 统一用 MCU 派生的第三色（tertiary），和主题同源又一眼可分 |
 | 🌀 | **消息入场** | 打开会话时级联浮入，新消息单条浮入（遵守系统「减少动画」） |
 | 🔤 | **自定义字体** | 设置页里选本机已安装的字体 |
+| 🧩 | **布局自定义** | 右键菜单可切「只显示图标」并自定义顺序；输入框里放几个按钮、放哪些、顺序，「更多」宫格里的顺序都能调；左侧边栏可隐藏空间、更多等按钮 |
 | ⚙️ | **设置页** | 材质模糊/透明度/泛光/阴影/壁纸压暗、自定义壁纸、明暗模式、Markdown 开关、字体 |
 
 ## 📦 安装
@@ -55,7 +54,7 @@
 
 到 **[Releases](https://github.com/LilycleHeart/qqnt-liuli-theme/releases/latest)** 下载 `QQNT-LiteLoader-Installer.exe`，双击点「一键安装」，它会自动装好 LiteLoaderQQNT + 本主题并重开 QQ。「还原」按钮可一键回退。
 
-> 安装器只装 **LiteLoader + 琉璃主题**。功能插件（防撤回等）见 [QQ 增强](https://github.com/LilycleHeart/qqnt-enhance)。
+> 安装器只装 **LiteLoader + 琉璃主题**。
 
 ### 方式二：手动安装
 

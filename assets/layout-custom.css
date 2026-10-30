@@ -1,0 +1,159 @@
+/* ============================================================
+ * 琉璃 · 界面布局自定义（配合 renderer/layout-custom.js）
+ * ============================================================ */
+
+/* ── 左侧边栏：设置页里隐藏的按钮 ── */
+body [data-liuli-hide="1"] {
+  display: none !important;
+}
+
+/* ── 输入框按钮：放进输入框的从「更多」宫格里拿掉，其余的都留在宫格里 ──
+ * 选择器叠 :not(#ll) 是为了压过 layout.css 里早先「表情固定拿掉」的规则。 */
+body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon.liuli-pinned {
+  display: none !important;
+}
+body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon.liuli-in-menu:not([style*="display: none"]) {
+  display: flex !important;
+}
+
+/* 输入框里的代理按钮（样式同原来的表情/更多按钮） */
+#liuli-bar-pins .liuli-bar-btn {
+  position: static !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: rgba(var(--ll-on-glass-rgb), 0.1) !important;
+  color: var(--ll-on-glass-2) !important;
+  transition: background-color 140ms ease, color 140ms ease !important;
+  pointer-events: auto !important;
+}
+#liuli-bar-pins .liuli-bar-btn:hover,
+#liuli-bar-pins .liuli-bar-btn[data-open="1"] {
+  background: rgba(var(--ll-brand-rgb), 0.22) !important;
+  color: var(--ll-brand) !important;
+}
+#liuli-bar-pins .liuli-bar-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+  display: block !important;
+}
+#liuli-bar-pins .liuli-bar-btn svg [fill]:not([fill="none"]) {
+  fill: currentColor !important;
+}
+
+/* ── 右键菜单：只显示图标 ── */
+body[data-liuli-menu-compact] .q-context-menu.aio-right-click-menu {
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-content: flex-start !important;
+  max-width: 212px !important;
+  gap: 2px !important;
+  padding: 6px !important;
+}
+body[data-liuli-menu-compact] .q-context-menu.aio-right-click-menu > .menu-stickers-wrapper {
+  flex: 0 0 100% !important;
+  order: -1 !important;
+}
+body[data-liuli-menu-compact] .q-context-menu.aio-right-click-menu > .q-context-menu-item {
+  width: 36px !important;
+  height: 36px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  align-items: center !important;
+  flex: 0 0 auto !important;
+}
+body[data-liuli-menu-compact] .q-context-menu.aio-right-click-menu > .q-context-menu-item > .q-context-menu-item__icon {
+  margin: 0 !important;
+}
+body[data-liuli-menu-compact] .q-context-menu.aio-right-click-menu > .q-context-menu-item > .q-context-menu-item__icon .q-icon {
+  width: 18px !important;
+  height: 18px !important;
+}
+body[data-liuli-menu-compact] .q-context-menu.aio-right-click-menu > .q-context-menu-item > :not(.q-context-menu-item__icon) {
+  display: none !important;
+}
+body[data-liuli-menu-compact] .q-context-menu.aio-right-click-menu > .q-context-menu-separator,
+body .q-context-menu.aio-right-click-menu.liuli-menu-sorted > .q-context-menu-separator {
+  display: none !important;
+}
+
+/* ── 设置页：可排序名单 ── */
+.liuli-lo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 4px;
+}
+.liuli-lo-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 4px 0 12px;
+  border-radius: 8px;
+  background: rgba(var(--ll-on-glass-rgb), 0.05);
+}
+.liuli-lo-row.is-off .liuli-lo-name {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.liuli-lo-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--ll-on-glass);
+}
+.liuli-lo-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ll-on-glass-2);
+  cursor: pointer;
+  padding: 0;
+}
+.liuli-lo-btn:hover:not(:disabled) {
+  background: rgba(var(--ll-brand-rgb), 0.16);
+  color: var(--ll-brand);
+}
+.liuli-lo-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.liuli-lo-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--ll-brand);
+}
+.liuli-lo-divider::before,
+.liuli-lo-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(var(--ll-brand-rgb), 0.5);
+}
+.liuli-lo-num {
+  min-width: 28px;
+  text-align: center;
+  align-self: center;
+  font-size: 13px;
+  color: var(--ll-on-glass);
+}
+.liuli-lo-reset {
+  cursor: pointer;
+  color: var(--ll-brand) !important;
+  margin-bottom: 6px;
+}

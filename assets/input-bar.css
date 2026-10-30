@@ -77,7 +77,7 @@
   min-height: 40px !important;
   max-height: calc(50vh - 20px) !important;
   /* 左边让给 表情/+ 两个按钮，右边让给发送键 */
-  padding: 0 50px 0 76px !important;
+  padding: 0 50px 0 var(--liuli-bar-pad, 76px) !important;
   display: flex !important;
   align-items: center !important;
 }
