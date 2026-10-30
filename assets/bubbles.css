@@ -1,0 +1,677 @@
+/* ============================================================
+ * 琉璃 · Telegram 风格气泡（照参考图对齐）
+ * ------------------------------------------------------------
+ * 参考图2（TG）的结构：
+ *   ┌──────────────────────────┐
+ *   │ 发送者名字 + 身份标签      │  ← 气泡内部顶部，名字用品牌色
+ *   │ 消息内容                  │
+ *   │                   18:57  │  ← 气泡内部右下，灰色小字
+ *   └──────────────────────────┘
+ *            ↑ 尖角在底部外侧（自己右下 / 对方左下）
+ *
+ * QQ 默认：名字在气泡外面、时间单独一行、四角同圆。
+ * ============================================================ */
+
+/* ── 1. 气泡本体：尾巴在底部外侧 ── */
+/* 自己（靠右）→ 右上尖（尖角朝上） */
+.msg-content-container.container--self {
+  border-radius: 14px 4px 14px 14px !important;
+  background: rgba(var(--ll-brand-rgb), 0.42) !important;
+  border: none !important;
+  padding: 8px 13px 8px !important;
+  position: relative !important;
+  box-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.16) !important;
+}
+
+/* 对方（靠左）→ 左上尖（尖角朝上） */
+.msg-content-container.container--others {
+  border-radius: 4px 14px 14px 14px !important;
+  background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.16)) !important;
+  border: none !important;
+  padding: 8px 13px 8px !important;
+  position: relative !important;
+  box-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.16) !important;
+}
+
+/* 富媒体/ark 卡片不要尾巴 */
+.msg-content-container.ark-msg-content-container,
+.msg-content-container.mix-message__container--pic,
+.msg-content-container.mix-message__container--image {
+  border-radius: 14px !important;
+  padding: 8px 10px !important;
+}
+
+/* ── 2. 发送者名字：搬进气泡内部后变成顶部一行 ── */
+.msg-content-container .user-name {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  max-width: 100% !important;
+  margin: 0 0 3px 0 !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 16px !important;
+  letter-spacing: 0.1px !important;
+  color: var(--ll-brand) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+/* 身份标签（群主/管理员）：小胶囊，跟名字同排 */
+.msg-content-container .group-member-label,
+.msg-content-container .user-name .q-tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex: 0 0 auto !important;
+  height: 15px !important;
+  padding: 0 5px !important;
+  border-radius: 4px !important;
+  font-size: 10px !important;
+  line-height: 15px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  background: rgba(var(--ll-brand-rgb), 0.18) !important;
+  color: var(--ll-brand) !important;
+  border: none !important;
+}
+
+/* ── 3. 时间：气泡内部右下角 ── */
+.msg-content-container [class*="msg-time"],
+.msg-content-container [class*="message-time"],
+.msg-content-container [class*="timestamp"],
+.msg-content-container .msg-time {
+  display: inline-block !important;
+  margin: 2px 0 0 auto !important;
+  padding: 0 !important;
+  font-size: 10px !important;
+  line-height: 12px !important;
+  font-variant-numeric: tabular-nums !important;
+  color: var(--ll-on-glass-3) !important;
+  background: transparent !important;
+  text-align: right !important;
+  float: right !important;
+}
+
+/* ── 4. 气泡内文字 ── */
+.msg-content-container .text-element,
+.msg-content-container .message-content,
+.msg-content-container > [class*="text"] {
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+}
+
+/* ── 5. 回复引用：整块只有一条竖线 ──
+ * QQ 的引用是嵌套结构（reply 里还有 reply），
+ * 所以 [class*="reply"] 会给每层都加一条线，视觉上就是三四条竖线。
+ * renderer 的 markQuoteRoots() 给最外层打 data-liuli-quote-root="1"，
+ * 内层打 "0"。这里只给最外层画线，其余层全部归零。 */
+
+/* 内层：清空一切装饰 */
+.msg-content-container [data-liuli-quote-root="0"] {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* 最外层：一条左边线 + 淡底 */
+.msg-content-container [data-liuli-quote-root="1"] {
+  border: none !important;
+  border-left: 3px solid rgba(var(--ll-brand-rgb), 0.72) !important;
+  border-radius: 0 6px 6px 0 !important;
+  padding: 5px 9px 5px 10px !important;
+  margin: 0 0 5px 0 !important;
+  background: rgba(var(--ll-brand-rgb), 0.09) !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 引用块里的名字 */
+.msg-content-container [data-liuli-quote-root="1"] [class*="name"],
+.msg-content-container [data-liuli-quote-root="1"] [class*="nick"] {
+  display: block !important;
+  margin: 0 0 1px 0 !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+  line-height: 16px !important;
+  color: var(--ll-brand) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* 引用块里的摘要 */
+.msg-content-container [data-liuli-quote-root="1"] [class*="content"],
+.msg-content-container [data-liuli-quote-root="1"] [class*="summary"] {
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+  line-height: 16px !important;
+  color: var(--ll-on-glass-2) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* 引用块里不要头像 */
+.msg-content-container [data-liuli-quote-root="1"] [class*="avatar"] {
+  display: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 9. 连续消息合并（TG 规则）
+ * ------------------------------------------------------------
+ *   first  → 显示名字，隐藏头像
+ *   mid    → 名字、头像都隐藏
+ *   last   → 隐藏名字，显示头像（"头像留在最尾"）
+ *   single → 名字 + 头像都显示
+ * 分组由 renderer 的 groupMessages() 写在 data-liuli-g 上。
+ * ════════════════════════════════════════════════════════════ */
+
+/* 名字：只在组内第一条和单条消息上出现 */
+.message-container[data-liuli-g="mid"] .user-name,
+.message-container[data-liuli-g="last"] .user-name {
+  display: none !important;
+}
+
+/* 头像：只在组内最后一条和单条消息上出现。
+ * ⚠️ 不能用 visibility: hidden —— 它会保留 32px 的占位，
+ * 而且实测 .avatar-span 的宽度会被拉成 657~770px（跟随容器），
+ * 导致整行布局错乱。display: none 才能真正让出空间。 */
+.message-container[data-liuli-g="first"] > [class*="avatar"],
+.message-container[data-liuli-g="mid"] > [class*="avatar"] {
+  display: none !important;
+}
+
+/* 头像宽度不再强制 —— grid 列宽由 QQ 的 grid-template-columns 决定，\n * 单独改子元素宽度会让列宽计算错乱（实测列被撑到 765px）。 */
+
+/* 中间/末条没有头像时，气泡要顶到与头像同列，不能左右跳 */
+.message-container[data-liuli-g="mid"],
+.message-container[data-liuli-g="last"] {
+  grid-template-columns: var(--liuli-avatar-col, 0) 1fr !important;
+}
+
+/* 组内消息贴紧一点，组间拉开 */
+.message-container[data-liuli-g="mid"],
+.message-container[data-liuli-g="last"] {
+  margin-top: -2px !important;
+}
+
+.message-container[data-liuli-g="first"] {
+  margin-top: 8px !important;
+}
+
+.message-container[data-liuli-g="single"] {
+  margin-top: 8px !important;
+}
+
+/* ── 10. 尾巴：圆角方案（尖角指向头像一侧） ──
+ * 之前用伪元素画三角，方向算错了 —— 三角没有朝向头像。
+ * 现在改回「把靠近头像的那个角收小」的做法：
+ *   对方（头像在左）→ 左上角 5px，其余 16px
+ *   自己（头像在右）→ 右上角 5px，其余 16px
+ * 这样尖角天然朝向头像方向，且不会画出多余的凸起。
+ */
+.msg-content-container.container--others {
+  border-radius: 5px 16px 16px 16px !important;
+  overflow: visible !important;
+}
+
+.msg-content-container.container--self {
+  border-radius: 16px 5px 16px 16px !important;
+  overflow: visible !important;
+}
+
+/* 富媒体/ark 卡片不要尖角 */
+.msg-content-container.ark-msg-content-container,
+.msg-content-container.mix-message__container--pic,
+.msg-content-container.mix-message__container--image {
+  border-radius: 14px !important;
+}
+
+
+/* ── 11. 头像位置：普通布局（sticky 已移除） ──
+ * sticky 在静止状态会让头像贴住行底，
+ * 气泡一高就与头像拉开距离（截图里那个孤零零的绿色头像就是它）。
+ * 滚动跟随需要动滚动容器，风险大，先回到稳定布局：
+ * 头像与气泡都底部对齐，组内只在最后一条显示。
+ */
+.message-container > .avatar-span,
+.message-container > [class*="avatar"] {
+  position: static !important;
+  align-self: end !important;
+}
+
+/* 气泡也同样贴底，保证与头像底边齐平 */
+.message-container .msg-content-container {
+  align-self: end !important;
+  margin-bottom: 0 !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 12. 三个视觉问题一起修
+ * ============================================================ */
+
+/* ── 12.1 头像孤立：气泡再高也要有可见部分贴着头像 ──
+ * 气泡向上延伸时，若整块跑到视口外，头像会孤零零留在屏幕上。
+ * 给气泡一个最小可见高度并让行不被裁切，保证头像附近始终有内容。 */
+.message-container {
+  overflow: visible !important;
+  min-height: 44px !important;
+}
+
+.message-container .msg-content-container {
+  /* 气泡贴底，长内容向上长；给一点底部留白，与头像底边齐平 */
+  margin-bottom: 0 !important;
+  min-height: 36px !important;
+}
+
+/* 头像单独且没有被隐藏时，保证它在行内可见 */
+.message-container[data-liuli-g="last"] > [class*="avatar"],
+.message-container[data-liuli-g="single"] > [class*="avatar"] {
+  display: flex !important;
+  align-self: end !important;
+  position: static !important;
+}
+
+/* ── 12.2 名字颜色：连身份标签一起强制品牌色 ──
+ * 之前只设了 .user-name 的 color，
+ * 但里面的 .group-member-label / .q-tag 有自己的颜色，会盖掉。 */
+.user-name,
+.user-name *,
+.msg-content-container .user-name,
+.msg-content-container .user-name *,
+.message-container .user-name .q-tag {
+  color: var(--ll-brand) !important;
+}
+
+/* 身份标签：品牌淡底 + 品牌字 */
+.msg-content-container .user-name .q-tag,
+.msg-content-container .group-member-label {
+  background: rgba(var(--ll-brand-rgb), 0.18) !important;
+  color: var(--ll-brand) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 0 5px !important;
+  font-size: 10px !important;
+  line-height: 15px !important;
+  height: 15px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+/* 12.3 已回滚：原来用了 [class*="time"] / [class*="timestamp"] 这种宽泛子串，
+ * 结果把图片消息里的元素也命中了，导致「K1LLER...」文字被 float 顶到气泡外面。
+ * 时间戳先不动 —— 宁可位置维持原生，也不能破坏图片消息布局。
+ */
+
+/* 12.4 已回滚：给气泡设 max-width 会把正常消息挤成两行窄条。 */
+
+
+
+
+/* ════════════════════════════════════════════════════════════
+ * 13. 气泡内排版（曾经存在，被某次替换误删，重新加回）
+ * ------------------------------------------------------------
+ * 名字搬进气泡后必须竖排，否则名字和内容并排。
+ * 用双重类名提特异性 —— QQ 的 .mix-message__container 也会设
+ * flex-direction，单类名打不过它。
+ * ════════════════════════════════════════════════════════════ */
+.msg-content-container.container--self,
+.msg-content-container.container--others,
+.msg-content-container.container--self.mix-message__container,
+.msg-content-container.container--others.mix-message__container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 2px !important;
+}
+
+/* 名字行占满宽度 */
+.msg-content-container > .user-name {
+  width: 100% !important;
+  flex: 0 0 auto !important;
+}
+
+/* 内容块占满宽度，不被 flex 压缩 */
+.msg-content-container > :not(.user-name) {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 15. 消息左右方向修复（功能性修复）
+ * ------------------------------------------------------------
+ * 实测 i:22 是 container--others 却跑到了右侧（bubbleLeft 1096）。
+ * QQ 的行布局是 grid，靠 justify-items / 列定位实现左右对齐，
+ * 我前面加的 align-items: end 可能影响了它。
+ * 这里显式声明左右：self 靠右、others 靠左。
+ * ════════════════════════════════════════════════════════════ */
+.message-container--others {
+  justify-items: start !important;
+  text-align: left !important;
+}
+
+.message-container--self {
+  justify-items: end !important;
+  text-align: right !important;
+}
+
+.message-container--others .msg-content-container {
+  justify-self: start !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+}
+
+.message-container--self .msg-content-container {
+  justify-self: end !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+}
+
+/* 头像也要跟着对齐 */
+.message-container--others > [class*="avatar"] {
+  justify-self: start !important;
+}
+
+.message-container--self > [class*="avatar"] {
+  justify-self: end !important;
+}
+
+
+/* ════════════════════════════════════════════════════════════
+ * 16. 左右方向修复（改用气泡类名判定）
+ * ------------------------------------------------------------
+ * 实测：部分消息行的类名只有 "message-container message-container--mix-or-markdown"，
+ * 既没有 --self 也没有 --others，所以按行类名写的规则对它们不生效，
+ * 结果对方消息跑到了右侧。
+ * 改用 :has() 按气泡自身的 container--self / container--others 判定。
+ * ════════════════════════════════════════════════════════════ */
+.message-container:has(.msg-content-container.container--others) {
+  justify-items: start !important;
+}
+
+.message-container:has(.msg-content-container.container--others) .msg-content-container {
+  justify-self: start !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+}
+
+.message-container:has(.msg-content-container.container--self) {
+  justify-items: end !important;
+}
+
+.message-container:has(.msg-content-container.container--self) .msg-content-container {
+  justify-self: end !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+}
+
+/* 头像跟随气泡方向 */
+.message-container:has(.msg-content-container.container--others) > [class*="avatar"] {
+  justify-self: start !important;
+}
+
+.message-container:has(.msg-content-container.container--self) > [class*="avatar"] {
+  justify-self: end !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 17. 强制对方消息靠左（覆盖 grid 列定义）
+ * ------------------------------------------------------------
+ * 实测 i:18 / i:23 的 grid-template-columns 是
+ *   "0px 765px 0px 125px 0px 0px"（气泡落在第 4 列 → 靠右）
+ * 这是 QQ 自己算出来的右对齐布局，justify-items / justify-self 都改不动。
+ * 只能直接重写列定义：让气泡列紧跟头像列。
+ * ════════════════════════════════════════════════════════════ */
+.message-container:has(.msg-content-container.container--others) {
+  grid-template-columns: 0px 32px 8px minmax(0, 1fr) 0px 0px !important;
+}
+
+.message-container:has(.msg-content-container.container--self) {
+  grid-template-columns: 0px minmax(0, 1fr) 8px auto 32px 0px !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 18. TG 分组形状 + 尾巴 + 配色（最终层，覆盖上面 1/10/12 的圆角与底色）
+ * ------------------------------------------------------------
+ * 头像在行底（align-self:end），所以尾巴必须在「底部、靠头像一侧」，
+ * 且只出现在组内最后一条 / 单条上：
+ *            对方                         自己
+ *   first   16 16 16 6            16 16 6 16
+ *   mid      6 16 16 6            16 6 6 16
+ *   last     6 16 16 0 + 尾巴      16 6 0 16 + 尾巴
+ *   single  16 16 16 0 + 尾巴     16 16 0 16 + 尾巴
+ * （border-radius 顺序：左上 右上 右下 左下）
+ *
+ * 气泡去掉 backdrop-filter：气泡本身是 backdrop root，
+ * 子元素（尾巴伪元素）的 backdrop 采不到壁纸，尾巴会和气泡色差。
+ * 改用高不透明度底色（也更符合「平滑不透明」的材质偏好），可读性一起解决。
+ * ════════════════════════════════════════════════════════════ */
+
+.message-container .msg-content-container.container--others,
+.message-container .msg-content-container.container--self {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  overflow: visible !important;
+  color: var(--ll-on-glass) !important;
+  text-shadow: none !important;
+}
+
+/* 对方：深色亚克力，0.36 → 0.86，亮壁纸上也能读 */
+.message-container .msg-content-container.container--others {
+  background: rgba(var(--ll-acrylic), 0.86) !important;
+}
+
+/* 自己：品牌色混入深底（primary-container 的做法），
+ * 浅字压浅粉的对比度问题就是从这里来的 */
+.message-container .msg-content-container.container--self {
+  background: var(--ll-bubble-self, color-mix(in srgb, rgb(var(--ll-brand-rgb)) 34%, rgb(var(--ll-acrylic)))) !important;
+  color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
+}
+
+.message-container .msg-content-container.container--others .text-element,
+.message-container .msg-content-container.container--others .text-normal {
+  color: var(--ll-on-glass) !important;
+}
+/* 自己的气泡是浅底（DSH 同款），文字用 onPrimaryContainer */
+.message-container .msg-content-container.container--self .text-element,
+.message-container .msg-content-container.container--self .text-normal,
+.message-container .msg-content-container.container--self .text-element * {
+  color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
+}
+
+/* 自己的消息不显示自己的名字（TG 行为） */
+.message-container .msg-content-container.container--self > .user-name {
+  display: none !important;
+}
+
+/* ── 圆角：对方 ── */
+.message-container[data-liuli-g="first"] .msg-content-container.container--others {
+  border-radius: 16px 16px 16px 6px !important;
+}
+.message-container[data-liuli-g="mid"] .msg-content-container.container--others {
+  border-radius: 6px 16px 16px 6px !important;
+}
+.message-container[data-liuli-g="last"] .msg-content-container.container--others {
+  border-radius: 6px 16px 16px 0 !important;
+}
+.message-container[data-liuli-g="single"] .msg-content-container.container--others,
+.message-container:not([data-liuli-g]) .msg-content-container.container--others {
+  border-radius: 16px 16px 16px 0 !important;
+}
+
+/* ── 圆角：自己 ── */
+.message-container[data-liuli-g="first"] .msg-content-container.container--self {
+  border-radius: 16px 16px 6px 16px !important;
+}
+.message-container[data-liuli-g="mid"] .msg-content-container.container--self {
+  border-radius: 16px 6px 6px 16px !important;
+}
+.message-container[data-liuli-g="last"] .msg-content-container.container--self {
+  border-radius: 16px 6px 0 16px !important;
+}
+.message-container[data-liuli-g="single"] .msg-content-container.container--self,
+.message-container:not([data-liuli-g]) .msg-content-container.container--self {
+  border-radius: 16px 16px 0 16px !important;
+}
+
+/* ── 尾巴：只在 last / single，底部靠头像一侧 ──
+ * 伪元素继承气泡底色，用 SVG 遮罩裁成 TG 的弧形尖角。 */
+.message-container .msg-content-container.container--others::before,
+.message-container .msg-content-container.container--self::before {
+  content: none !important;
+}
+
+.message-container[data-liuli-g="last"] .msg-content-container.container--others:not(.mix-message__container--pic)::before,
+.message-container[data-liuli-g="single"] .msg-content-container.container--others:not(.mix-message__container--pic)::before,
+.message-container[data-liuli-g="last"] .msg-content-container.container--self:not(.mix-message__container--pic)::before,
+.message-container[data-liuli-g="single"] .msg-content-container.container--self:not(.mix-message__container--pic)::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  width: 9px !important;
+  height: 17px !important;
+  background: inherit !important;
+  pointer-events: none !important;
+  -webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 17'%3E%3Cpath d='M9 0v17H0c4.5-.5 8-3.5 9-9z'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100% !important;
+  mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 17'%3E%3Cpath d='M9 0v17H0c4.5-.5 8-3.5 9-9z'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100% !important;
+}
+
+.message-container .msg-content-container.container--others::before {
+  left: -9px !important;
+  right: auto !important;
+}
+
+.message-container .msg-content-container.container--self::before {
+  right: -9px !important;
+  left: auto !important;
+  transform: scaleX(-1) !important;
+}
+
+/* ── 组内间距：组内 4px，组间 10px ── */
+.ml-item .message:has(> .message-native > .message-container[data-liuli-g]) {
+  padding-bottom: 0 !important;
+}
+.message-container[data-liuli-g] {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  min-height: 0 !important;
+}
+.message-container[data-liuli-g="first"],
+.message-container[data-liuli-g="single"] {
+  margin-top: 8px !important;
+}
+.message-container[data-liuli-g="mid"],
+.message-container[data-liuli-g="last"] {
+  margin-top: 0 !important;
+}
+
+/* ── 头像：由 renderer 的 stickAvatars() 用 transform 推到视口内 ──
+ * 必须压在上一行之上（它会被推进前几行的头像列）。 */
+.message-container[data-liuli-g="last"] > .avatar-span,
+.message-container[data-liuli-g="single"] > .avatar-span {
+  position: relative !important;
+  z-index: 3 !important;
+  will-change: transform;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 19. 图片 / 卡片统一
+ * ------------------------------------------------------------
+ * 纯图片消息：去掉气泡内边距，图本身就是气泡（TG 做法），
+ * 圆角跟分组走；卡片（ark/小程序/转发）统一成同一套深色卡片。
+ * ════════════════════════════════════════════════════════════ */
+.message-container .msg-content-container.mix-message__container--pic {
+  padding: 3px !important;
+  background: rgba(var(--ll-acrylic), 0.86) !important;
+}
+.message-container .msg-content-container.mix-message__container--pic.container--self {
+  background: var(--ll-bubble-self, rgba(var(--ll-acrylic), 0.86)) !important;
+}
+.message-container[data-liuli-g="last"] .msg-content-container.mix-message__container--pic,
+.message-container[data-liuli-g="single"] .msg-content-container.mix-message__container--pic {
+  border-radius: 16px !important;
+}
+.message-container .msg-content-container.mix-message__container--pic .pic-element,
+.message-container .msg-content-container.mix-message__container--pic img {
+  border-radius: 13px !important;
+  overflow: hidden !important;
+}
+/* 有名字的图片消息：名字行补回内边距 */
+.message-container .msg-content-container.mix-message__container--pic > .user-name {
+  padding: 4px 8px 2px !important;
+}
+
+.message-container .msg-content-container.ark-msg-content-container,
+.message-container .msg-content-container:has(.ark-view-message),
+.message-container .msg-content-container:has(.forward-msg) {
+  background: rgba(var(--ll-acrylic), 0.86) !important;
+  border-radius: 16px !important;
+  padding: 8px !important;
+}
+.message-container .msg-content-container.ark-msg-content-container::before,
+.message-container .msg-content-container:has(.ark-view-message)::before,
+.message-container .msg-content-container:has(.forward-msg)::before {
+  content: none !important;
+}
+.message-container .msg-content-container .ark-view-message,
+.message-container .msg-content-container .forward-msg {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+
+/* ════════════════════════════════════════════════════════════
+ * 20. 没有 .msg-content-container 的行（转发聊天记录等卡片）
+ * ------------------------------------------------------------
+ * 实测转发卡片行只有 .message-content__wrapper > .forward-msg，
+ * 上面 17 节按气泡类名改列宽的规则打不到它，QQ 原生列宽
+ * "0px 989px 0px 226px" 把卡片推到最右，头像却留在左边（孤立头像）。
+ * 改为：不是自己的行一律按「对方」靠左排。
+ * ════════════════════════════════════════════════════════════ */
+.message-container:not(.message-container--self):not(:has(.container--self)) {
+  grid-template-columns: 0px 32px 14px minmax(0, 1fr) 0px 0px !important;
+}
+.message-container:not(.message-container--self):not(:has(.container--self)) > .message-content__wrapper {
+  justify-self: start !important;
+}
+
+/* 转发卡片与其他卡片同一套深色底 */
+.message-container .message-content__wrapper > .forward-msg {
+  background: rgba(var(--ll-acrylic), 0.86) !important;
+  backdrop-filter: none !important;
+  border: none !important;
+  border-radius: 16px !important;
+  color: var(--ll-on-glass) !important;
+  text-shadow: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 20. 尾巴与头像之间留缝（2026-10-29）
+ * ------------------------------------------------------------
+ * 实测：
+ *   自己：grid-template-areas 的 avatar 在第 6 列，但列宽写成
+ *         "… auto 32px 0px"，avatar 列是 0，头像溢出到第 5 列，
+ *         和气泡右边缘贴死（1580 / 1580），尾巴 9px 全压在头像下面。
+ *   对方：头像与气泡之间只有 8px，尾巴 9px，尖端压进头像 1px。
+ * TG 的做法是尾巴落在缝里、离头像还有几像素，这里缝统一 14px。
+ * ════════════════════════════════════════════════════════════ */
+body .message-container:has(.msg-content-container.container--others):not(#ll) {
+  grid-template-columns: 0px 32px 14px minmax(0, 1fr) 0px 0px !important;
+}
+body .message-container:has(.msg-content-container.container--self):not(#ll) {
+  grid-template-columns: 0px minmax(0, 1fr) 8px auto 14px 32px !important;
+}
+

@@ -1,0 +1,383 @@
+/* ============================================================
+ * 琉璃 · 电波推送 — 外观层（独立实现）
+ * ------------------------------------------------------------
+ * 设计语言：dsh-liuli-ui-enhance
+ * 色板：由 palette.css 提供（Material Color Utilities 实时派生）
+ * 骨架：实测 QQ 9.9.36 DOM
+ *
+ * ─── 材质原则（三条硬规则）────────────────────────────────
+ * 1. 唯一材质源：所有玻璃层都只用 --ll-material-opacity + --ll-material-blur
+ *    + --ll-acrylic，不允许任何地方写死 rgba(...) 数值。
+ * 2. 玻璃只挂在最外层：承载层（.container-sidebar / .recent-contact /
+ *    .chat-header / .chat-input-area / .right-sidebar）才有 glass；
+ *    它内部的 .sidebar-nav / .group-user / .group-member 一律
+ *    transparent + backdrop-filter:none —— 否则 alpha 叠加，
+ *    同一材质在嵌套处深浅不一（"玻璃叠玻璃"）。
+ * 3. 中间容器全部打透，让壁纸透出。
+ * ============================================================ */
+
+/* ── 材质令牌：全站唯一来源 ── */
+:root {
+  --ll-material-opacity: 0.55;
+  --ll-material-blur: blur(18px) saturate(1.6);
+
+  /* DSH 的亚克力底（固定值，不跟 M3 走） */
+  --ll-acrylic: 221, 229, 237;
+  --ll-acrylic-low: 232, 238, 244;
+  --ll-acrylic-high: 200, 212, 223;
+
+  --ll-radius: 14px;
+  --ll-radius-sm: 10px;
+  --ll-radius-xs: 7px;
+
+  /* 阴影与遮罩一律走 RGB 三元组，由 M3 的 scrim 语义提供（黑），
+   * 这样暗/亮主题只需要换 alpha，不需要另写颜色。 */
+  --ll-shadow-rgb: 0, 0, 0;
+  --ll-scrim-rgb: 0, 0, 0;
+  --ll-specular: 255, 255, 255;
+
+  --ll-shadow: 0 2px 10px rgba(var(--ll-shadow-rgb), 0.24);
+  --ll-shadow-float: 0 8px 28px rgba(var(--ll-shadow-rgb), 0.28);
+  --ll-scrim-alpha: 0.18;
+
+  --ll-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.045'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+body[q-theme="dark"],
+body.q-theme-tokens-dark {
+  --ll-material-opacity: 0.5;
+  --ll-acrylic: 30, 37, 48;
+  --ll-acrylic-low: 26, 32, 42;
+  --ll-acrylic-high: 63, 74, 92;
+  --ll-scrim-alpha: 0.28;
+  --ll-shadow: 0 2px 10px rgba(var(--ll-shadow-rgb), 0.45);
+  --ll-shadow-float: 0 10px 32px rgba(var(--ll-shadow-rgb), 0.55);
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 0. 基础
+ * ════════════════════════════════════════════════════════════ */
+
+body {
+  font-family: "MiSans", "Inter", "Space Grotesk", "Segoe UI", system-ui,
+    -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background-color: transparent !important;
+}
+
+/* 全局颗粒：已关闭（2026-10-30）。
+ * 它是盖在所有内容最上面的一层噪点，文字也被盖住，看起来发虚。
+ * 各块玻璃材质的背景里本来就带 var(--ll-noise)，颗粒感不会丢。 */
+body::after {
+  content: none;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483000;
+  background-image: var(--ll-noise);
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 1. 承载层：唯一允许挂玻璃的 5 个容器
+ * ════════════════════════════════════════════════════════════ */
+
+.ll-glass-layer,
+.container-sidebar,
+.recent-contact,
+/* .chat-header（群聊标题栏）刻意不加材质，保持通透 */
+/* .chat-input-area 也不加：backdrop-filter 会让它内部的 .msg-input
+ * （ProseMirror 编辑器）在某些层叠条件下完全不绘制，
+ * 表现就是「输入框消失」。输入区的背景改由 input-bar.css 单独给。 */
+.right-sidebar,
+/* 右栏承载层：.group-box (180x800) 同时覆盖群公告与群成员，
+ * 只挂这一块材质；里面的 .group-notice / .group-member / .group-user 全透明。 */
+.group-box,
+/* 左下角用户资料卡。必须排除 .topbar-profile —— 顶部标题栏里那个同名元素
+ * 宽 1797px，一起加材质会变成横贯窗口的玻璃长条。 */
+.user-profile-card:not(.topbar-profile),
+.fs-panel {
+  background: rgba(var(--ll-acrylic), var(--ll-material-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-shadow) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 2. 打透：中间容器 + 承载层内部的嵌套层
+ *    （嵌套层必须连 backdrop-filter 一起清掉，否则仍是双层玻璃）
+ * ════════════════════════════════════════════════════════════ */
+
+#app,
+.global-container,
+.container-content,
+.message-panel,
+.container-content-view,
+.two-col-layout,
+.two-col-layout__aside,
+.two-col-layout__main,
+.aio,
+.group-chat,
+.chat-msg-area,
+.message-panel__content,
+
+/* 承载层内部的嵌套层 —— 玻璃叠玻璃的主要来源 */
+.sidebar-nav,
+.sidebar-wrapper,
+.nav,
+/* 右栏内部：材质统一由 .group-box 承载 */
+.group-panel,
+.group-box__container,
+.group-box__wrapper,
+.group-notice,
+.group-member,
+.group-user,
+.group-user-list,
+.recent-contact .viewport-list {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* 顶栏是全宽容器的容器（实测宽 2005px），不是按钮 */
+.topbar.container-topbar {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* QQ 的暗色主题全屏遮罩。
+ * 之前固定 0.28，导致「壁纸压暗」调到 0 时画面仍然是暗的 ——
+ * 用户看到的是这一层，不是壁纸层。
+ * 现在由壁纸层 (#app::before 的渐变) 唯一负责压暗，这层保持透明。 */
+.dark-mode-overlay {
+  background: transparent !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 3. 会话列表项
+ * ════════════════════════════════════════════════════════════ */
+
+.recent-contact-item {
+  border-radius: var(--ll-radius-sm) !important;
+  transition: background-color 160ms ease !important;
+  margin: 1px 4px !important;
+}
+
+.recent-contact-item:hover {
+  background: rgba(var(--ll-specular), 0.07) !important;
+}
+
+.recent-contact-item.active,
+.recent-contact-item--active {
+  background: rgba(var(--ll-brand-rgb), 0.16) !important;
+}
+
+.recent-contact-item .contact-name,
+.recent-contact-item [class*="name"] {
+  color: var(--ll-on-glass) !important;
+}
+
+.recent-contact-item .summary-main,
+.recent-contact-item [class*="summary"] {
+  color: var(--ll-on-glass-2) !important;
+}
+
+/* 左栏激活项指示 */
+.tab-item-mask.is-active {
+  background: rgba(var(--ll-brand-rgb), 0.32) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 3.5 语义标签：按 M3 的 container / onContainer 配对重新分配
+ * ------------------------------------------------------------
+ * 实测问题：QQ 的 .q-tag--blue 用「深蓝字 #0066cc + 浅蓝底
+ * rgba(0,153,255,.2)」，落在暗色气泡 rgba(30,37,48,.62) 上时
+ * 对比度只有 2.2:1（"深底配深色"）。
+ * 修正原则：标签底用 brand 的 20% 透明，文字用 brand 本身
+ * （暗色下 brand 是 M3 primary tone 80 = 亮蓝，天然可读）。
+ * ════════════════════════════════════════════════════════════ */
+
+.q-tag--blue,
+.q-tag--blue .title {
+  color: var(--ll-brand) !important;
+}
+
+.q-tag--blue {
+  background: rgba(var(--ll-brand-rgb), 0.18) !important;
+}
+
+/* 橙色（群主）：文字走 M3 的 tertiary（由源色派生），不再硬编码橙 */
+.q-tag--orange,
+.q-tag--orange .title {
+  color: var(--ll-tertiary) !important;
+}
+
+body[q-theme="light"] .q-tag--orange,
+body[q-theme="light"] .q-tag--orange .title {
+  color: var(--ll-on-glass) !important;
+}
+
+/* 其余 q-tag 变体统一走 onGlass 二级色，避免任何深底深字 */
+.q-tag {
+  border-radius: var(--ll-radius-xs) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 4. 消息气泡
+ * ------------------------------------------------------------
+ * ⚠️ 不要用 [class*="container--self"] 这种宽匹配：
+ * QQ 有两个都含 container--self 的元素 ——
+ *   .msg-content-container.container--self   (272×60)   真正的气泡
+ *   .message-container--self                (1505×76)  整行容器
+ * 宽匹配会把整行染成一条长色带（"消息样式异常"就是这个）。
+ * ════════════════════════════════════════════════════════════ */
+
+.msg-content-container {
+  border-radius: var(--ll-radius) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+  box-shadow: 0 1px 6px rgba(var(--ll-shadow-rgb, 0, 0, 0), 0.16) !important;
+}
+
+/* 对方气泡：0.62 在亮壁纸上几乎看不见，提到 0.78 并加一圈极淡描边 */
+.msg-content-container.container--others {
+  background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.28)) !important;
+  border: 1px solid rgba(var(--ll-specular), 0.1) !important;
+  color: var(--ll-on-glass) !important;
+}
+
+/* 自己气泡 */
+.msg-content-container.container--self {
+  background: rgba(var(--ll-brand-rgb), 0.32) !important;
+  border: 1px solid rgba(var(--ll-brand-rgb), 0.4) !important;
+  color: var(--ll-on-glass) !important;
+}
+
+/* 消息时间戳：QQ 用深色胶囊浮在壁纸上，很突兀。
+ * 改成无底、弱化的次要色，并用等宽数字。 */
+.msg-time,
+[class*="msg-time"],
+.message-container [class*="time"] {
+  background: transparent !important;
+  padding: 0 4px !important;
+  border-radius: 0 !important;
+  font-size: 11px !important;
+  font-variant-numeric: tabular-nums !important;
+  color: var(--ll-on-glass-3) !important;
+  text-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.5);
+}
+
+/* 聊天区文字：直接压壁纸，需要描边保证可读 */
+.chat-msg-area {
+  text-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.4);
+}
+/* 气泡里有底色，不需要描边；阴影会让字发虚（2026-10-30） */
+.chat-msg-area .msg-content-container,
+.chat-msg-area .msg-content-container * {
+  text-shadow: none !important;
+}
+
+.chat-msg-area .message,
+.chat-msg-area .text-element {
+  color: var(--ll-on-glass) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 5. 输入区
+ * ════════════════════════════════════════════════════════════ */
+
+/* 只给编辑器设文字色，不再把 .msg-input 的背景强制成 transparent
+ * （那会覆盖 input-bar.css 给的可见底色）。 */
+.chat-input-area [contenteditable="true"] {
+  color: var(--ll-on-glass) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 6. 品牌与状态
+ * ════════════════════════════════════════════════════════════ */
+
+a,
+.link {
+  color: var(--ll-brand) !important;
+}
+
+/* 未读角标：只改文字色，绝不改 background / border-radius / 尺寸 ——
+ * QQ 的 .q-badge.q-badge__red 是 36×36 的普通 span，一旦上色+圆角
+ * 就会变成左栏那几个突兀的大蓝圆。 */
+.q-badge {
+  color: #ffffff !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 7. 弹层
+ * ════════════════════════════════════════════════════════════ */
+
+.q-context-menu,
+.q-dialog,
+[class*="popover"] {
+  background: rgba(var(--ll-acrylic-high), 0.94) !important;
+  backdrop-filter: blur(28px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.8) !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-shadow-float) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 8. 滚动条
+ * ════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--ll-acrylic-high), 0.6);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--ll-acrylic-high), 0.85);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 9. 泛光（--ll-glow-strength 的真实消费者）
+ * ------------------------------------------------------------
+ * 之前 --ll-glow-strength 只是个变量，没有任何规则用它，
+ * 所以设置面板的"泛光强度"滑条完全没效果（实测 glowConsumed: 0）。
+ * 这里把它接到承载层的外发光上：光晕半径与 alpha 都随设置线性变化。
+ * ════════════════════════════════════════════════════════════ */
+
+.container-sidebar,
+.recent-contact,
+.group-box,
+.user-profile-card:not(.topbar-profile) {
+  box-shadow:
+    var(--ll-shadow),
+    0 0 calc(8px + 26px * var(--ll-glow-strength, 0.15)) rgba(var(--ll-brand-rgb), calc(var(--ll-glow-strength, 0.15) * 0.55)) !important;
+}
+
+/* 输入框与选中项：更强的内发光，让"激活"有品牌色暗示 */
+.recent-contact-item.active,
+.recent-contact-item--active {
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--ll-brand-rgb), calc(var(--ll-glow-strength, 0.15) * 1.2)),
+    0 0 calc(6px + 14px * var(--ll-glow-strength, 0.15)) rgba(var(--ll-brand-rgb), calc(var(--ll-glow-strength, 0.15) * 0.4)) !important;
+}
+
+/* 浮动按钮与面板：泛光最明显的地方 */
+#liuli-fab {
+  box-shadow:
+    var(--ll-shadow),
+    0 0 calc(10px + 30px * var(--ll-glow-strength, 0.15)) rgba(var(--ll-brand-rgb), calc(var(--ll-glow-strength, 0.15) * 0.7)) !important;
+}
+

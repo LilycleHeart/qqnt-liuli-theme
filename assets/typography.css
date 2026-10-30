@@ -1,0 +1,219 @@
+/* ============================================================
+ * 琉璃 · 分隔线与排版（M3 语义重设计）
+ * ------------------------------------------------------------
+ * M3 的层级靠「表面色 + 留白 + 高度阴影」表达，不用 1px 分隔线。
+ * QQ 的线多数用 box-shadow: 0 1px 0 … 或伪元素画出来，不是 border，
+ * 所以这里同时清 border 和 box-shadow。
+ * ============================================================ */
+
+/* ════════════════════════════════════════════════════════════
+ * 1. 去掉组件分隔线
+ * ════════════════════════════════════════════════════════════ */
+
+/* 列表项：线交给间距表达 */
+.recent-contact-item,
+.group-user,
+.group-member,
+.item__content,
+.nav-item,
+.ml-item {
+  border-top: none !important;
+  border-bottom: none !important;
+  background-clip: padding-box !important;
+}
+
+/* 列表项之间的细线（box-shadow 实现） */
+.recent-contact-item::after,
+.recent-contact-item::before,
+.group-user::after,
+.group-user::before,
+.group-member::after,
+.group-member::before {
+  display: none !important;
+}
+
+/* 会话项用间距 + 圆角活跃态区分，不用线 */
+.recent-contact-item {
+  margin: 2px 6px !important;
+}
+
+/* 群成员项同理 */
+.group-user {
+  margin: 1px 4px !important;
+  border-radius: var(--ll-radius-xs) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 2. 新消息分隔线：胶囊标签 + 两侧渐隐细线
+ * ------------------------------------------------------------
+ * 原设计是一条贯穿整个聊天区的实线 + 中间文字，非常抢眼。
+ * 改成 M3 的做法：中间一个 pill 标签，两侧用渐变淡出的细线，
+ * 视觉上"指向"而不是"切断"对话流。
+ * ════════════════════════════════════════════════════════════ */
+
+/* 容器：横向 flex，两侧线 + 中间 pill */
+[class*="new-msg"],
+[class*="newMsg"],
+[class*="newmsg"],
+.chat-msg-area__tip,
+[class*="msg-divider"],
+[class*="unread-divider"] {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  height: auto !important;
+  min-height: 28px !important;
+  padding: 6px 18px !important;
+  color: var(--ll-brand) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.4px !important;
+}
+
+/* 两侧细线 */
+[class*="new-msg"]::before,
+[class*="new-msg"]::after,
+[class*="msg-divider"]::before,
+[class*="msg-divider"]::after,
+[class*="unread-divider"]::before,
+[class*="unread-divider"]::after {
+  content: "" !important;
+  flex: 1 1 auto !important;
+  height: 1px !important;
+  border: none !important;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(var(--ll-brand-rgb), 0.42) 35%,
+    rgba(var(--ll-brand-rgb), 0.42) 65%,
+    transparent 100%) !important;
+}
+
+/* 中间胶囊：把文字本身做成 pill（若结构里文字是独立元素） */
+[class*="new-msg"] > *,
+[class*="msg-divider"] > *,
+[class*="unread-divider"] > * {
+  flex: 0 0 auto !important;
+  padding: 3px 12px !important;
+  border-radius: 999px !important;
+  background: rgba(var(--ll-brand-rgb), 0.14) !important;
+  border: 1px solid rgba(var(--ll-brand-rgb), 0.28) !important;
+  color: var(--ll-brand) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 18px !important;
+  white-space: nowrap !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 3. M3 排版体系
+ * ------------------------------------------------------------
+ * QQ 原样几乎全是 400 字重、字号也偏平，没有标题层次。
+ * 按 M3 type scale 重新分配：
+ *   Title Medium  16/500   聊天标题
+ *   Body Large    14/400   消息正文
+ *   Label Large   14/500   会话名（列表项的主标签）
+ *   Body Medium   13/400   群成员名
+ *   Body Small    12/400   摘要、时间
+ *   Label Small   11/500   角标
+ * ════════════════════════════════════════════════════════════ */
+
+/* 会话列表：名字强调、摘要退后 */
+.recent-contact-item .contact-name,
+.recent-contact-item [class*="contact-name"],
+.recent-contact-item .item__title {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 20px !important;
+  letter-spacing: 0.1px !important;
+  color: var(--ll-on-glass) !important;
+}
+
+.recent-contact-item .summary-main,
+.recent-contact-item .item__summary,
+.recent-contact-item [class*="summary"] {
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 16px !important;
+  letter-spacing: 0.2px !important;
+  color: var(--ll-on-glass-2) !important;
+}
+
+/* 时间戳：更弱，等宽数字避免跳动 */
+.recent-contact-item .secondary-info,
+.recent-contact-item [class*="time"] {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.3px !important;
+  color: var(--ll-on-glass-3) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* 群成员名 */
+.group-user__name,
+.group-member-name,
+.group-member .user-name {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 18px !important;
+  letter-spacing: 0.1px !important;
+}
+
+/* 聊天区标题：标题级 */
+.chat-header .panel-header__title,
+.chat-header [class*="title"],
+.chat-header {
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  line-height: 24px !important;
+  letter-spacing: 0.15px !important;
+}
+
+/* 消息正文：可读优先 */
+.message .text-element,
+.message .text-normal,
+.msg-content-container .text-element {
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 22px !important;
+  letter-spacing: 0.15px !important;
+}
+
+/* 消息里的发送者名：小一号 + 中等字重 */
+.msg-content-container .user-name,
+.message-container .user-name {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 16px !important;
+  letter-spacing: 0.2px !important;
+  color: var(--ll-on-glass-2) !important;
+}
+
+/* 输入区：只设字号字重，绝不设 line-height / letter-spacing。
+ * ProseMirror 靠这两个值计算光标坐标与文字位置，
+ * 一改就会「光标错位 + 文字显示异常」。 */
+.chat-input-area [contenteditable="true"],
+.chat-input-area textarea {
+  font-size: 14px !important;
+  font-weight: 400 !important;
+}
+
+/* 群公告正文 */
+.group-notice,
+.group-notice [class*="content"],
+.group-notice p {
+  font-size: 12px !important;
+  line-height: 18px !important;
+  letter-spacing: 0.2px !important;
+  color: var(--ll-on-glass-2) !important;
+}
+
+/* 角标：最小号 */
+.q-badge {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.3px !important;
+  font-variant-numeric: tabular-nums !important;
+}

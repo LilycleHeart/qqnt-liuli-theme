@@ -1,0 +1,85 @@
+/* ============================================================
+ * 琉璃 · M3 动态色板（Material Color Utilities 派生）
+ * ------------------------------------------------------------
+ * 源色 #1d9bf0，与 dsh-liuli-ui-enhance 默认源色一致。
+ * 派生链完全照搬 liuli-palette.ts：
+ *   argbFromHex → themeFromSourceColor → schemes/palettes
+ *   → tone 派生 + SURFACE_TONES + SCRIM alphaComposite
+ * 由 tools/build-palette.mjs 生成，勿手改。
+ * ============================================================ */
+
+/* 亮色 */
+:root, body[q-theme="light"] {
+  --ll-brand: #00629d;
+  --ll-brand-rgb: 0, 98, 157;
+  --ll-brand-hover: #006dad;
+  --ll-brand-pressed: #00588e;
+  --ll-brand-tint: #cfe5ff;
+  --ll-brand-weak: #c4e0ff;
+  --ll-brand-line: #1097eb;
+  --ll-on-brand: #ffffff;
+
+  --ll-secondary: #526070;
+  --ll-tertiary: #695779;
+
+  --ll-on-glass: #1a1c1e;
+  --ll-on-glass-rgb: 26, 28, 30;
+  --ll-on-glass-2: #42474e;
+  --ll-on-glass-2-rgb: 66, 71, 78;
+  --ll-on-glass-3: #5a5f66;
+  --ll-on-glass-4: #c2c7cf;
+
+  --ll-app-bg: #f9f9fc;
+  --ll-surface-low: #f3f3f7;
+  --ll-surface-mid: #eeedf1;
+  --ll-surface-high: #e8e8eb;
+  --ll-surface-highest: #e2e2e5;
+  --ll-surface-1: #e7ecf2;
+  --ll-surface-2: #dbe2ea;
+  --ll-surface-3: #ced9e2;
+  --ll-surface-4: #c2d0db;
+
+  --ll-stroke-1: #72777f;
+  --ll-stroke-2: #c2c7cf;
+  --ll-popup-bg: #e2e2e5;
+  --ll-danger: #ba1a1a;
+  --ll-danger-bg: #ffdad6;
+}
+
+/* 暗色 */
+body[q-theme="dark"], body.q-theme-tokens-dark {
+  --ll-brand: #99cbff;
+  --ll-brand-rgb: 153, 203, 255;
+  --ll-brand-hover: #81c1ff;
+  --ll-brand-pressed: #afd5ff;
+  --ll-brand-tint: #003c62;
+  --ll-brand-weak: #004f7f;
+  --ll-brand-line: #0077bc;
+  --ll-on-brand: #003354;
+
+  --ll-secondary: #b9c8da;
+  --ll-tertiary: #d4bee6;
+
+  --ll-on-glass: #e2e2e5;
+  --ll-on-glass-rgb: 226, 226, 229;
+  --ll-on-glass-2: #c2c7cf;
+  --ll-on-glass-2-rgb: 194, 199, 207;
+  --ll-on-glass-3: #9ca1a9;
+  --ll-on-glass-4: #42474e;
+
+  --ll-app-bg: #121316;
+  --ll-surface-low: #1a1c1e;
+  --ll-surface-mid: #1e2022;
+  --ll-surface-high: #282a2d;
+  --ll-surface-highest: #333538;
+  --ll-surface-1: #202529;
+  --ll-surface-2: #282e34;
+  --ll-surface-3: #343c44;
+  --ll-surface-4: #414a54;
+
+  --ll-stroke-1: #8c9199;
+  --ll-stroke-2: #42474e;
+  --ll-popup-bg: #282a2d;
+  --ll-danger: #ffb4ab;
+  --ll-danger-bg: #93000a;
+}

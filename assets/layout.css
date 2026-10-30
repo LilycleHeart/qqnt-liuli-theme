@@ -1,0 +1,1415 @@
+/* ============================================================
+ * 琉璃 · 整体布局对齐 DSH（最后加载，覆盖前面各文件的布局部分）
+ * ------------------------------------------------------------
+ * DSH 的骨架（DockShellFrame.module.css / liuli.css）：
+ *   - 每块区域都是独立卡片，卡片之间统一留 --liuli-dock-padding = 8px
+ *   - 卡片配方：圆角 14px + 1px 发丝线（border-l1 = stroke3）
+ *              + 品牌泛光 0 0 10px + 投影 0 2px 10px
+ *              + 亚克力底 + 噪点 + backdrop 模糊
+ *   - 对话区 = header 卡 + 正文卡（中间留缝）；输入框是浮在正文卡里的卡片
+ *   - 侧栏选中项 = primaryContainer 实底 + 3×18px 左指示条 + 泛光
+ *
+ * QQ 映射：
+ *   .container-sidebar          → 导航卡
+ *   .recent-contact             → 会话列表卡
+ *   .aio > .chat-header         → header 卡
+ *   *:has(> .chat-input-area)   → 正文卡（群聊是 .group-chat，私聊类名不同，用 :has 兼容）
+ *   .group-box                  → 详情卡（群公告 + 成员）
+ *   .chat-input-area            → 浮动输入卡
+ * ============================================================ */
+
+body {
+  --ll-dock-gap: 8px;
+  /* 悬浮胶囊需要比承载层更实，壁纸亮时才看得清 */
+  --ll-pill-opacity: min(0.92, calc(var(--ll-material-opacity) + 0.32));
+  /* 卡片描边：按用户要求关闭（2026-10-28）。想恢复就改回
+   * 1px solid var(--ll-stroke-3, rgba(var(--ll-specular), 0.08)) */
+  --ll-card-border: none;
+  --ll-hairline: var(--ll-stroke-3, rgba(var(--ll-specular), 0.08));
+  --ll-glow-brand: 0 0 10px rgba(var(--ll-brand-rgb), var(--ll-glow-strength, 0.15));
+  --ll-card-shadow: var(--ll-glow-brand), var(--ll-shadow);
+}
+
+/* ── 外框：去掉 QQ 的 4px 外边距与 8/5 圆角，改为统一 8px 留白 ── */
+.global-container .container-content {
+  margin: 0 !important;
+  padding: 0 var(--ll-dock-gap) var(--ll-dock-gap) !important;
+  box-sizing: border-box !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
+/* ── 卡片通用外观（底色/模糊由 renderer 的 GLASS 内联写入，这里补描边与阴影） ── */
+.container-sidebar,
+.two-col-layout__aside > .recent-contact,
+.group-box {
+  border: var(--ll-card-border) !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-card-shadow) !important;
+  box-sizing: border-box !important;
+}
+
+/* 会话列表卡：原来是 content-box 255px + 6px 外边距，会压到右侧 6px */
+.two-col-layout__aside > .recent-contact {
+  margin: 0 0 0 var(--ll-dock-gap) !important;
+  width: calc(100% - var(--ll-dock-gap)) !important;
+}
+
+/* ── header：按用户要求不加材质（2026-10-28），只保留与正文卡的间距 ── */
+.aio > .chat-header {
+  margin: 0 0 var(--ll-dock-gap) var(--ll-dock-gap) !important;
+  width: auto !important;
+  border: none !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: 0 1px 3px rgba(var(--ll-shadow-rgb), 0.55) !important;
+}
+.aio > .chat-header .background-mask,
+.aio > .chat-header .texture-background {
+  background: transparent !important;
+}
+
+/* ── 正文卡：按用户要求不加材质，壁纸直接透出；只保留左侧间距 ── */
+.aio *:has(> .chat-input-area) {
+  position: relative !important;
+  margin-left: var(--ll-dock-gap) !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* ── 详情卡（群公告/成员）与正文卡之间留缝 ── */
+.group-box__container {
+  margin-left: var(--ll-dock-gap) !important;
+}
+
+/* ── 浮动输入卡：不再是贴底的整条，而是正文卡里四周留白的卡片。
+ * ⚠️ 仍然不加 backdrop-filter（会让 ProseMirror 不绘制），
+ * 下面是正文卡的磨砂，这里只给更实的底色。 ── */
+.aio .chat-input-area {
+  /* 上边 10px：聊天记录最后一条不贴输入框（2026-10-30） */
+  margin: 10px 10px 10px !important;
+  width: auto !important;
+  align-self: stretch !important;
+  padding: 0 !important;
+  border: var(--ll-card-border) !important;
+  border-radius: var(--ll-radius) !important;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.36)) !important;
+  box-shadow: var(--ll-shadow) !important;
+}
+
+/* 输入卡本身就是框，里面不再套第二层框 */
+.aio .chat-input-area > .msg-input {
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: none !important;
+  min-height: 44px !important;
+}
+
+/* ── 侧栏导航选中：primaryContainer 实底 ── */
+.tab-item-mask.is-active {
+  background: var(--ll-primary-container, rgba(var(--ll-brand-rgb), 0.32)) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+.tab-item:has(.tab-item-mask.is-active) .tab-item-img,
+.tab-item:has(.tab-item-mask.is-active) svg {
+  color: var(--ll-on-primary-container, var(--ll-on-glass)) !important;
+}
+
+/* ── 会话列表项：12px 圆角，hover 品牌 8%，选中 primaryContainer + 左指示条 ── */
+.recent-contact-item {
+  border-radius: 12px !important;
+  margin: 2px 6px !important;
+}
+.recent-contact-item .item__content {
+  background: transparent !important;
+}
+.recent-contact-item:hover {
+  background: rgba(var(--ll-brand-rgb), 0.08) !important;
+}
+.recent-contact-item.recent-contact-item--selected,
+.recent-contact-item.recent-contact-item--selected:hover {
+  /* renderer 的 normalizeColors/fixContrast 会把文字内联成 var(--ll-on-glass*)，
+   * 在这里改写变量本身，选中项里的文字就跟着变成 onPrimaryContainer */
+  --ll-on-glass: var(--ll-on-primary-container);
+  --ll-on-glass-2: color-mix(in srgb, var(--ll-on-primary-container) 78%, transparent);
+  --ll-on-glass-3: color-mix(in srgb, var(--ll-on-primary-container) 62%, transparent);
+  background-color: var(--ll-primary-container, rgba(var(--ll-brand-rgb), 0.16)) !important;
+  background-image: linear-gradient(var(--ll-on-primary-container), var(--ll-on-primary-container)) !important;
+  background-repeat: no-repeat !important;
+  background-position: left center !important;
+  background-size: 3px 18px !important;
+  box-shadow: var(--ll-card-shadow) !important;
+  color: var(--ll-on-primary-container) !important;
+}
+.recent-contact-item--selected .item__content * {
+  color: inherit;
+}
+
+/* 发送键：输入卡去掉内边距后，原来的 bottom:16px 会把它顶到卡片上沿外，
+ * 改为在 44px 单行高度里垂直居中（(44 - 30) / 2 = 7），多行时仍贴底行。 */
+.aio .chat-input-area > .operation {
+  right: 8px !important;
+  bottom: 7px !important;
+}
+
+/* 发送图标错位：QQ 给 .send-btn-wrap 写了 padding-right:11px，
+ * .send 被挤到左边 5px，纸飞机就偏了。三层全部归零、居中。 */
+.chat-input-area > .operation .send-btn-wrap,
+.chat-input-area > .operation .send,
+.chat-input-area > .operation .send-msg {
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+/* 纸飞机图形的视觉重心偏左下，向右上补 1px */
+.chat-input-area > .operation .send-msg::after {
+  transform: translate(-1px, 1px) !important;
+}
+
+
+/* ════════════════════════════════════════════════════════════
+ * 顶部悬浮控件（DSH WindowControls 的做法）
+ *   左上：头像 + 名字胶囊        右上：窗口按钮胶囊
+ * 顶部 40px 仍是 QQ 原本的拖动区，只把内容收成两颗胶囊。
+ * ════════════════════════════════════════════════════════════ */
+body[data-liuli-scope="main"] .topbar-content .qq-logo {
+  display: none !important;
+}
+body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile {
+  flex: 0 0 auto !important;
+  /* QQ 自己写了 width:0 + flex:1，flex 改成 auto 后宽度会塌到 0，必须显式给宽 */
+  width: max-content !important;
+  max-width: 50vw !important;
+  height: 30px !important;
+  margin: 5px 0 0 var(--ll-dock-gap) !important;
+  padding: 0 12px 0 4px !important;
+  border-radius: 12px !important;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-pill-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+  box-shadow: var(--ll-shadow) !important;
+  box-sizing: border-box !important;
+}
+body[data-liuli-scope="main"] .topbar-profile .user-profile-card__content,
+body[data-liuli-scope="main"] .topbar-profile .user-profile-card__info {
+  flex: 0 0 auto !important;
+  height: 30px !important;
+}
+body[data-liuli-scope="main"] .topbar-profile .user-avatar-container {
+  height: 30px !important;
+}
+body[data-liuli-scope="main"] .topbar-profile .user-avatar {
+  margin-top: -5px !important;
+}
+body[data-liuli-scope="main"] .topbar-profile .user-avatar-container,
+body[data-liuli-scope="main"] .topbar-profile .user-avatar-container * {
+  top: auto;
+}
+body[data-liuli-scope="main"] .topbar-profile .avatar.user-avatar {
+  margin: 3px 0 0 !important;
+}
+/* 空签名占位（"编辑个性签名"）不进胶囊 */
+body[data-liuli-scope="main"] .topbar-profile .user-profile-card__long-nick:has(.empty-long-nick) {
+  display: none !important;
+}
+
+body[data-liuli-scope="main"] .window-title-bar .window-control-area {
+  height: 30px !important;
+  margin: 5px var(--ll-dock-gap) 0 0 !important;
+  padding: 2px 4px !important;
+  gap: 0 !important;
+  align-items: center !important;
+  border-radius: 12px !important;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-pill-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+  box-shadow: var(--ll-shadow) !important;
+  box-sizing: border-box !important;
+}
+body[data-liuli-scope="main"] .window-title-bar .window-control-area > * {
+  width: 34px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  color: var(--ll-on-glass-2) !important;
+  transition: background-color 140ms ease, color 140ms ease !important;
+}
+body[data-liuli-scope="main"] .window-title-bar .window-control-area > *:hover {
+  background: rgba(var(--ll-brand-rgb), 0.14) !important;
+  color: var(--ll-on-glass) !important;
+}
+body[data-liuli-scope="main"] .window-title-bar .window-control-area > .close:hover {
+  background: var(--ll-danger, #e5484d) !important;
+  color: #fff !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 左侧导航：常态收起，指向展开
+ * 导航卡脱离文档流，平时只在窗口左缘露 6px（带一条提示竖线），
+ * 鼠标移到左缘时滑出，盖在会话列表上，不挤动布局。
+ * ::before 向左延伸 14px 作为感应区，滑出后鼠标仍在元素范围内，不会抖动。
+ * ════════════════════════════════════════════════════════════ */
+.global-container .container-content > .container-sidebar {
+  position: fixed !important;
+  left: var(--ll-dock-gap) !important;
+  top: 40px !important;
+  bottom: var(--ll-dock-gap) !important;
+  height: auto !important;
+  z-index: 3000 !important;
+  overflow: visible !important;
+  transform: translateX(calc(-100% - var(--ll-dock-gap) + 6px)) !important;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease !important;
+  box-shadow: none !important;
+}
+.global-container .container-content > .container-sidebar:hover,
+.global-container .container-content > .container-sidebar:focus-within {
+  transform: translateX(0) !important;
+  box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
+}
+.global-container .container-content > .container-sidebar::before {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: -14px !important;
+  width: 14px !important;
+}
+.global-container .container-content > .container-sidebar::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 50% !important;
+  right: 1px !important;
+  width: 3px !important;
+  height: 36px !important;
+  margin-top: -18px !important;
+  border-radius: 2px !important;
+  background: var(--ll-on-glass) !important;
+  opacity: 0.55 !important;
+  pointer-events: none !important;
+  transition: opacity 160ms ease !important;
+}
+.global-container .container-content > .container-sidebar:hover::after,
+.global-container .container-content > .container-sidebar:focus-within::after {
+  opacity: 0 !important;
+}
+.container-sidebar > .sidebar-nav {
+  overflow: hidden !important;
+  border-radius: inherit !important;
+}
+/* 导航让出位置后，会话列表直接贴外框留白 */
+.two-col-layout__aside > .recent-contact {
+  margin-left: 0 !important;
+  width: 100% !important;
+}
+
+/* 展开的导航盖在会话列表上：常态材质 0.3 太透，压在列表文字上读不清。
+ * 底色是 renderer 内联写的 rgba(acrylic, var(--ll-material-opacity))，
+ * 在元素自身改写变量即可，不用和内联 !important 抢。 */
+.global-container .container-content > .container-sidebar:hover,
+.global-container .container-content > .container-sidebar:focus-within {
+  --ll-material-opacity: 0.92;
+  backdrop-filter: blur(24px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 联系人页（#/main/contact/*）
+ * QQ 在这里有两块实底 rgb(34,34,34)：
+ *   .contact          左侧好友/群列表 → 与会话列表同款卡片
+ *   .contact-profile  右侧资料区     → 与聊天区一样不加材质
+ * ════════════════════════════════════════════════════════════ */
+/* :not(#ll) 计入 ID 优先级：QQ 的 body[is-base-theme][q-theme] .contact[data-v-…]
+ * 是 (0,4,1) 且带 !important，普通类选择器压不过它。 */
+.contact-layout .contact-layout__left-area > .contact:not(#ll) {
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-material-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+  border: var(--ll-card-border) !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-card-shadow) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+.contact-layout .contact-layout__right-area:not(#ll),
+.contact-layout .contact-layout__right-area > *:not(#ll),
+.contact-layout .contact-profile:not(#ll) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.contact-layout .contact-layout__right-area {
+  margin-left: var(--ll-dock-gap) !important;
+}
+/* 左右之间的竖分割线、列表里的横分割线 */
+.contact-layout > .q-divider,
+.contact-layout .contact .q-divider,
+.contact-layout .contact [class*="divider"] {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+/* 分组标题（我的好友 / 同学…）：QQ base-theme 给了 rgb(34,34,34) 实底 */
+.contact-layout .contact-list .q-collapse-item__header:not(#ll),
+.contact-layout .contact-list .q-collapse-item__wrap:not(#ll),
+.contact-layout .contact-list .q-collapse-item:not(#ll) {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.contact-layout .contact-list .q-collapse-item__header:not(#ll) {
+  border-radius: 10px !important;
+  margin: 0 6px !important;
+  transition: background-color 140ms ease !important;
+}
+.contact-layout .contact-list .q-collapse-item__header:not(#ll):hover {
+  background-color: rgba(var(--ll-brand-rgb), 0.08) !important;
+}
+
+/* 联系人页「新朋友/新群聊」下方的横分割线 */
+body .contact-layout .contact .contact-notify {
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+
+/* 联系人资料：资料区本身不加材质，但资料卡片直接压在壁纸上不可读，
+ * 给中间那块 .profile__body 一张浮动卡片（与输入卡同配方）。 */
+body .contact-layout .contact-profile .profile__body {
+  padding: 20px !important;
+  border-radius: var(--ll-radius) !important;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-pill-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+body .contact-layout .contact-profile .q-divider {
+  background: rgba(var(--ll-on-glass-rgb), 0.08) !important;
+}
+
+
+/* ════════════════════════════════════════════════════════════
+ * 第 4 轮（2026-10-28）：隐藏标题栏 + 指向入口 + 消息区即时生效
+ * ------------------------------------------------------------
+ * ⚠️ 为什么之前的 :hover 在真实鼠标下不生效：
+ *   QQ 顶部 40px、左侧 52px 有 position:fixed 的 .draggable-view，
+ *   带 -webkit-app-region: drag。Windows 下拖动区里的鼠标事件被系统
+ *   当成「拖窗口」，页面收不到，:hover 永远不会触发。
+ *   （调试桥的 sendInputEvent 绕过了系统命中测试，所以自测时是好的。）
+ * 处理：
+ *   1. 顶部拖动区收成 8px（就是卡片外留白那一条），左侧拖动区去掉；
+ *   2. 入口用独立的 no-drag 元素（renderer 的 ensureHoverEntries 创建）；
+ *   3. 聊天标题栏本身改成拖动区，补足拖窗口的面积。
+ * ════════════════════════════════════════════════════════════ */
+
+/* ── 拖动区 ── */
+body[data-liuli-scope="main"] .draggable-view:not(.draggable-view__container):nth-child(1) {
+  height: var(--ll-dock-gap) !important;
+}
+body[data-liuli-scope="main"] .draggable-view:not(.draggable-view__container):nth-child(2) {
+  display: none !important;
+}
+body[data-liuli-scope="main"] .aio > .chat-header {
+  -webkit-app-region: drag;
+}
+body[data-liuli-scope="main"] .aio > .chat-header .panel-header__action,
+body[data-liuli-scope="main"] .aio > .chat-header .panel-header__action *,
+body[data-liuli-scope="main"] .aio > .chat-header button,
+body[data-liuli-scope="main"] .aio > .chat-header [role="button"],
+body[data-liuli-scope="main"] .aio > .chat-header input {
+  -webkit-app-region: no-drag;
+}
+
+/* ── 标题栏收起：内容区顶到窗口上沿（留 8px） ── */
+body[data-liuli-scope="main"] .global-container > .topbar,
+body[data-liuli-scope="main"] .global-container > .topbar .topbar-content {
+  height: 0 !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+body[data-liuli-scope="main"] .global-container .container-content {
+  padding-top: var(--ll-dock-gap) !important;
+}
+body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar {
+  top: var(--ll-dock-gap) !important;
+}
+
+/* ── 两颗胶囊：常态隐藏，指向窗口左上 / 右上角唤出 ──
+ * 隐藏时 visibility 延迟 250ms 再生效：鼠标从感应条移到胶囊上的途中不会消失。 */
+body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile,
+body[data-liuli-scope="main"] .window-title-bar .window-control-area {
+  position: fixed !important;
+  top: 6px !important;
+  margin: 0 !important;
+  z-index: 3600 !important;
+  pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(-8px) !important;
+  transition: opacity 160ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 250ms !important;
+}
+body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile {
+  /* 让出左侧导航条（约 56px），展开时不压住导航顶部（2026-10-30） */
+  left: calc(var(--ll-dock-gap) + 56px) !important;
+}
+body[data-liuli-scope="main"] .window-title-bar .window-control-area {
+  right: var(--ll-dock-gap) !important;
+}
+body[data-liuli-scope="main"][data-liuli-r-l] .topbar-content .user-profile-card.topbar-profile,
+body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile:hover,
+body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile:focus-within,
+body[data-liuli-scope="main"][data-liuli-r-r] .window-title-bar .window-control-area,
+body[data-liuli-scope="main"] .window-title-bar .window-control-area:hover,
+body[data-liuli-scope="main"] .window-title-bar .window-control-area:focus-within {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  transition: opacity 160ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s !important;
+}
+
+/* 感应条：窗口顶边 8px，左右各一段，中间仍是拖动区 */
+body[data-liuli-scope="main"] .liuli-top-hint {
+  position: fixed;
+  top: 0;
+  height: var(--ll-dock-gap);
+  width: 200px;
+  z-index: 3700;
+  -webkit-app-region: no-drag;
+  cursor: default;
+}
+body[data-liuli-scope="main"] #liuli-top-hint-l { left: 56px; }   /* 跟着头像胶囊让出导航条 */
+body[data-liuli-scope="main"] #liuli-top-hint-r { right: 0; }
+/* 提示短横：告诉用户这里能唤出东西（DSH WindowControls 的 .hint 同款） */
+body[data-liuli-scope="main"] .liuli-top-hint::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ll-on-glass);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  opacity: 0.7;
+  transition: opacity 140ms ease;
+}
+body[data-liuli-scope="main"] #liuli-top-hint-l::after { left: 24px; }
+body[data-liuli-scope="main"] #liuli-top-hint-r::after { right: 24px; }
+body[data-liuli-scope="main"] .liuli-top-hint:hover::after,
+body[data-liuli-scope="main"][data-liuli-r-l] #liuli-top-hint-l::after,
+body[data-liuli-scope="main"][data-liuli-r-r] #liuli-top-hint-r::after {
+  opacity: 0;
+}
+
+/* ── 左侧导航：完全收起，入口是左边缘的把手 ── */
+body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar {
+  transform: translateX(calc(-100% - var(--ll-dock-gap) - 4px)) !important;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1) 180ms,
+    box-shadow 220ms ease 180ms !important;
+  -webkit-app-region: no-drag !important;
+}
+body[data-liuli-scope="main"][data-liuli-r-nav] .global-container .container-content > .container-sidebar,
+body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:hover,
+body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:focus-within {
+  transform: translateX(0) !important;
+  transition-delay: 0s !important;
+  box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
+  --ll-material-opacity: 0.92;
+}
+body[data-liuli-scope="main"][data-liuli-r-nav] .global-container .container-content > .container-sidebar {
+  backdrop-filter: blur(24px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
+}
+/* 旧的 6px 露边提示条不要了 */
+body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar::after {
+  content: none !important;
+}
+
+body[data-liuli-scope="main"] #liuli-nav-handle {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 64px;
+  margin-top: -32px;
+  z-index: 3100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 10px 10px 0;
+  background: rgba(var(--ll-acrylic), 0.72);
+  backdrop-filter: var(--ll-material-blur);
+  -webkit-backdrop-filter: var(--ll-material-blur);
+  box-shadow: var(--ll-shadow);
+  color: var(--ll-on-glass-2);
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  transition: width 160ms ease, background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+body[data-liuli-scope="main"] #liuli-nav-handle svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+body[data-liuli-scope="main"] #liuli-nav-handle:hover {
+  width: 18px;
+  background: rgba(var(--ll-brand-rgb), 0.3);
+  color: var(--ll-on-glass);
+}
+/* 导航展开后把手让开 */
+body[data-liuli-scope="main"]:has(.container-sidebar:hover) #liuli-nav-handle {
+  opacity: 0;
+}
+
+/* ── 消息区即时生效 ──
+ * QQ 给 .message-container 写了 transition: all 0.3s，
+ * 分组属性一改，圆角/间距/位置都会慢慢动过去，看起来像「过一会儿才生效」。 */
+.message-container,
+.message-container .msg-content-container,
+.message-container > .avatar-span {
+  transition: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 统一浮层材质（2026-10-28）
+ * ------------------------------------------------------------
+ * 之前每种浮层各写各的：工具栏 acrylic-high 0.96 + blur 28 / 侧栏
+ * acrylic 0.92 + blur 24 / 输入区 acrylic opacity+0.36 无模糊 /
+ * 弹出菜单 acrylic-high 0.94，而 QQ 自己的大部分弹层（资料卡、表情面板、
+ * @ 面板、下拉菜单…）背景走 --bg_top_light 等 token，被打透成 transparent
+ * 之后直接压在壁纸上，就是"弹出来读不清"。
+ * 现在只有一套配方（DSH 对话框/菜单的做法：亚克力 + 噪点 + 强模糊）：
+ * ════════════════════════════════════════════════════════════ */
+body {
+  --ll-float-bg: rgba(var(--ll-acrylic), 0.9);
+  --ll-float-blur: blur(28px) saturate(1.6);
+  --ll-float-shadow: var(--ll-glow-brand), var(--ll-shadow-float);
+}
+
+/* 1. 输入区 / 工具栏面板 / 展开的侧栏：同一底色 */
+body .aio .chat-input-area,
+body .chat-input-area > .chat-func-bar.liuli-expanded {
+  background: var(--ll-noise), var(--ll-float-bg) !important;
+}
+body .chat-input-area > .chat-func-bar.liuli-expanded {
+  backdrop-filter: var(--ll-float-blur) !important;
+  -webkit-backdrop-filter: var(--ll-float-blur) !important;
+  border: none !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-float-shadow) !important;
+}
+body[data-liuli-r-nav] .global-container .container-content > .container-sidebar.container-sidebar {
+  background: var(--ll-noise), var(--ll-float-bg) !important;
+  backdrop-filter: var(--ll-float-blur) !important;
+  -webkit-backdrop-filter: var(--ll-float-blur) !important;
+  box-shadow: var(--ll-float-shadow) !important;
+}
+
+/* 2. 点击弹出的各种面板：根节点统一上材质
+ * 右键菜单不在这里：它里面嵌着 position:fixed 的子菜单，
+ * 父级一旦有 backdrop-filter / transform，子菜单就会相对父级定位而错位（见下方单独处理）。 */
+body .q-context-sub-menu__container,
+body .q-menu,
+body .q-popup__main,
+body .q-dialog-main,
+body .q-dialog,
+body .form-modal,
+body .q-tooltips__content,
+body .q-tooltips-v2,
+body .sidebar-tooltips__content,
+body .q-notification,
+body .q-color-picker,
+body .q-pulldown-menu .q-pulldown-menu-wrapper,
+body .pulldown-menu,
+body .mini-buddy,
+body .mini-group,
+body .buddy-profile,
+body .group-profile-card,
+body .group-member-card,
+body .finger-memo-dialog,
+body .menu-stickers-panel,
+body .menu-stickers-wrapper .menu-stickers,
+body .editor-at-panel,
+body .editor-qqface-short-panel,
+body .expression-panel .sticker-panel,
+body .expression-panel > *:not(:empty),
+body .bot-panel-wrapper,
+body .handoff-menu,
+body .q-float-card,
+body .main-search .search-result,
+body .aio .panel-container {
+  background: var(--ll-noise), var(--ll-float-bg) !important;
+  backdrop-filter: var(--ll-float-blur) !important;
+  -webkit-backdrop-filter: var(--ll-float-blur) !important;
+  border: none !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-float-shadow) !important;
+  color: var(--ll-on-glass) !important;
+}
+/* 右键菜单：模糊放到 ::before 上。
+ * 实测（ll-probe）：「输入"/"时唤起」的子菜单 .q-context-sub-menu__container 是 position:fixed，
+ * 却嵌在父菜单里面。父菜单自身带 backdrop-filter 或 transform 时会变成子菜单的定位参照，
+ * 子菜单跑偏、父菜单内容被挤走，只剩一块空底。伪元素上的模糊不影响子元素定位。 */
+body .q-context-menu:not(.is-pure) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+  border: none !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-float-shadow) !important;
+  color: var(--ll-on-glass) !important;
+}
+body .q-context-menu:not(.is-pure)::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  border-radius: inherit !important;
+  background: var(--ll-noise), var(--ll-float-bg) !important;
+  backdrop-filter: var(--ll-float-blur) !important;
+  -webkit-backdrop-filter: var(--ll-float-blur) !important;
+  pointer-events: none !important;
+}
+/* 弹层内部不要再叠一层材质（玻璃叠玻璃会深浅不一） */
+body .q-context-menu .q-context-menu,
+body .q-dialog-main .q-dialog-main,
+body .q-dialog .q-dialog-main,
+body .mini-buddy .buddy-profile,
+body .expression-panel .sticker-panel .sticker-panel {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+/* 遮罩层：保留轻微压暗，不要磨砂 */
+body .q-popup__modal {
+  background: rgba(0, 0, 0, 0.32) !important;
+}
+
+/* 弹层里的文字/图标：统一走 onSurface 体系，次要文字不低于 on-glass-2 */
+body :is(.q-context-menu, .q-menu, .q-popup__main, .q-dialog-main, .q-dialog, .mini-buddy,
+  .buddy-profile, .group-profile-card, .group-member-card, .menu-stickers-panel, .editor-at-panel,
+  .bot-panel-wrapper, .q-float-card, .pulldown-menu, .q-pulldown-menu-wrapper, .panel-container) {
+  --text_primary: var(--ll-on-glass);
+  --text_secondary: var(--ll-on-glass-2);
+  --text_tertiary: var(--ll-on-glass-2);
+  --icon_primary: var(--ll-on-glass);
+  --icon_secondary: var(--ll-on-glass-2);
+  --overlay_hover: rgba(var(--ll-brand-rgb), 0.12);
+  --overlay_active: rgba(var(--ll-brand-rgb), 0.2);
+  --fill_light_secondary: rgba(var(--ll-on-glass-rgb), 0.06);
+  --border_standard: transparent;
+}
+/* 菜单项：DSH 菜单的 8px 圆角 + 品牌悬停 */
+body .q-context-menu-item {
+  border-radius: 8px !important;
+  color: var(--ll-on-glass) !important;
+}
+body .q-context-menu-item:hover {
+  background: rgba(var(--ll-brand-rgb), 0.14) !important;
+}
+body .q-context-menu-separator {
+  background: rgba(var(--ll-on-glass-rgb), 0.08) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 侧栏入口：整条左边缘都能唤出（不必再找中间的把手）
+ * 把手变成从上到下 8px 宽的感应带，视觉上只在中间留一条短竖线提示。
+ * ════════════════════════════════════════════════════════════ */
+#liuli-nav-handle {
+  top: 0 !important;
+  bottom: 0 !important;
+  height: auto !important;
+  margin-top: 0 !important;
+  width: 8px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+#liuli-nav-handle svg {
+  display: none !important;
+}
+#liuli-nav-handle::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 3px;
+  height: 36px;
+  margin-top: -18px;
+  border-radius: 2px;
+  background: var(--ll-on-glass);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+#liuli-nav-handle:hover {
+  width: 8px !important;
+  background: linear-gradient(to right, rgba(var(--ll-brand-rgb), 0.22), transparent) !important;
+}
+body[data-liuli-r-nav] #liuli-nav-handle::after {
+  opacity: 0;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 系统头像（群助手、服务号、我的手机…）：QQ 写死橙/蓝底，改主题色
+ * ════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════
+ * 第 6 轮（2026-10-28）
+ * ════════════════════════════════════════════════════════════ */
+
+/* ── 系统头像：浅底深图标（用户要求对调） ── */
+body .avatar.avatar-sys,
+body [class*="avatar-sys"] {
+  background: var(--ll-on-primary-container) !important;
+  background-color: var(--ll-on-primary-container) !important;
+  color: var(--ll-primary-container) !important;
+}
+body .avatar.avatar-sys .q-svg-icon,
+body .avatar.avatar-sys svg,
+body [class*="avatar-sys"] .q-svg-icon {
+  color: var(--ll-primary-container) !important;
+  fill: currentColor;
+}
+
+/* ── 非主界面（独立窗口：群公告、状态、好友管理器、独立聊天窗…）──
+ * 不要悬浮控件，标题栏常驻；感应条、把手一律不出现。 */
+body:not([data-liuli-scope="main"]) .liuli-top-hint,
+body:not([data-liuli-scope="main"]) #liuli-nav-handle {
+  display: none !important;
+}
+
+/* 壁纸在 #app::before（absolute, z-index 0）。主界面的内容在
+ * position:fixed 的 .global-container 里所以盖得住；独立窗口的内容是
+ * 普通流，被壁纸层盖在下面 —— 状态窗口"只有壁纸"、面板"是空的"就是这个。
+ * 修正：内容抬到壁纸上面，并在两者之间铺一层卡片材质保证可读。 */
+/* ⚠️ 不能给子元素改 position：资料卡窗口的 .fake-target-element 是 QQ 的
+ * position:fixed，改成 relative 后脱离视口约束，窗口按内容高度一路长到 16216px。
+ * 改为反过来：#app 自建层叠上下文，壁纸和材质两层压到 z-index:-1，
+ * 普通流内容天然画在负 z-index 层之上，不用碰任何 QQ 元素。 */
+body:not([data-liuli-scope="main"]) #app {
+  isolation: isolate;
+}
+body:not([data-liuli-scope="main"]) #app::before {
+  z-index: -2 !important;
+}
+body:not([data-liuli-scope="main"]) #app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-aux-opacity, 0.72));
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+}
+/* 独立窗口里 QQ 写死的实底（深色 rgb(34,34,34) / 浅色 rgb(229,238,255)） */
+body:not([data-liuli-scope="main"]) .draggable-view__container:not(.window-title-bar):not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .container-content:not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .sidebar-nav:not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .container-content-view:not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .panel-header:not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .aio:not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .notice:not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .notice__container:not(#ll):not(#ll),
+body:not([data-liuli-scope="main"]) .sys-status-editor:not(#ll):not(#ll) {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* ── 联系人页：新朋友 / 新群聊（.sys-notify）──
+ * QQ 用 body[is-simple-theme][q-theme=dark] … 写死 rgb(34,34,34)，
+ * 选择器特异性很高，这里用 :not(#ll) 抬分。 */
+body .contact-layout .sys-notify .panel-header:not(#ll),
+body .contact-layout .sys-notify .q-scroll-view:not(#ll),
+body .contact-layout .sys-notify__scroll-host:not(#ll),
+body .contact-layout .sys-notify__empty-state:not(#ll) {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+body .contact-layout .sys-notify .panel-header:not(#ll) {
+  -webkit-app-region: drag;
+  text-shadow: 0 1px 3px rgba(var(--ll-shadow-rgb), 0.55);
+}
+body .contact-layout .sys-notify .notify-list:not(#ll),
+body .contact-layout .sys-notify .recommend-list:not(#ll),
+body .contact-layout .sys-notify .wrap:not(#ll) {
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-material-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+body .contact-layout .sys-notify .sys-notify-card:not(#ll) {
+  background: transparent !important;
+  border-radius: 12px !important;
+}
+body .contact-layout .sys-notify .sys-notify-card:not(#ll):hover {
+  background: rgba(var(--ll-brand-rgb), 0.08) !important;
+}
+
+/* ── 展开的侧栏 / 输入区：改成和会话列表卡同一材质 ──
+ * 同色同不透明度（--ll-material-opacity），只把模糊加强到 DSH 的
+ * material-blur-strong 档（盖在别的内容上时，下面的字要糊掉才读得清）。 */
+body {
+  --ll-card-bg: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-material-opacity));
+  --ll-card-blur-strong: blur(40px) saturate(1.6);
+}
+body[data-liuli-r-nav] .global-container .container-content > .container-sidebar.container-sidebar {
+  --ll-material-opacity: inherit;
+  background: var(--ll-card-bg) !important;
+  backdrop-filter: var(--ll-card-blur-strong) !important;
+  -webkit-backdrop-filter: var(--ll-card-blur-strong) !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+body .chat-input-area > .chat-func-bar.liuli-expanded {
+  background: var(--ll-card-bg) !important;
+  backdrop-filter: var(--ll-card-blur-strong) !important;
+  -webkit-backdrop-filter: var(--ll-card-blur-strong) !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+/* 输入区自身不能挂 backdrop-filter（会让 ProseMirror 不绘制），
+ * 用 DSH composer-card 的做法：磨砂放在 ::before 上，内容在其上方。 */
+body .aio .chat-input-area {
+  background: transparent !important;
+  isolation: isolate !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+body .aio .chat-input-area::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  border-radius: inherit !important;
+  background: var(--ll-card-bg) !important;
+  backdrop-filter: var(--ll-card-blur-strong) !important;
+  -webkit-backdrop-filter: var(--ll-card-blur-strong) !important;
+  pointer-events: none !important;
+}
+
+/* ── 状态设置窗口（#/status-setting）──
+ * 这个窗口固定按 q-theme=light 渲染，文字写死黑色 rgb(0,0,0)，
+ * 压在我们的深色材质上就看不清；选中项是 QQ 蓝 rgb(0,153,255)。
+ * 统一改成主题文字色 + primaryContainer 选中态。 */
+body .sys-status-editor,
+body .sys-status-editor *:not(img):not(svg):not(use) {
+  color: var(--ll-on-glass) !important;
+}
+body .sys-status-editor .select-area__content:not(#ll) {
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-material-opacity)) !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+body .sys-status-editor .sys-status-option {
+  border-radius: 12px !important;
+  transition: background-color 140ms ease !important;
+}
+body .sys-status-editor .sys-status-option:hover {
+  background: rgba(var(--ll-brand-rgb), 0.12) !important;
+}
+body .sys-status-editor .sys-status-option.sys-status-option--selected:not(#ll),
+body .sys-status-editor .sys-status-option--selected:not(#ll):hover {
+  background: var(--ll-primary-container) !important;
+}
+body .sys-status-editor .sys-status-option--selected,
+body .sys-status-editor .sys-status-option--selected * {
+  color: var(--ll-on-primary-container) !important;
+}
+body .sys-status-editor .entrance-btn {
+  background: rgba(var(--ll-acrylic), 0.72) !important;
+  color: var(--ll-on-glass) !important;
+}
+
+/* ── 输入卡底边与左侧会话列表卡、右侧群成员卡对齐（2026-10-29）──
+ * 原来 margin-bottom:10px，输入卡底边在 863，两侧卡片底边在 873。 */
+body .aio .chat-input-area:not(#ll) {
+  margin-bottom: 0 !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 「更多」工具栏：横条 → 竖排菜单（2026-10-29）
+ * ------------------------------------------------------------
+ * 之前是横贯输入区的长条（left:12 / right:120，宽 670px），
+ * 鼠标要横扫很远才点得到右边的按钮；而且：
+ *   · overflow:auto 把「截图 / 文件」的下拉子菜单裁掉了；
+ *   · 工具栏自身挂 backdrop-filter / transform，会成为内部弹层的
+ *     包含块，子菜单定位跑偏；
+ *   · 「+」和工具栏之间 8px 空隙没有感应，鼠标穿过去就触发收起。
+ * 现在：贴着「+」向上弹出的竖排菜单（图标 + 文字），
+ * 磨砂挪到 ::before（DSH composer-card 做法），::after 填住空隙，
+ * 子菜单从行的右侧展开。
+ * ════════════════════════════════════════════════════════════ */
+body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll) {
+  left: 2px !important;
+  right: auto !important;
+  bottom: calc(100% + 8px) !important;
+  width: max-content !important;
+  min-width: 176px !important;
+  max-width: 260px !important;
+  max-height: none !important;
+  overflow: visible !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  gap: 2px !important;
+  padding: 6px !important;
+  border: none !important;
+  border-radius: var(--ll-radius) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  isolation: isolate !important;
+  transform-origin: bottom left !important;
+}
+body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), max(var(--ll-material-opacity), 0.86));
+  backdrop-filter: var(--ll-card-blur-strong, blur(40px) saturate(1.6));
+  -webkit-backdrop-filter: var(--ll-card-blur-strong, blur(40px) saturate(1.6));
+  box-shadow: var(--ll-card-shadow);
+  pointer-events: none;
+}
+/* 感应桥：填住工具栏和「+」之间的空隙 */
+body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 48px;
+  top: 100%;
+  height: 12px;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .chat-func-bar__left,
+body .chat-func-bar.liuli-expanded:not(#ll) .func-bar-native {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 2px !important;
+  width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+/* 右侧那组（聊天记录）接在下面，中间一道分隔 */
+body .chat-func-bar.liuli-expanded:not(#ll) > .func-bar-native {
+  margin-top: 4px !important;
+  padding-top: 6px !important;
+  border-top: 1px solid rgba(var(--ll-on-glass-rgb), 0.08) !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 34px !important;
+  margin: 0 !important;
+  padding: 0 6px 0 4px !important;
+  border-radius: 10px !important;
+  box-sizing: border-box !important;
+  transition: background-color 120ms ease !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon[style*="display: none"],
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:not(:has(.icon-item[aria-label]:not([aria-label=""]))) {
+  display: none !important;
+}
+/* 「表情」已经有独立按钮，菜单里不重复（原生节点保留，独立按钮靠它打开面板） */
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
+  display: none !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover {
+  background: rgba(var(--ll-brand-rgb), 0.12) !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  width: auto !important;
+  height: 34px !important;
+  padding: 0 4px !important;
+  background: transparent !important;
+  color: var(--ll-on-glass-2) !important;
+  cursor: pointer !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item::after {
+  content: attr(data-liuli-label);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ll-on-glass);
+  white-space: nowrap;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover > .icon-item,
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover > .icon-item::after {
+  color: var(--ll-brand) !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item svg {
+  flex: 0 0 auto !important;
+  width: 18px !important;
+  height: 18px !important;
+}
+/* 有子菜单的行：箭头放到行尾，指向右边 */
+body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .arrow {
+  flex: 0 0 auto !important;
+  height: 34px !important;
+  display: flex !important;
+  align-items: center !important;
+  margin-left: auto !important;
+  transform: rotate(-90deg) !important;
+  color: var(--ll-on-glass-3) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 工具栏：4 列 × 2 行宫格（2026-10-29，用户要求 2x4）
+ * ------------------------------------------------------------
+ * 竖列表 7 行太长、横排小图标难认，改成宫格：图标在上、文字在下。
+ * 两组原生容器用 display:contents 拆掉，8 个按钮直接成为格子，
+ * 「表情」也放回来补满第 8 格（独立按钮仍保留）。
+ * 子菜单（截图/文件）改为从整个面板上方弹出：格子取消 position，
+ * .bar-more-menu 就以面板为定位基准，不会盖住相邻格子。
+ * ════════════════════════════════════════════════════════════ */
+body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll) {
+  display: grid !important;
+  grid-template-columns: repeat(4, 76px) !important;
+  grid-auto-rows: 64px !important;
+  gap: 4px !important;
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 8px !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .chat-func-bar__left,
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .func-bar-native {
+  display: contents !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) > .func-bar-native {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
+  display: flex !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon {
+  position: static !important;
+  width: 76px !important;
+  height: 64px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  border-radius: 12px !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item {
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  height: 64px !important;
+  padding: 0 2px !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item svg {
+  width: 22px !important;
+  height: 22px !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item::after {
+  font-size: 12px;
+  line-height: 16px;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 有子菜单的格子：右上角一个小三角提示，点它展开 */
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon {
+  isolation: auto !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon:has(> .arrow) {
+  position: relative !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .arrow {
+  position: absolute !important;
+  top: 2px !important;
+  right: 2px !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin: 0 !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  transform: none !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .arrow:hover {
+  background: rgba(var(--ll-brand-rgb), 0.18) !important;
+  color: var(--ll-brand) !important;
+}
+
+/* 宫格固定 2×4：群里多一个「机器人指令」时第 9 格会换到第三行。
+ * 表情已有独立按钮，这种情况下从宫格里拿掉，正好 8 格。 */
+body .chat-input-area > .chat-func-bar.liuli-expanded:has(.icon-item[aria-label="机器人指令"]):not(#ll):not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
+  display: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 工具栏：只留图标的 4 × 2 小宫格（2026-10-29，用户：太大了只留图标）
+ * ------------------------------------------------------------
+ * 文字标签去掉，名字由 QQ 原生悬停提示给出。
+ * 子菜单盖住面板的原因：面板入场动画动了 transform，
+ * 有 transform 动画的元素会成为 position:fixed 子孙的定位基准，
+ * QQ 按窗口坐标算出的子菜单位置就被平移到了面板内部。
+ * 面板本身只做透明度渐入，位移动画只留在图标上。
+ * ════════════════════════════════════════════════════════════ */
+body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) {
+  grid-template-columns: repeat(4, 38px) !important;
+  grid-auto-rows: 38px !important;
+  gap: 4px !important;
+  padding: 6px !important;
+  animation: liuli-fade-in 160ms ease both !important;
+  transform: none !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon {
+  position: relative !important;
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+  justify-content: center !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item {
+  flex: 0 0 auto !important;
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item::after {
+  content: none !important;
+  display: none !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+/* 有子菜单的格子：右下角一个小三角作入口 */
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow {
+  position: absolute !important;
+  right: 1px !important;
+  bottom: 1px !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transform: none !important;
+  color: var(--ll-on-glass-3) !important;
+  border-radius: 4px !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow:hover {
+  background: rgba(var(--ll-brand-rgb), 0.18) !important;
+  color: var(--ll-brand) !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow svg,
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow i {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+/* ── 工具栏子菜单（截图/文件）位置（2026-10-29）──
+ * 位置交给 QQ：它在 .bar-more-menu 上内联写好 left/top（格子上方），
+ * 里面的 .bar-more-menu-inner 是 position:fixed、相对外层定位。
+ * 之前竖排菜单时代的 top:-6px !important 盖掉了 QQ 的内联 top，子菜单就压在宫格上。
+ * 外层是 0×0 的定位壳：不给它材质和动画，只用 translateZ(0) 固定成定位基准，
+ * 动画和材质只在真正可见的 .bar-more-menu-inner 上。 */
+body .chat-func-bar.liuli-expanded .bar-more-menu {
+  animation: none !important;
+  transform: translateZ(0) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* ── 独立资料卡窗口：空的 .mini-buddy 占位层不能上材质（2026-10-29）──
+ * 资料卡窗口里真正的内容在 .fake-target-element（position:fixed）里，
+ * 同级还有一个空的 .mini-buddy。统一浮层材质给它加了 0.9 底色 + backdrop-filter，
+ * backdrop-filter 会让它变成层叠上下文，按 DOM 顺序画在资料卡上面，
+ * 结果整个窗口被一块空的深色玻璃盖住、点也点不到（"个人资料加载不出来"）。 */
+body .mini-buddy:not(:has(*)):not(#ll),
+body:has(.standalone-mini-profile-container) #app > .mini-buddy:not(#ll) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+  pointer-events: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 右上角下拉层级（2026-10-29，Pixiv 群实测）
+ * ------------------------------------------------------------
+ * 「群应用」等标题栏下拉弹出后被右侧群公告/成员卡盖住：
+ *   1. .chat-header 与 .group-box 同级、都没有 z-index，
+ *      group-box（带 backdrop-filter，DOM 在后）画在上面；
+ *   2. 外层 .bar-more-menu（0×0 的定位壳）被统一浮层规则加了
+ *      材质和入场动画，transform/backdrop 让它成了层叠上下文，
+ *      里面 z-index:4002 的菜单出不去。
+ * 处理：标题栏整体抬到卡片之上；外层壳不加任何材质/动画，
+ *       只有真正可见的 .bar-more-menu-inner 上材质。
+ * ════════════════════════════════════════════════════════════ */
+body .aio > .chat-header:not(#ll) {
+  position: relative !important;
+  z-index: 50 !important;
+}
+body .bar-more-menu.q-float-card:not(#ll) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  animation: none !important;
+  transform: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 群资料抽屉（标题栏「…」打开的 .side-panel，2026-10-29）
+ * ------------------------------------------------------------
+ * 实测：抽屉自身透明，中段（资料管理 / 群公告 / 本群昵称 / 备注）
+ * 直接压在壁纸上；占位文字与输入框描边是 rgb(66,71,78)，深底上看不清。
+ * 抽屉整体挂浮层材质，里面的分组卡改成浅一档的表面，避免玻璃叠玻璃。
+ * ════════════════════════════════════════════════════════════ */
+body .aio .side-panel:not(#ll) {
+  border-radius: var(--ll-radius) !important;
+  overflow: hidden auto !important;
+  isolation: isolate !important;
+  box-shadow: var(--ll-float-shadow, var(--ll-shadow-float)) !important;
+}
+body .aio .side-panel:not(#ll)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), 0.9);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+}
+body .aio .side-panel .group-profile-card:not(#ll),
+body .aio .side-panel .group-member-card:not(#ll),
+body .aio .side-panel .pulldown-menu:not(#ll),
+body .aio .side-panel .q-pulldown-menu:not(#ll) {
+  background: rgba(var(--ll-on-glass-rgb), 0.06) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+body .aio .side-panel .field-body:not(#ll),
+body .aio .side-panel .input-container:not(#ll),
+body .aio .side-panel .q-pulldown-menu-button:not(#ll) {
+  background: rgba(var(--ll-on-glass-rgb), 0.06) !important;
+  border-color: rgba(var(--ll-on-glass-rgb), 0.14) !important;
+  border-radius: 10px !important;
+}
+body .aio .side-panel .field-body:not(#ll):hover,
+body .aio .side-panel .input-container:not(#ll):focus-within {
+  border-color: rgba(var(--ll-brand-rgb), 0.55) !important;
+}
+body .aio .side-panel input::placeholder,
+body .aio .side-panel textarea::placeholder {
+  color: var(--ll-on-glass-3) !important;
+  opacity: 1 !important;
+}
+body .aio .side-panel .field-body,
+body .aio .side-panel .field-body * {
+  color: var(--ll-on-glass-2) !important;
+}
+body .aio .side-panel .field-title {
+  color: var(--ll-on-glass-2) !important;
+}
+
+/* ── 对话框：材质挂在卡片上，不挂在全窗口外壳上（2026-10-29）──
+ * 实测 .q-dialog 是铺满窗口的外壳（1338×860），里面是 .q-dialog-modal 遮罩
+ * 和真正的卡片 .q-dialog-main。之前统一材质把外壳整个糊成深色玻璃，
+ * 又按「不叠玻璃」把卡片打透，结果分享二维码这类对话框没有卡片、整屏发黑。 */
+body .q-dialog:not(#ll):not(#ll) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  animation: none !important;
+}
+body .q-dialog .q-dialog-modal:not(#ll) {
+  background: rgba(0, 0, 0, 0.36) !important;
+}
+body .q-dialog > .q-dialog-main:not(#ll):not(#ll) {
+  background: var(--ll-noise), rgba(var(--ll-acrylic), 0.9) !important;
+  backdrop-filter: var(--ll-float-blur, blur(28px) saturate(1.6)) !important;
+  -webkit-backdrop-filter: var(--ll-float-blur, blur(28px) saturate(1.6)) !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-float-shadow, var(--ll-shadow-float)) !important;
+}
+
+/* ── 开关（2026-10-29）──
+ * QQ 的滑块统一用 --on_brand_primary（暗色主题下是深色），
+ * 关闭态压在浅灰轨道上就成了一个深色小点。改成 M3 开关：
+ *   关：轨道 surface + outline 描边，滑块 outline 色
+ *   开：轨道 brand，滑块 on-brand */
+body .q-switch:not(#ll) {
+  background: rgba(var(--ll-on-glass-rgb), 0.1) !important;
+  box-shadow: inset 0 0 0 1.5px var(--ll-stroke-1, rgba(var(--ll-on-glass-rgb), 0.4)) !important;
+  transition: background-color 160ms ease, box-shadow 160ms ease !important;
+}
+body .q-switch:not(#ll) .q-switch__handle {
+  background: var(--ll-stroke-1, var(--ll-on-glass-3)) !important;
+  transition: transform 200ms var(--ll-ease-spring, ease), background-color 160ms ease !important;
+}
+body .q-switch.is-active:not(#ll) {
+  background: var(--ll-brand) !important;
+  box-shadow: none !important;
+}
+body .q-switch.is-active:not(#ll) .q-switch__handle {
+  background: var(--ll-on-brand) !important;
+}
+body .q-switch.is-disabled:not(#ll) {
+  opacity: 0.45 !important;
+}
+
+/* 开关滑块：真正看得见的圆点是 .q-switch__handle::before（QQ 用 --icon_white 上色，
+ * 本主题把它映射成 on-brand 深色，关闭态就成了浅轨道上的深蓝点）。伪元素一起改。 */
+body .q-switch:not(#ll) .q-switch__handle::before {
+  background: var(--ll-stroke-1, var(--ll-on-glass-3)) !important;
+  border-radius: 50% !important;
+}
+body .q-switch.is-active:not(#ll) .q-switch__handle::before {
+  background: var(--ll-on-brand) !important;
+}
+
+/* ── 通话窗口 / 轻提示：QQ 的 --text_white 在这里是「深灰卡片上的白字」，
+ * 主题把它映射成 on-brand（深色，只适合品牌色实底），结果深字压深底看不清
+ * （实测通话窗口的麦克风提示 rgb(0,51,83) 压在灰卡上）。这两处还原成白。 */
+body[data-hash^="#/av"],
+body [class*="toast"],
+body .q-tips,
+body .q-notification {
+  --text_white: #ffffff !important;
+  --text_allwhite_primary: #ffffff !important;
+  --icon_white: #ffffff !important;
+}

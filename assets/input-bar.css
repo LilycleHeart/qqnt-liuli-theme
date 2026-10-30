@@ -1,0 +1,245 @@
+/* ============================================================
+ * 琉璃 · 输入区（保留改造 + 不破坏编辑器）
+ * ------------------------------------------------------------
+ * 已验证的唯一破坏因素是 line-height / letter-spacing
+ * （在 typography.css 里已移除）。
+ *
+ * 铁律（2026-10-28 修订，已实测打字/换行/多行增高正常）：
+ *   可以改：.chat-input-area 高度改 auto、.msg-input 的 height/padding/margin、
+ *           .qq-msg-editor 的高度变量、ProseMirror 的 min/max-height 与上下 padding
+ *   绝不改：ProseMirror 的 line-height / letter-spacing / display / overflow
+ *           （line-height、letter-spacing 是已验证的唯一破坏因素）
+ * ============================================================ */
+
+/* 1. 容器：必须压在消息区之上。
+ * 实测消息区 .aio 占满 40~942，输入区也在 735~942，两者重叠；
+ * z-index 不够时输入框会被消息列表盖住（看起来「输入框消失」）。 */
+.chat-input-area {
+  position: relative !important;
+  overflow: visible !important;
+  z-index: 120 !important;
+  background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.30)) !important;
+  border-radius: 18px 18px 0 0 !important;
+  /* QQ 用 --inputAreaHeight 把整块定死在 207px，导致输入框过高；
+   * 改为随内容增高，上限沿用 QQ 原值 50vh。 */
+  height: auto !important;
+  max-height: 50vh !important;
+  padding: 8px 12px 10px !important;
+  box-sizing: border-box !important;
+  /* ⚠️ 不要加 backdrop-filter：它会创建独立合成层，
+   * 嵌在 overflow:hidden 的祖先里时整个层可能不绘制，
+   * 表现就是「DOM 在、坐标对、但画面里看不见」。 */
+}
+
+.chat-input-area:has(.chat-func-bar.liuli-expanded) {
+  z-index: 40 !important;
+}
+
+/* 2. 工具栏收起 / 展开浮层 */
+.chat-input-area > .chat-func-bar {
+  display: none !important;
+}
+
+.chat-input-area > .chat-func-bar.liuli-expanded {
+  display: flex !important;
+  position: absolute !important;
+  left: 12px !important;
+  right: 120px !important;
+  bottom: calc(100% + 8px) !important;
+  z-index: 60 !important;
+  height: auto !important;
+  min-height: 48px !important;
+  max-height: 280px !important;
+  overflow: auto !important;
+  padding: 8px 10px !important;
+  border-radius: 16px !important;
+  background: rgba(var(--ll-acrylic-high), 0.96) !important;
+  backdrop-filter: blur(28px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.8) !important;
+  border: 1px solid rgba(var(--ll-specular), 0.12) !important;
+  box-shadow: var(--ll-shadow-float) !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+/* 3. 输入框：加背景与圆角，并提高与容器底的对比度 */
+.chat-input-area > .msg-input {
+  background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.32)) !important;
+  border: 1px solid rgba(var(--ll-specular), 0.22) !important;
+  border-radius: 18px !important;
+  box-shadow: inset 0 1px 3px rgba(var(--ll-shadow-rgb), 0.12) !important;
+  /* 宽度 100% + border-box：不再左右溢出到群成员栏下面 */
+  margin: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  height: auto !important;
+  min-height: 40px !important;
+  max-height: calc(50vh - 20px) !important;
+  /* 左边让给 表情/+ 两个按钮，右边让给发送键 */
+  padding: 0 50px 0 76px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* QQ 内联写了 --qq-editor-height: 111px，这里让编辑器随内容增高 */
+.chat-input-area .qq-msg-editor {
+  --qq-editor-height: auto !important;
+  height: auto !important;
+  width: 100% !important;
+}
+
+.chat-input-area .qq-msg-editor .ExEditor-qq-msg-editor {
+  height: auto !important;
+  min-height: 20px !important;
+  max-height: 180px !important;
+  padding: 10px 0 !important;
+  box-sizing: content-box !important;
+}
+
+/* 4. 左侧两个按钮（独立覆盖层） */
+#liuli-input-overlay {
+  position: fixed !important;
+  z-index: 9999 !important;
+  display: none;
+  align-items: center !important;
+  gap: 4px !important;
+  pointer-events: none !important;
+}
+
+#liuli-emoji-btn,
+#liuli-func-toggle {
+  position: static !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: rgba(var(--ll-on-glass-rgb), 0.1) !important;
+  color: var(--ll-on-glass-2) !important;
+  transition: background-color 140ms ease, color 140ms ease, transform 170ms ease !important;
+  pointer-events: auto !important;
+}
+
+#liuli-emoji-btn:hover,
+#liuli-func-toggle:hover {
+  background: rgba(var(--ll-brand-rgb), 0.22) !important;
+  color: var(--ll-brand) !important;
+}
+
+#liuli-emoji-btn[data-open="1"],
+#liuli-func-toggle[data-open="1"] {
+  background: rgba(var(--ll-brand-rgb), 0.26) !important;
+  color: var(--ll-brand) !important;
+}
+
+#liuli-func-toggle[data-open="1"] svg {
+  transform: rotate(45deg) !important;
+}
+
+#liuli-emoji-btn svg,
+#liuli-func-toggle svg {
+  width: 16px !important;
+  height: 16px !important;
+  display: block !important;
+  transition: transform 170ms ease !important;
+}
+
+/* 5. 发送键：纸飞机 */
+.chat-input-area > .operation {
+  position: absolute !important;
+  /* 贴输入框底行（多行时不漂到中间）：area 底 padding 10 + 内缩 6 */
+  right: 18px !important;
+  bottom: 16px !important;
+  top: auto !important;
+  transform: none !important;
+  z-index: 8 !important;
+  height: 30px !important;
+  width: 30px !important;
+  max-width: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.chat-input-area > .operation .send-btn-wrap {
+  width: 30px !important;
+  height: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  background: rgba(var(--ll-brand-rgb), 0.92) !important;
+  transition: background-color 140ms ease, transform 120ms ease !important;
+}
+
+.chat-input-area > .operation .send-btn-wrap:hover {
+  background: var(--ll-brand) !important;
+  transform: scale(1.06) !important;
+}
+
+.chat-input-area > .operation .send {
+  width: 30px !important;
+  height: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.chat-input-area > .operation .send-msg {
+  width: 30px !important;
+  height: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: var(--ll-on-brand) !important;
+  background: transparent !important;
+}
+
+.chat-input-area > .operation .send-msg::after {
+  content: "" !important;
+  width: 16px !important;
+  height: 16px !important;
+  display: block !important;
+  background-color: currentColor !important;
+  -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 2L11 13'/%3E%3Cpath d='M22 2l-7 20-4-9-9-4 20-7z'/%3E%3C/svg%3E") !important;
+  mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 2L11 13'/%3E%3Cpath d='M22 2l-7 20-4-9-9-4 20-7z'/%3E%3C/svg%3E") !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+}
+
+.chat-input-area > .operation .divider,
+.chat-input-area > .operation .send-setting__wrapper {
+  display: none !important;
+}
+
+/* 6. 底部拖动条隐藏 */
+.chat-input-area > .resize-handler,
+.chat-input-area > .resize-handler.ns {
+  display: none !important;
+}
+
+/* 7. 已回滚：.aio / .message-panel 的 overflow 必须保持 hidden。
+ * 改成 visible 会让消息列表溢出到窗口底部，把输入区挤出去/盖住，
+ * 表现就是「输入框完全看不见」。浮层改用 position: fixed 规避裁切。 */
+
+
+
+

@@ -1,0 +1,123 @@
+/* ============================================================
+ * 琉璃 · 细节修正（实测类名）
+ * ============================================================ */
+
+/* ════════════════════════════════════════════════════════════
+ * 1. 新消息分隔线
+ * ------------------------------------------------------------
+ * 真实类名 .new-msg-indicator（宽 918、高 40）。
+ * 之前我给它加了 ::before/::after 两侧渐变线，
+ * 而 QQ 本身已经有一条线 → 两套线叠在一起。
+ * 保留它的原生结构，去掉我加的伪元素。
+ * ════════════════════════════════════════════════════════════ */
+.new-msg-indicator::before,
+.new-msg-indicator::after {
+  display: none !important;
+  content: none !important;
+}
+
+.new-msg-indicator {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--ll-brand) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.3px !important;
+}
+
+/* 胶囊只加在文字本身。
+ * 之前用 "> div:not(:only-child)" 会命中两侧的小圆点，
+ * 截图里表现为胶囊左右各多一个小圆。 */
+.new-msg-indicator > span {
+  padding: 2px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(var(--ll-brand-rgb), 0.14) !important;
+  white-space: nowrap !important;
+}
+
+.new-msg-indicator > div {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 2. 转发 / 合并消息卡片
+ * ------------------------------------------------------------
+ * .forward-msg 实测 bg: rgba(0,0,0,0)、无边框、radius 8px，
+ * 在壁纸上只有一条极淡的描边，完全看不出是卡片。
+ * ════════════════════════════════════════════════════════════ */
+.forward-msg {
+  background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.14)) !important;
+  backdrop-filter: blur(14px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.4) !important;
+  border: 1px solid rgba(var(--ll-specular), 0.1) !important;
+  border-radius: var(--ll-radius-sm) !important;
+  padding: 10px 12px !important;
+}
+
+.forward-msg .count,
+.forward-msg [class*="count"] {
+  color: var(--ll-on-glass-2) !important;
+  border: none !important;
+}
+
+.forward-msg [class*="title"],
+.forward-msg [class*="summary"] {
+  color: var(--ll-on-glass) !important;
+}
+
+/* ark 卡片（小程序/富媒体消息）同款材质 */
+.ark-msg-content-container,
+[class*="ark-msg"] {
+  background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
+  border: 1px solid rgba(var(--ll-specular), 0.08) !important;
+  border-radius: var(--ll-radius-sm) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 3. 链接
+ * ------------------------------------------------------------
+ * QQ 有两套类名：
+ *   .text--link（双横）→ 已经跟随 --text_link = 品牌色
+ *   .text-link （单横）→ 实测是 rgb(235,224,225) 的近白色，没走主题
+ * 两个都要品牌色。
+ * ════════════════════════════════════════════════════════════ */
+.text-link,
+.text--link,
+a.text-link,
+[class*="text-link"],
+.msg-content-container .text-link {
+  color: var(--ll-brand) !important;
+  text-decoration-color: rgba(var(--ll-brand-rgb), 0.5) !important;
+}
+
+.text-link:hover,
+.text--link:hover {
+  color: var(--ll-brand-hover) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 4. 未读气泡
+ * ------------------------------------------------------------
+ * 实测：数字气泡 .q-badge-sub.q-badge-num 用
+ *   bg rgba(235,224,225,0.2) + color rgb(100,0,54)
+ * 又淡又暗，完全不是主题色。
+ * ⚠️ 只改 .q-badge-num / .q-badge-dot：
+ *    千万不要碰 .q-badge.q-badge__red —— 那是 36×36 的容器，
+ *    上色会变成左栏那几个大蓝圆（早先踩过）。
+ * ════════════════════════════════════════════════════════════ */
+.q-badge-sub.q-badge-num,
+.q-badge-num,
+.q-badge-num * {
+  background: var(--ll-brand) !important;
+  color: var(--ll-on-brand) !important;
+  font-weight: 500 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.q-badge-sub.q-badge-dot,
+.q-badge-dot {
+  background: var(--ll-brand) !important;
+}
