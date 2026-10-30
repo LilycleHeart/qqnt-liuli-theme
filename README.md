@@ -28,10 +28,10 @@
 
 <br/><br/>
 
-<img src="assets/screenshots/settings.svg" alt="设置页示意" width="760" />
+<img src="assets/screenshots/settings.jpg" alt="设置页实机截图" width="560" />
 
 <br/>
-<sub>设置页为示意图</sub>
+<sub>设置页实机截图</sub>
 
 </div>
 
