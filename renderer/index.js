@@ -192,6 +192,8 @@ async function applyDynamicPalette() {
         const opp = mcu.themeFromSourceColor(mcu.argbFromHex(source)).schemes[isDark ? "light" : "dark"];
         vars["--ll-bubble-self"] = mcu.hexFromArgb(opp.primaryContainer);
         vars["--ll-bubble-self-fg"] = mcu.hexFromArgb(opp.onPrimaryContainer);
+        // 自己气泡里的链接：用同一方案的第三色（tertiary），和正文颜色分开，压在 primaryContainer 上对比度够
+        vars["--ll-bubble-self-link"] = mcu.hexFromArgb(opp.tertiary);
     } catch (e) {}
     const body = document.body;
     for (const k in vars) body.style.setProperty(k, vars[k]);

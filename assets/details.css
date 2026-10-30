@@ -98,6 +98,38 @@ a.text-link,
   color: var(--ll-brand-hover) !important;
 }
 
+/* 自己的气泡是浅底：链接用第三色，不能跟正文一个颜色（上面 .text-element * 的规则会把它染成正文色） */
+.message-container .msg-content-container.container--self .text-link,
+.message-container .msg-content-container.container--self .text--link,
+.message-container .msg-content-container.container--self .text-element .text-link,
+.message-container .msg-content-container.container--self .text-element .text--link,
+.message-container .msg-content-container.container--self .text-element [class*="text-link"],
+.message-container .msg-content-container.container--self .text-element [class*="text-link"] * {
+  color: var(--ll-bubble-self-link, var(--ll-tertiary)) !important;
+  text-decoration-color: color-mix(in srgb, var(--ll-bubble-self-link, var(--ll-tertiary)) 55%, transparent) !important;
+}
+
+/* 自己发的转发卡片：和自己的气泡同色 */
+.message-container--self .forward-msg {
+  background: var(--ll-bubble-self, rgba(var(--ll-acrylic), 0.86)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: transparent !important;
+}
+.message-container--self .forward-msg,
+.message-container--self .forward-msg [class*="title"],
+.message-container--self .forward-msg [class*="summary"],
+.message-container--self .forward-msg [class*="content"],
+.message-container--self .forward-msg [class*="text"] {
+  color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
+}
+.message-container--self .forward-msg .count,
+.message-container--self .forward-msg [class*="count"],
+.message-container--self .forward-msg [class*="footer"] {
+  color: color-mix(in srgb, var(--ll-bubble-self-fg, var(--ll-on-glass)) 70%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ll-bubble-self-fg, var(--ll-on-glass)) 15%, transparent) !important;
+}
+
 /* ════════════════════════════════════════════════════════════
  * 4. 未读气泡
  * ------------------------------------------------------------

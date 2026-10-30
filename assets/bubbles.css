@@ -657,6 +657,11 @@
   color: var(--ll-on-glass) !important;
   text-shadow: none !important;
 }
+/* 自己发的转发卡片：和自己的气泡同色 */
+.message-container.message-container--self .message-content__wrapper > .forward-msg {
+  background: var(--ll-bubble-self, rgba(var(--ll-acrylic), 0.86)) !important;
+  color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
+}
 
 /* ════════════════════════════════════════════════════════════
  * 20. 尾巴与头像之间留缝（2026-10-29）
