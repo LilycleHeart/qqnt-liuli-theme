@@ -6,6 +6,7 @@
 
 const SLUG = "liuli-dsh-theme";
 import { installLayout, applyBar, nativeBarItem, applyAll as llLayoutPass, buildLayoutSection } from "./layout-custom.js";
+import { installArkExternal } from "./ark-external.js";
 const ASSET_BASE = "local://profile/plugins/" + SLUG + "/assets/";
 const FILES = ["wallpaper.css", "qq-tokens.css", "palette.css", "liuli.css", "typography.css", "panel.css", "settings-page.css", "details.css", "no-dividers.css", "input-bar.css", "bubbles.css", "layout.css", "lists.css", "motion.css", "markdown.css", "layout-custom.css"];
 const STYLE_ID = "liuli-dsh-theme";
@@ -2131,6 +2132,7 @@ async function initPanel() {
         normalizeColors();
         setInterval(() => { if (window.__liuliPause) return; if (performance.now() - (window.__llScrollT || 0) < 600) return; /* 正在滚动：这一轮跳过，免得滚动中卡一下 */ if (document.querySelector(".q-dialog-modal")) { mountInputBar(); return; } applyOverrides(); fixContrast(); normalizeColors(); keepWindowControlsVisible(); mountInputBar(); groupMessages(); stickAvatars(); markQuoteRoots(); moveSenderIntoBubble(); ensureHoverEntries(); llWatchContactList(); llGroupMembersPass(); llMarkdownPass(); llLayoutPass(); }, 1500);
         try { installLayout(function () { llSyncPins(); }); } catch (e) { console.warn("[liuli-dsh-theme] layout failed:", e && e.message); }
+        try { installArkExternal(window.liuli_api); } catch (e) { console.warn("[liuli-dsh-theme] ark external failed:", e && e.message); }
         installMarkdownObserver();
         installAvatarStick();
         ensureHoverEntries();

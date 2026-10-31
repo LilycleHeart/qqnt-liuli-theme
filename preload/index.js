@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 const api = {
     selfUid: () => ipcRenderer.invoke("LiteLoader.liuli.selfUid"),
+    openExternal: url => ipcRenderer.invoke("LiteLoader.liuli.openExternal", url),
 };
 
 const exists = contextBridge.executeInMainWorld({ func: key => key in globalThis, args: ["liuli_api"] });
