@@ -167,6 +167,24 @@
   display: none !important;
 }
 
+/* 自己的气泡是浅底：引用块的线、底、名字、摘要都改用气泡文字色（浅字压浅底看不清） */
+.msg-content-container.container--self [data-liuli-quote-root="1"] {
+  opacity: 1 !important;
+  color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
+  border-left-color: color-mix(in srgb, var(--ll-bubble-self-fg, var(--ll-on-glass)) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--ll-bubble-self-fg, var(--ll-on-glass)) 8%, transparent) !important;
+}
+.msg-content-container.container--self [data-liuli-quote-root="1"] * {
+  color: color-mix(in srgb, var(--ll-bubble-self-fg, var(--ll-on-glass)) 72%, transparent) !important;
+}
+.msg-content-container.container--self [data-liuli-quote-root="1"] [class*="name"],
+.msg-content-container.container--self [data-liuli-quote-root="1"] [class*="nick"],
+.msg-content-container.container--self [data-liuli-quote-root="1"] [class*="name"] *,
+.msg-content-container.container--self [data-liuli-quote-root="1"] [class*="nick"] * {
+  color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
+  font-weight: 600 !important;
+}
+
 /* ════════════════════════════════════════════════════════════
  * 9. 连续消息合并（TG 规则）
  * ------------------------------------------------------------
