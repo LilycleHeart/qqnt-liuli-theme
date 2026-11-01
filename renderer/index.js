@@ -1227,7 +1227,7 @@ function installRevealTracker() {
     /* 按坐标判断，不依赖 mouseover/mouseout：
      * 那两个事件在 QQ 里会晚一拍到达，且离开时偶尔不来，标记就卡住不收。
      *   左边缘 ≤8px（整条）           → 展开导航；展开后指针在导航卡上就保持
-     *   顶边 ≤8px 的左 320px（macOS）/ 右 200px → 唤出左上 / 右上胶囊；指针在胶囊上就保持
+     *   顶边 ≤8px 的左 200px（macOS为320px）/ 右 200px → 唤出左上 / 右上胶囊；指针在胶囊上就保持
      * 离开后 250ms 收起。 */
     var EDGE = 8, HOLD = 250, PAD = 10, CORNER = 200;
     var LEFT_CORNER = document.body.dataset.liuliPlatform === "darwin" ? 320 : CORNER;
