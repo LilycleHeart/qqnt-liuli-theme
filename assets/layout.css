@@ -516,8 +516,7 @@ body[data-liuli-scope="main"] .global-container .container-content > .container-
   -webkit-app-region: no-drag !important;
 }
 body[data-liuli-scope="main"][data-liuli-r-nav] .global-container .container-content > .container-sidebar,
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:hover,
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:focus-within {
+body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:hover {
   transform: translateX(0) !important;
   transition-delay: 0s !important;
   box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
