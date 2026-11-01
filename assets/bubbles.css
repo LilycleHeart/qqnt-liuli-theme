@@ -732,3 +732,49 @@ body .message-container:has(.msg-content-container.container--self):not(#ll) {
   --icon_primary: var(--ll-bubble-other-fg, var(--ll-on-glass));
   --icon_secondary: var(--ll-bubble-other-fg, var(--ll-on-glass-2));
 }
+
+/* ════════════════════════════════════════════════════════════
+ * 气泡装扮（九宫格皮肤）与主题底板冲突
+ * ------------------------------------------------------------
+ * 现象：带「气泡装扮」的消息出现两层底并错位，文字压到九宫格角花上。
+ * 实测 QQ 9.9.36.53644 / Windows 的运行时结构：
+ *   .msg-content-container.container--personalization
+ *     ├ .personalization-bubble   空层，九宫格皮肤画在这里
+ *     │   --static-bg / --borderImageSlice / --borderImageWidth
+ *     └ .message-content          正文
+ *   容器上带 --on_bubble_host_text / --bubble_guest_text / --text_link
+ * 主题底板画在容器上、皮肤画在子层，两层内边距不一致 → 双层错位。
+ * 处理：有装扮时撤掉主题底板，文字色跟随皮肤自带的变量（缺失则继承）。
+ * 普通气泡不受影响（只有装了装扮才有 container--personalization）。
+ * ════════════════════════════════════════════════════════════ */
+.message-container .message-content__wrapper .msg-content-container.container--personalization {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  /* 皮肤九宫格左右框厚约 20–23px；--borderImageWidth 定义在子元素上，
+   * 容器读不到，无法用 var() 换算，这里取固定值。 */
+  padding: 8px 20px 8px 20px !important;
+  --ll-on-glass: var(--on_bubble_host_text, var(--on_bubble_guest_text, var(--bubble_guest_text, inherit))) !important;
+  --ll-on-glass-2: var(--on_bubble_host_text, var(--on_bubble_guest_text, var(--bubble_guest_text, inherit))) !important;
+  --ll-on-glass-3: var(--on_bubble_host_text, var(--on_bubble_guest_text, var(--bubble_guest_text, inherit))) !important;
+  --ll-bubble-self-fg: var(--on_bubble_host_text, var(--on_bubble_guest_text, var(--bubble_guest_text, inherit))) !important;
+  --ll-bubble-self-link: var(--text_link, inherit) !important;
+}
+
+.message-container .message-content__wrapper .msg-content-container.container--personalization::before,
+.message-container .message-content__wrapper .msg-content-container.container--personalization::after {
+  content: none !important;
+  background: none !important;
+  border: none !important;
+}
+
+/* 皮肤层本身：别让主题的圆角/阴影盖上去 */
+.message-container .message-content__wrapper .msg-content-container.container--personalization .personalization-bubble {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
