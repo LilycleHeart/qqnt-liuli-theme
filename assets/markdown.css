@@ -8,7 +8,7 @@
   font-family: "Cascadia Code", Consolas, "MiSans", monospace !important;
   font-size: 0.92em;
   border-radius: var(--ll-radius-sm, 6px);
-  background: rgba(var(--ll-specular), 0.14);
+  background: rgba(var(--ll-tint-rgb), 0.14);
   color: inherit;
 }
 
@@ -21,10 +21,16 @@
   display: inline-block;
   padding: 0 4px;
   border-radius: 4px;
-  background: rgba(var(--ll-specular), 0.12);
+  background: rgba(var(--ll-tint-rgb), 0.12);
   filter: blur(4px);
   transition: filter 120ms ease;
   cursor: pointer;
+}
+/* 亮色：深色字压 12% 的深色底，blur 之后仍然认得出字（遮罩失效）。
+ * 亮色的玻璃底本来就是浅色，用同一族亚克力色做接近实心的遮罩：
+ * 既挡得住文字，悬停去掉 blur 后深色字仍然可读。 */
+body[data-liuli-dark="0"] .ll-inline-md .text-normal .ll-spoiler {
+  background: rgba(var(--ll-acrylic), 0.94);
 }
 .ll-inline-md .text-normal .ll-spoiler:hover,
 .ll-inline-md .text-normal .ll-spoiler:active {
@@ -39,26 +45,19 @@
 /* ============================================================
  * @ 高亮（renderer 的 llAtPass 写 data-ll-at）
  *   other：@别人，品牌色
- *   me：   @我 / @全体成员，暖橙色 + 淡底，一眼能看到
+ *   me：   @我 / @全体成员，按 M3 用 tertiaryContainer 底 + onTertiaryContainer 字的小标签，
+ *          和正文、链接都区分得开（以前是写死的橙色）
  * ============================================================ */
-body {
-  --ll-at-me: #ffb057;
-  --ll-at-me-rgb: 255, 176, 87;
-}
-body[data-liuli-dark="0"] {
-  --ll-at-me: #b35c00;
-  --ll-at-me-rgb: 179, 92, 0;
-}
 .ml-item .text-element--at[data-ll-at="other"] {
-  color: var(--ll-brand) !important;
+  color: var(--ll-link, var(--ll-brand)) !important;
   font-weight: 500;
 }
 .ml-item .text-element--at[data-ll-at="me"] {
-  color: var(--ll-at-me) !important;
+  color: var(--ll-on-tertiary-container) !important;
   font-weight: 600;
   padding: 0 4px;
   border-radius: 6px;
-  background: rgba(var(--ll-at-me-rgb), 0.16);
+  background: var(--ll-tertiary-container);
 }
 
 
@@ -68,7 +67,7 @@ body[data-liuli-dark="0"] {
  * ============================================================ */
 .ml-item .msg-content-container .user-name,
 .ml-item .msg-content-container .user-name * {
-  color: var(--ll-tertiary, var(--ll-brand)) !important;
+  color: var(--ll-name, var(--ll-tertiary, var(--ll-brand))) !important;
 }
 .ml-item .msg-content-container .user-name .q-tag,
 .ml-item .msg-content-container .user-name .group-member-label {

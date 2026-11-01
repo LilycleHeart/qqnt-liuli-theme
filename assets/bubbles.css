@@ -486,13 +486,14 @@
   text-shadow: none !important;
 }
 
-/* 对方：深色亚克力，0.36 → 0.86，亮壁纸上也能读 */
+/* 对方：深色亚克力，0.36 → 0.86，亮壁纸上也能读。
+ * 配色里把「对方的气泡」换成颜色时，renderer 写 --ll-bubble-other / -fg / -link（color-roles.js） */
 .message-container .msg-content-container.container--others {
-  background: rgba(var(--ll-acrylic), 0.86) !important;
+  background: var(--ll-bubble-other, rgba(var(--ll-acrylic), 0.86)) !important;
+  color: var(--ll-bubble-other-fg, var(--ll-on-glass)) !important;
 }
 
-/* 自己：品牌色混入深底（primary-container 的做法），
- * 浅字压浅粉的对比度问题就是从这里来的 */
+/* 自己：默认同明暗方案的 primaryContainer（color-roles.js 决定用哪个角色） */
 .message-container .msg-content-container.container--self {
   background: var(--ll-bubble-self, color-mix(in srgb, rgb(var(--ll-brand-rgb)) 34%, rgb(var(--ll-acrylic)))) !important;
   color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
@@ -500,7 +501,12 @@
 
 .message-container .msg-content-container.container--others .text-element,
 .message-container .msg-content-container.container--others .text-normal {
-  color: var(--ll-on-glass) !important;
+  color: var(--ll-bubble-other-fg, var(--ll-on-glass)) !important;
+}
+.message-container .msg-content-container.container--others .text-element .text-link,
+.message-container .msg-content-container.container--others .text-element .text--link,
+.message-container .msg-content-container.container--others .text-element [class*="text-link"] {
+  color: var(--ll-bubble-other-link, var(--ll-link, var(--ll-brand))) !important;
 }
 /* 自己的气泡是浅底（DSH 同款），文字用 onPrimaryContainer */
 .message-container .msg-content-container.container--self .text-element,
@@ -615,6 +621,9 @@
   padding: 3px !important;
   background: rgba(var(--ll-acrylic), 0.86) !important;
 }
+.message-container .msg-content-container.mix-message__container--pic.container--others {
+  background: var(--ll-bubble-other, rgba(var(--ll-acrylic), 0.86)) !important;
+}
 .message-container .msg-content-container.mix-message__container--pic.container--self {
   background: var(--ll-bubble-self, rgba(var(--ll-acrylic), 0.86)) !important;
 }
@@ -698,3 +707,28 @@ body .message-container:has(.msg-content-container.container--self):not(#ll) {
   grid-template-columns: 0px minmax(0, 1fr) 8px auto 14px 32px !important;
 }
 
+/* ── 气泡里的 QQ 文字 token（2026-11-01）──
+ * 气泡里有些元素（图片加载失败的提示、文件大小、语音时长…）直接用 QQ 的 --text_tertiary 等 token，
+ * 而这些 token 在 body 上就已经算成了玻璃上的灰色，到了自己的气泡（primaryContainer）上只剩 3.6:1。
+ * 按 M3：container 上的文字一律用对应的 onContainer。这里在气泡上重新声明，子元素就都跟着变。
+ * 卡片消息（ark）有自己的底，不动。 */
+.message-container .msg-content-container.container--self:not(.ark-msg-content-container) {
+  --ll-on-glass: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --ll-on-glass-2: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --ll-on-glass-3: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --text_primary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --text_secondary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --text_tertiary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --text-primary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --text-secondary-01: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --icon_primary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+  --icon_secondary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+}
+/* 对方的气泡默认是中性玻璃，body 上的 token 本来就对；只有选了彩色角色（--ll-bubble-other-fg 有值）才换 */
+.message-container .msg-content-container.container--others:not(.ark-msg-content-container) {
+  --text_primary: var(--ll-bubble-other-fg, var(--ll-on-glass));
+  --text_secondary: var(--ll-bubble-other-fg, var(--ll-on-glass-2));
+  --text_tertiary: var(--ll-bubble-other-fg, var(--ll-on-glass-3));
+  --icon_primary: var(--ll-bubble-other-fg, var(--ll-on-glass));
+  --icon_secondary: var(--ll-bubble-other-fg, var(--ll-on-glass-2));
+}

@@ -23,9 +23,9 @@ body {
   /* 悬浮胶囊需要比承载层更实，壁纸亮时才看得清 */
   --ll-pill-opacity: min(0.92, calc(var(--ll-material-opacity) + 0.32));
   /* 卡片描边：按用户要求关闭（2026-10-28）。想恢复就改回
-   * 1px solid var(--ll-stroke-3, rgba(var(--ll-specular), 0.08)) */
+   * 1px solid var(--ll-stroke-3, rgba(var(--ll-tint-rgb), 0.08)) */
   --ll-card-border: none;
-  --ll-hairline: var(--ll-stroke-3, rgba(var(--ll-specular), 0.08));
+  --ll-hairline: var(--ll-stroke-3, rgba(var(--ll-tint-rgb), 0.08));
   --ll-glow-brand: 0 0 10px rgba(var(--ll-brand-rgb), var(--ll-glow-strength, 0.15));
   --ll-card-shadow: var(--ll-glow-brand), var(--ll-shadow);
 }
@@ -65,6 +65,10 @@ body {
   -webkit-backdrop-filter: none !important;
   box-shadow: none !important;
   text-shadow: 0 1px 3px rgba(var(--ll-shadow-rgb), 0.55) !important;
+}
+/* 亮色主题：深色字配黑投影会糊，改成底色光晕（同 liuli.css 聊天区） */
+body[data-liuli-dark="0"] .aio > .chat-header {
+  text-shadow: 0 0 2px rgba(var(--ll-halo-rgb, 255, 255, 255), 0.9), 0 0 6px rgba(var(--ll-halo-rgb, 255, 255, 255), 0.7) !important;
 }
 .aio > .chat-header .background-mask,
 .aio > .chat-header .texture-background {
@@ -136,8 +140,11 @@ body {
   /* renderer 的 normalizeColors/fixContrast 会把文字内联成 var(--ll-on-glass*)，
    * 在这里改写变量本身，选中项里的文字就跟着变成 onPrimaryContainer */
   --ll-on-glass: var(--ll-on-primary-container);
-  --ll-on-glass-2: color-mix(in srgb, var(--ll-on-primary-container) 78%, transparent);
-  --ll-on-glass-3: color-mix(in srgb, var(--ll-on-primary-container) 62%, transparent);
+  /* 选中项底色是 primaryContainer，上面的字统一用 onPrimaryContainer，层级靠字号区分。
+   * 以前次要 / 弱化文字是 78% / 62% 透明，暗色下只有约 4.2 / 3.2:1（无壁纸基准实测）。
+   * 按 M3：container 上的文字一律用对应的 onContainer，不打透明。 */
+  --ll-on-glass-2: var(--ll-on-primary-container);
+  --ll-on-glass-3: var(--ll-on-primary-container);
   background-color: var(--ll-primary-container, rgba(var(--ll-brand-rgb), 0.16)) !important;
   background-image: linear-gradient(var(--ll-on-primary-container), var(--ll-on-primary-container)) !important;
   background-repeat: no-repeat !important;
@@ -177,10 +184,10 @@ body {
  *   左上：头像 + 名字胶囊        右上：窗口按钮胶囊
  * 顶部 40px 仍是 QQ 原本的拖动区，只把内容收成两颗胶囊。
  * ════════════════════════════════════════════════════════════ */
-body[data-liuli-scope="main"] .topbar-content .qq-logo {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .qq-logo {
   display: none !important;
 }
-body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile {
   flex: 0 0 auto !important;
   /* QQ 自己写了 width:0 + flex:1，flex 改成 auto 后宽度会塌到 0，必须显式给宽 */
   width: max-content !important;
@@ -195,30 +202,30 @@ body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile 
   box-shadow: var(--ll-shadow) !important;
   box-sizing: border-box !important;
 }
-body[data-liuli-scope="main"] .topbar-profile .user-profile-card__content,
-body[data-liuli-scope="main"] .topbar-profile .user-profile-card__info {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__content,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__info {
   flex: 0 0 auto !important;
   height: 30px !important;
 }
-body[data-liuli-scope="main"] .topbar-profile .user-avatar-container {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container {
   height: 30px !important;
 }
-body[data-liuli-scope="main"] .topbar-profile .user-avatar {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar {
   margin-top: -5px !important;
 }
-body[data-liuli-scope="main"] .topbar-profile .user-avatar-container,
-body[data-liuli-scope="main"] .topbar-profile .user-avatar-container * {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container * {
   top: auto;
 }
-body[data-liuli-scope="main"] .topbar-profile .avatar.user-avatar {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .avatar.user-avatar {
   margin: 3px 0 0 !important;
 }
 /* 空签名占位（"编辑个性签名"）不进胶囊 */
-body[data-liuli-scope="main"] .topbar-profile .user-profile-card__long-nick:has(.empty-long-nick) {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__long-nick:has(.empty-long-nick) {
   display: none !important;
 }
 
-body[data-liuli-scope="main"] .window-title-bar .window-control-area {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
   height: 30px !important;
   margin: 5px var(--ll-dock-gap) 0 0 !important;
   padding: 2px 4px !important;
@@ -231,7 +238,7 @@ body[data-liuli-scope="main"] .window-title-bar .window-control-area {
   box-shadow: var(--ll-shadow) !important;
   box-sizing: border-box !important;
 }
-body[data-liuli-scope="main"] .window-title-bar .window-control-area > * {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area > * {
   width: 34px !important;
   height: 26px !important;
   padding: 0 !important;
@@ -242,13 +249,13 @@ body[data-liuli-scope="main"] .window-title-bar .window-control-area > * {
   color: var(--ll-on-glass-2) !important;
   transition: background-color 140ms ease, color 140ms ease !important;
 }
-body[data-liuli-scope="main"] .window-title-bar .window-control-area > *:hover {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area > *:hover {
   background: rgba(var(--ll-brand-rgb), 0.14) !important;
   color: var(--ll-on-glass) !important;
 }
-body[data-liuli-scope="main"] .window-title-bar .window-control-area > .close:hover {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area > .close:hover {
   background: var(--ll-danger, #e5484d) !important;
-  color: #fff !important;
+  color: var(--ll-on-danger) !important;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -270,7 +277,7 @@ body[data-liuli-scope="main"] .window-title-bar .window-control-area > .close:ho
   box-shadow: none !important;
 }
 .global-container .container-content > .container-sidebar:hover,
-.global-container .container-content > .container-sidebar:focus-within {
+.global-container .container-content > .container-sidebar:has(:focus-visible) {
   transform: translateX(0) !important;
   box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
 }
@@ -297,7 +304,7 @@ body[data-liuli-scope="main"] .window-title-bar .window-control-area > .close:ho
   transition: opacity 160ms ease !important;
 }
 .global-container .container-content > .container-sidebar:hover::after,
-.global-container .container-content > .container-sidebar:focus-within::after {
+.global-container .container-content > .container-sidebar:has(:focus-visible)::after {
   opacity: 0 !important;
 }
 .container-sidebar > .sidebar-nav {
@@ -314,7 +321,7 @@ body[data-liuli-scope="main"] .window-title-bar .window-control-area > .close:ho
  * 底色是 renderer 内联写的 rgba(acrylic, var(--ll-material-opacity))，
  * 在元素自身改写变量即可，不用和内联 !important 抢。 */
 .global-container .container-content > .container-sidebar:hover,
-.global-container .container-content > .container-sidebar:focus-within {
+.global-container .container-content > .container-sidebar:has(:focus-visible) {
   --ll-material-opacity: 0.92;
   backdrop-filter: blur(24px) saturate(1.6) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
@@ -408,75 +415,93 @@ body .contact-layout .contact-profile .q-divider {
  * ════════════════════════════════════════════════════════════ */
 
 /* ── 拖动区 ── */
-body[data-liuli-scope="main"] .draggable-view:not(.draggable-view__container):nth-child(1) {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .draggable-view:not(.draggable-view__container):nth-child(1) {
   height: var(--ll-dock-gap) !important;
 }
+/* 左侧 52px 的拖动区跟导航收起走，与标题栏模式无关（原版常驻时也要去掉，
+ * 否则会话列表左边那条会变成拖窗口） */
 body[data-liuli-scope="main"] .draggable-view:not(.draggable-view__container):nth-child(2) {
   display: none !important;
 }
-body[data-liuli-scope="main"] .aio > .chat-header {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header {
   -webkit-app-region: drag;
 }
-body[data-liuli-scope="main"] .aio > .chat-header .panel-header__action,
-body[data-liuli-scope="main"] .aio > .chat-header .panel-header__action *,
-body[data-liuli-scope="main"] .aio > .chat-header button,
-body[data-liuli-scope="main"] .aio > .chat-header [role="button"],
-body[data-liuli-scope="main"] .aio > .chat-header input {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header .panel-header__action,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header .panel-header__action *,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header button,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header [role="button"],
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header input {
   -webkit-app-region: no-drag;
 }
 
 /* ── 标题栏收起：内容区顶到窗口上沿（留 8px） ── */
-body[data-liuli-scope="main"] .global-container > .topbar,
-body[data-liuli-scope="main"] .global-container > .topbar .topbar-content {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container > .topbar,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container > .topbar .topbar-content {
   height: 0 !important;
   min-height: 0 !important;
   overflow: visible !important;
 }
-body[data-liuli-scope="main"] .global-container .container-content {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container .container-content {
   padding-top: var(--ll-dock-gap) !important;
 }
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container .container-content > .container-sidebar {
   top: var(--ll-dock-gap) !important;
 }
 
 /* ── 两颗胶囊：常态隐藏，指向窗口左上 / 右上角唤出 ──
- * 隐藏时 visibility 延迟 250ms 再生效：鼠标从感应条移到胶囊上的途中不会消失。 */
-body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile,
-body[data-liuli-scope="main"] .window-title-bar .window-control-area {
+ * 隐藏只用 opacity + pointer-events，不用 visibility:hidden（#4 #10，2026-11-01）：
+ *   Chromium 收集 -webkit-app-region 时跳过 visibility:hidden 的元素，
+ *   胶囊一隐藏，它那块就变回聊天标题栏的拖动区；唤出后 no-drag 区域要等
+ *   一次布局 + IPC 才更新到窗口，这段时间里鼠标落在「拖动区」上，系统把它
+ *   当成非客户区，页面收到 mouseleave，胶囊随即收起 —— 就是「消失太快点不到」。
+ *   现在胶囊常驻布局（透明、不接收点击），no-drag 区域始终有效。 */
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
   position: fixed !important;
   top: 6px !important;
   margin: 0 !important;
   z-index: 3600 !important;
-  pointer-events: auto !important;
+  pointer-events: none !important;
   -webkit-app-region: no-drag !important;
   opacity: 0 !important;
-  visibility: hidden !important;
-  transform: translateY(-8px) !important;
-  transition: opacity 160ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    visibility 0s linear 250ms !important;
+  visibility: visible !important;
+  transform: translateY(-3px) !important;
+  transition: opacity 180ms ease 120ms, transform 200ms cubic-bezier(0.22, 1, 0.36, 1) 120ms !important;
 }
-body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile {
   /* 让出左侧导航条（约 56px），展开时不压住导航顶部（2026-10-30） */
   left: calc(var(--ll-dock-gap) + 56px) !important;
 }
-body[data-liuli-scope="main"] .window-title-bar .window-control-area {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
   right: var(--ll-dock-gap) !important;
 }
-body[data-liuli-scope="main"][data-liuli-r-l] .topbar-content .user-profile-card.topbar-profile,
-body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile:hover,
-body[data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile:focus-within,
-body[data-liuli-scope="main"][data-liuli-r-r] .window-title-bar .window-control-area,
-body[data-liuli-scope="main"] .window-title-bar .window-control-area:hover,
-body[data-liuli-scope="main"] .window-title-bar .window-control-area:focus-within {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-l] .topbar-content .user-profile-card.topbar-profile,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile:hover,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile:has(:focus-visible),
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-r] .window-title-bar .window-control-area,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area:hover,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area:has(:focus-visible) {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: none !important;
+  transition: opacity 140ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+/* ── 标题栏控件「常驻（原版）」：data-liuli-tb="native"（设置 → 窗口按钮）──
+ * 上面的收起 / 胶囊 / 感应条规则都带 :not([data-liuli-tb="native"])，这里只需
+ * 让 QQ 的 ghost 标题栏按钮一直可见，并去掉感应条。 */
+body[data-liuli-scope="main"][data-liuli-tb="native"] .window-title-bar .window-control-area {
   opacity: 1 !important;
   visibility: visible !important;
+  pointer-events: auto !important;
   transform: none !important;
-  transition: opacity 160ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    visibility 0s !important;
+}
+body[data-liuli-tb="native"] .liuli-top-hint {
+  display: none !important;
 }
 
 /* 感应条：窗口顶边 8px，左右各一段，中间仍是拖动区 */
-body[data-liuli-scope="main"] .liuli-top-hint {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint {
   position: fixed;
   top: 0;
   height: var(--ll-dock-gap);
@@ -485,10 +510,10 @@ body[data-liuli-scope="main"] .liuli-top-hint {
   -webkit-app-region: no-drag;
   cursor: default;
 }
-body[data-liuli-scope="main"] #liuli-top-hint-l { left: 56px; }   /* 跟着头像胶囊让出导航条 */
-body[data-liuli-scope="main"] #liuli-top-hint-r { right: 0; }
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-l { left: 56px; }   /* 跟着头像胶囊让出导航条 */
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-r { right: 0; }
 /* 提示短横：告诉用户这里能唤出东西（DSH WindowControls 的 .hint 同款） */
-body[data-liuli-scope="main"] .liuli-top-hint::after {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint::after {
   content: "";
   position: absolute;
   top: 2px;
@@ -496,15 +521,15 @@ body[data-liuli-scope="main"] .liuli-top-hint::after {
   height: 4px;
   border-radius: 2px;
   background: var(--ll-on-glass);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 4px rgba(var(--ll-shadow-rgb), 0.45);
   opacity: 0.7;
   transition: opacity 140ms ease;
 }
-body[data-liuli-scope="main"] #liuli-top-hint-l::after { left: 24px; }
-body[data-liuli-scope="main"] #liuli-top-hint-r::after { right: 24px; }
-body[data-liuli-scope="main"] .liuli-top-hint:hover::after,
-body[data-liuli-scope="main"][data-liuli-r-l] #liuli-top-hint-l::after,
-body[data-liuli-scope="main"][data-liuli-r-r] #liuli-top-hint-r::after {
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-l::after { left: 24px; }
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-r::after { right: 24px; }
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint:hover::after,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-l] #liuli-top-hint-l::after,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-r] #liuli-top-hint-r::after {
   opacity: 0;
 }
 
@@ -517,7 +542,7 @@ body[data-liuli-scope="main"] .global-container .container-content > .container-
 }
 body[data-liuli-scope="main"][data-liuli-r-nav] .global-container .container-content > .container-sidebar,
 body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:hover,
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:focus-within {
+body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:has(:focus-visible) {
   transform: translateX(0) !important;
   transition-delay: 0s !important;
   box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
@@ -591,6 +616,16 @@ body {
   --ll-float-bg: rgba(var(--ll-acrylic), 0.9);
   --ll-float-blur: blur(28px) saturate(1.6);
   --ll-float-shadow: var(--ll-glow-brand), var(--ll-shadow-float);
+  /* 浮层（右键菜单、资料卡、表情面板、搜索结果等）比输入区 / 气泡高一级：M3 里浮得越高底色越靠 surfaceContainerHighest。
+   * 以前和对方气泡同为 acrylic，无壁纸的暗色基准下菜单和压在下面的气泡分不开。 */
+  /* 用 M3 surfaceContainerHighest（中性 tone 22），不用 acrylic-high：后者混了 14% 主色，
+   * 暗色下亮到 L≈31，菜单 / 搜索结果里的次要文字只剩 4.3:1（2026-11-01 实测）。 */
+  --ll-menu-bg: color-mix(in srgb, var(--ll-surface-highest) 94%, transparent);
+}
+/* 亮色下浮层靠投影和下面分开（白底上阴影看得见）。底色用 M3 surfaceContainerLow（中性 tone 96）：
+ * 以前用 --ll-float-bg（混了主色的 acrylic），悬停态再叠 7% 墨色后，搜索结果里的品牌色高亮只有 4.25:1。 */
+body[data-liuli-dark="0"] {
+  --ll-menu-bg: color-mix(in srgb, var(--ll-surface-low) 94%, transparent);
 }
 
 /* 1. 输入区 / 工具栏面板 / 展开的侧栏：同一底色 */
@@ -645,7 +680,7 @@ body .handoff-menu,
 body .q-float-card,
 body .main-search .search-result,
 body .aio .panel-container {
-  background: var(--ll-noise), var(--ll-float-bg) !important;
+  background: var(--ll-noise), var(--ll-menu-bg, var(--ll-float-bg)) !important;
   backdrop-filter: var(--ll-float-blur) !important;
   -webkit-backdrop-filter: var(--ll-float-blur) !important;
   border: none !important;
@@ -673,7 +708,7 @@ body .q-context-menu:not(.is-pure)::before {
   inset: 0 !important;
   z-index: -1 !important;
   border-radius: inherit !important;
-  background: var(--ll-noise), var(--ll-float-bg) !important;
+  background: var(--ll-noise), var(--ll-menu-bg, var(--ll-float-bg)) !important;
   backdrop-filter: var(--ll-float-blur) !important;
   -webkit-backdrop-filter: var(--ll-float-blur) !important;
   pointer-events: none !important;
@@ -691,7 +726,7 @@ body .expression-panel .sticker-panel .sticker-panel {
 }
 /* 遮罩层：保留轻微压暗，不要磨砂 */
 body .q-popup__modal {
-  background: rgba(0, 0, 0, 0.32) !important;
+  background: rgba(var(--ll-scrim-rgb), 0.32) !important;
 }
 
 /* 弹层里的文字/图标：统一走 onSurface 体系，次要文字不低于 on-glass-2 */
@@ -716,7 +751,22 @@ body .q-context-menu-item {
 body .q-context-menu-item:hover {
   background: rgba(var(--ll-brand-rgb), 0.14) !important;
 }
-body .q-context-menu-separator {
+/* @ 成员面板的当前项（键盘上下选中的那一行）：QQ 只在 q-theme=dark 下写了 rgba(255,255,255,0.2)，
+ * 琉璃亮色时白底叠白看不见，暗色时浅灰底上字只有 4:1。按 M3 选中态用 primaryContainer + onPrimaryContainer，
+ * 和会话列表的选中项一致。 */
+body .editor-at-panel .item-wrap.active:not(#ll),
+body .editor-at-panel .active:not(#ll) {
+  --ll-on-glass: var(--ll-on-primary-container);
+  --ll-on-glass-2: var(--ll-on-primary-container);
+  --text_primary: var(--ll-on-primary-container);
+  --text_secondary: var(--ll-on-primary-container);
+  background-color: var(--ll-primary-container) !important;
+  color: var(--ll-on-primary-container) !important;
+}
+body .editor-at-panel .active:not(#ll) .item-name,
+body .editor-at-panel .active:not(#ll) .item-name * {
+  color: var(--ll-on-primary-container) !important;
+}body .q-context-menu-separator {
   background: rgba(var(--ll-on-glass-rgb), 0.08) !important;
 }
 
@@ -749,7 +799,7 @@ body .q-context-menu-separator {
   margin-top: -18px;
   border-radius: 2px;
   background: var(--ll-on-glass);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 4px rgba(var(--ll-shadow-rgb), 0.45);
   opacity: 0.55;
   transition: opacity 140ms ease;
 }
@@ -814,6 +864,17 @@ body:not([data-liuli-scope="main"]) #app::after {
   backdrop-filter: blur(24px) saturate(1.6);
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
 }
+/* 语音 / 视频通话窗口（#/av）不铺壁纸和材质（#9，2026-11-01 实测）：
+ * 这个窗口的成员画面和一个原生 <embed> 视频层一起合成，#app 一旦 isolation:isolate，
+ * .video-content 整块（头像、名字）就不绘制了，命中测试却还在 —— 就是「全员滚木」。
+ * 通话窗口本身是 rgb(26,26,26) 实底，不需要壁纸，这里整块还原。 */
+body[data-hash^="#/av"] #app {
+  isolation: auto !important;
+}
+body[data-hash^="#/av"] #app::before,
+body[data-hash^="#/av"] #app::after {
+  content: none !important;
+}
 /* 独立窗口里 QQ 写死的实底（深色 rgb(34,34,34) / 浅色 rgb(229,238,255)） */
 body:not([data-liuli-scope="main"]) .draggable-view__container:not(.window-title-bar):not(#ll):not(#ll),
 body:not([data-liuli-scope="main"]) .container-content:not(#ll):not(#ll),
@@ -842,6 +903,9 @@ body .contact-layout .sys-notify__empty-state:not(#ll) {
 body .contact-layout .sys-notify .panel-header:not(#ll) {
   -webkit-app-region: drag;
   text-shadow: 0 1px 3px rgba(var(--ll-shadow-rgb), 0.55);
+}
+body[data-liuli-dark="0"] .contact-layout .sys-notify .panel-header:not(#ll) {
+  text-shadow: 0 0 2px rgba(var(--ll-halo-rgb, 255, 255, 255), 0.9), 0 0 6px rgba(var(--ll-halo-rgb, 255, 255, 255), 0.7);
 }
 body .contact-layout .sys-notify .notify-list:not(#ll),
 body .contact-layout .sys-notify .recommend-list:not(#ll),
@@ -1357,7 +1421,7 @@ body .q-dialog:not(#ll):not(#ll) {
   animation: none !important;
 }
 body .q-dialog .q-dialog-modal:not(#ll) {
-  background: rgba(0, 0, 0, 0.36) !important;
+  background: rgba(var(--ll-scrim-rgb), 0.36) !important;
 }
 body .q-dialog > .q-dialog-main:not(#ll):not(#ll) {
   background: var(--ll-noise), rgba(var(--ll-acrylic), 0.9) !important;
@@ -1404,12 +1468,28 @@ body .q-switch.is-active:not(#ll) .q-switch__handle::before {
 
 /* ── 通话窗口 / 轻提示：QQ 的 --text_white 在这里是「深灰卡片上的白字」，
  * 主题把它映射成 on-brand（深色，只适合品牌色实底），结果深字压深底看不清
- * （实测通话窗口的麦克风提示 rgb(0,51,83) 压在灰卡上）。这两处还原成白。 */
+ * （实测通话窗口的麦克风提示 rgb(0,51,83) 压在灰卡上）。这两处还原成白。
+ * 白改用「恒白」角色 --ll-specular（255,255,255，亮暗同值）：这两处的底色是
+ * QQ 自带的深色浮层，不跟主题明暗反相，所以不能用 onSurface / on-brand。 */
 body[data-hash^="#/av"],
-body [class*="toast"],
 body .q-tips,
 body .q-notification {
-  --text_white: #ffffff !important;
-  --text_allwhite_primary: #ffffff !important;
-  --icon_white: #ffffff !important;
+  --text_white: rgb(var(--ll-specular)) !important;
+  --text_allwhite_primary: rgb(var(--ll-specular)) !important;
+  --icon_white: rgb(var(--ll-specular)) !important;
+}
+
+/* 轻提示（复制成功等）：QQ 在 q-theme=dark 下写死 rgba(153,153,153,0.4) 灰底 + 白字，
+ * 琉璃亮色时就是白字压浅灰，看不见。按 M3 snackbar 用 inverseSurface + inverseOnSurface。 */
+body .q-toast-item:not(#ll) {
+  --text_white: var(--ll-inverse-on-surface) !important;
+  --text_allwhite_primary: var(--ll-inverse-on-surface) !important;
+  --icon_white: var(--ll-inverse-on-surface) !important;
+  background-color: var(--ll-inverse-surface) !important;
+  color: var(--ll-inverse-on-surface) !important;
+  backdrop-filter: none !important;
+  box-shadow: var(--ll-shadow-float) !important;
+}
+body .q-toast-item:not(#ll) * {
+  color: var(--ll-inverse-on-surface) !important;
 }

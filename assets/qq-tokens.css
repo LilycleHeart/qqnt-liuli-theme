@@ -87,8 +87,8 @@ body {
   --overlay_hover_brand: rgba(var(--ll-brand-rgb), 0.1) !important;
   --overlay_active_brand: var(--ll-brand) !important;
   --overlay_pressed_brand: rgba(var(--ll-brand-rgb), 0.24) !important;
-  --overlay_allblack_hover: rgba(var(--ll-specular), 0.06) !important;
-  --overlay_allblack_pressed: rgba(var(--ll-specular), 0.1) !important;
+  --overlay_allblack_hover: rgba(var(--ll-tint-rgb), 0.06) !important;
+  --overlay_allblack_pressed: rgba(var(--ll-tint-rgb), 0.1) !important;
   --overlay_mask_standard: rgba(var(--ll-scrim-rgb), 0.5) !important;
   --overlay_mask_dark: rgba(var(--ll-scrim-rgb), 0.6) !important;
   --overlay_mask_aio: transparent !important;
@@ -177,10 +177,10 @@ body {
   --button-secondary-hover: rgba(var(--ll-on-glass-rgb), 0.16) !important;
   --button-secondary-pressed: rgba(var(--ll-on-glass-rgb), 0.22) !important;
   --button-secondary-disable: rgba(var(--ll-on-glass-rgb), 0.05) !important;
-  --button-white-default: rgba(var(--ll-specular), 0.12) !important;
-  --button-white-hover: rgba(var(--ll-specular), 0.18) !important;
-  --button-white-pressed: rgba(var(--ll-specular), 0.24) !important;
-  --button-white-disable: rgba(var(--ll-specular), 0.06) !important;
+  --button-white-default: rgba(var(--ll-tint-rgb), 0.12) !important;
+  --button-white-hover: rgba(var(--ll-tint-rgb), 0.18) !important;
+  --button-white-pressed: rgba(var(--ll-tint-rgb), 0.24) !important;
+  --button-white-disable: rgba(var(--ll-tint-rgb), 0.06) !important;
   --button-error-default: var(--ll-danger) !important;
   --button-error-hover: var(--ll-danger-bg) !important;
   --button-error-pressed: var(--ll-danger) !important;
@@ -194,8 +194,9 @@ body {
 }
 
 /* 暗色下只需调整「反色」语义：亮底 → 暗字，暗底 → 亮字 */
-body[q-theme="dark"],
-body.q-theme-tokens-dark {
+body[q-theme="dark"]:not([data-liuli-dark="0"]),
+body.q-theme-tokens-dark:not([data-liuli-dark="0"]),
+body[data-liuli-dark="1"] {
   --text_black: var(--ll-on-glass) !important;
   --icon_black: var(--ll-on-glass) !important;
   --bubble_guest: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
@@ -204,4 +205,45 @@ body.q-theme-tokens-dark {
   --bubble_host_text: var(--ll-on-glass) !important;
   --on_bubble_host_text: var(--ll-on-glass) !important;
   --overlay_mask_standard: rgba(var(--ll-scrim-rgb), 0.55) !important;
+}
+
+/* ── QQ 旧版 token（连字符 / 下划线数字写法）──
+ * QQ 还有一套老 token（--text-primary、--text-link、--background_02 …），只有一份写死的值，
+ * 不跟主题走：QQ 暗色下 --text-primary 是 #FFFFFF、--text-link 是 #2d77e5。
+ * 琉璃亮色时用到它们的地方就是白字压浅底、链接蓝色和品牌色对不上
+ * （2026-11-01 实测：@ 成员选择框的「全选」只有 3.1:1）。这里按 M3 角色重新接上。
+ * 只接了实测在 QQ 样式里被用到的；--text-white / --icon-white 用在图片蒙层、彩色标签上，保持白色。 */
+body {
+  --text-primary: var(--ll-on-glass) !important;
+  --text-primary-light: var(--ll-on-glass-2) !important;
+  --text-secondary-01: var(--ll-on-glass-2) !important;
+  --text-secondary-02: var(--ll-on-glass-3) !important;
+  --text-brand: var(--ll-brand) !important;
+  --text-link: var(--ll-link, var(--ll-brand)) !important;
+  --text-error: var(--ll-danger) !important;
+  --text-success: var(--ll-success) !important;
+  --text-warning: var(--ll-warn) !important;
+  --icon-primary: var(--ll-on-glass-2) !important;
+  --icon-secondary-01: var(--ll-on-glass-2) !important;
+  --icon-secondary-02: var(--ll-on-glass-3) !important;
+  --icon-brand: var(--ll-brand) !important;
+  --icon-error: var(--ll-danger) !important;
+  --icon-success: var(--ll-success) !important;
+  --icon-warning: var(--ll-warn) !important;
+  --divider-brand: var(--ll-brand-line) !important;
+  --divider-light: var(--ll-stroke-2) !important;
+  --divider-standard: var(--ll-stroke-2) !important;
+  --list-hover: rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.07) !important;
+  --list-pressed: rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.12) !important;
+  /* 输入框里的引用块、选中的图片底：surfaceContainerHigh */
+  --background_02: var(--ll-surface-high) !important;
+  /* 长消息卡片、红包蒙层 */
+  --background_05: var(--ll-surface-mid) !important;
+  --background_dialogue: var(--ll-popup-bg) !important;
+  /* 文件卡片、推荐消息等浮在消息上的底 */
+  --blur_middle_standard: rgba(var(--ll-acrylic-high), 0.9) !important;
+  /* 自己点过的表情回应、语音转文字块：跟自己的气泡同色 */
+  --host_bubble_bg_css_value: var(--ll-bubble-self, var(--ll-primary-container)) !important;
+  /* 只用在撤回提示的「重新编辑」上，当链接色用 */
+  --bubble-host: var(--ll-link, var(--ll-brand)) !important;
 }

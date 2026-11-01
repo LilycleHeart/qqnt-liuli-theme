@@ -2,12 +2,13 @@
 //   1. 右键菜单：简洁模式（只显示图标）+ 自定义排序（消息右键菜单）
 //   2. 输入框：左侧按钮的数量和顺序，「更多」宫格里的顺序
 //   3. 左侧边栏：隐藏不想要的按钮（空间、更多等）
+//   4. 标题栏控件：悬浮胶囊（默认）或 QQ 原版常驻标题栏（body[data-liuli-tb]）
 // 设置存在 localStorage（设置窗口和主界面同源，storage 事件实时同步）。
 // 菜单项、工具栏按钮、侧栏按钮都是运行时见到一个记一个（SEEN），设置页按这份名单列出来。
 
 const KEY = "liuli-layout";
 const SEEN_KEY = "liuli-layout-seen";
-const DEFAULTS = { menuCompact: false, menuOrder: [], barOrder: [], barPinned: 1, navHidden: [] };
+const DEFAULTS = { menuCompact: false, menuOrder: [], barOrder: [], barPinned: 1, navHidden: [], titlebar: "float" };
 
 const ICON_UP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>';
 const ICON_DOWN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>';
@@ -171,6 +172,8 @@ export function applyAll() {
     try {
         const cfg = loadLayout();
         document.body.toggleAttribute("data-liuli-menu-compact", !!cfg.menuCompact);
+        const tb = cfg.titlebar === "native" ? "native" : "float";
+        if (document.body.dataset.liuliTb !== tb) document.body.dataset.liuliTb = tb;
         applyNav();
         applyBar();
         document.querySelectorAll(".q-context-menu.aio-right-click-menu").forEach(applyMenu);
@@ -252,6 +255,11 @@ export function buildLayoutControls(host) {
     const cfg = loadLayout();
     const seen = loadSeen();
     const save = () => saveLayout(cfg);
+
+    /* 窗口按钮（#4 #10） */
+    host.appendChild(el("div", "liuli-panel__group", "窗口按钮"));
+    seg(host, "标题栏控件", [["float", "悬浮"], ["native", "常驻（原版）"]], cfg.titlebar === "native" ? "native" : "float", v => { cfg.titlebar = v; save(); });
+    host.appendChild(el("div", "liuli-field__hint", "悬浮：最小化 / 关闭按钮和头像平时隐藏，鼠标移到窗口顶边左右两端时出现。常驻：恢复 QQ 原来的标题栏，按钮一直显示。"));
 
     /* 右键菜单 */
     host.appendChild(el("div", "liuli-panel__group", "右键菜单"));

@@ -7,6 +7,17 @@
 const SLUG = "liuli-dsh-theme";
 import { installLayout, applyBar, nativeBarItem, applyAll as llLayoutPass, buildLayoutSection } from "./layout-custom.js";
 import { installArkExternal } from "./ark-external.js";
+import { ROLE_KEY, loadRoles, roleVars, accentPalette, buildRoleControls } from "./color-roles.js";
+// 诊断运行时（契约 installer/DIAG-COVERAGE.md 第三、3.2、3.3、3.5 节）：
+// 尽早安装，后面整个模块体里任何 console.error / 未捕获异常 / Promise 拒绝
+// 都会进环形缓冲并转发主进程 session.log。
+import {
+    installDiagRuntime, beginBoot, markBootReady, markBootFailed, auditWallpaper,
+    collectDiagnostics, getErrors, getErrorCount, buildExportPayload, setImageRatioReader,
+    noteThemeFailure, notePanelBuild
+} from "./diag.js";
+beginBoot();
+installDiagRuntime();
 const ASSET_BASE = "local://profile/plugins/" + SLUG + "/assets/";
 const FILES = ["wallpaper.css", "qq-tokens.css", "palette.css", "liuli.css", "typography.css", "panel.css", "settings-page.css", "details.css", "no-dividers.css", "input-bar.css", "bubbles.css", "layout.css", "lists.css", "motion.css", "markdown.css", "layout-custom.css"];
 const STYLE_ID = "liuli-dsh-theme";
@@ -117,16 +128,20 @@ function alphaComposite(fg, bg, a) {
     return "#" + out.join("");
 }
 
-function deriveVars(mcu, sourceHex, isDark) {
+function deriveVars(mcu, sourceHex, isDark, roles) {
     const theme = mcu.themeFromSourceColor(mcu.argbFromHex(sourceHex));
     const s = isDark ? theme.schemes.dark : theme.schemes.light;
-    const tp = theme.palettes.primary;
+    // 强调色可以换成次色 / 第三色（配色设置，#12）：同一条色调上取同样的 tone
+    const acc = roles && (roles.accent === "secondary" || roles.accent === "tertiary") ? roles.accent : "primary";
+    const tp = accentPalette(theme, roles);
     const neutral = theme.palettes.neutral;
     const nv = theme.palettes.neutralVariant;
     const st = SURFACE_TONES[isDark ? "dark" : "light"];
     const sc = t => mcu.hexFromArgb(neutral.tone(t));
-    const primary = mcu.hexFromArgb(s.primary);
+    const primary = mcu.hexFromArgb(s[acc]);
+    const onPrimary = mcu.hexFromArgb(s["on" + acc.charAt(0).toUpperCase() + acc.slice(1)]);
     const cLow = sc(st.low), cMid = sc(st.mid), cHigh = sc(st.high), cHighest = sc(st.highest);
+    const glass2 = mcu.hexFromArgb(s.onSurfaceVariant);
 
     return {
         "--ll-brand": primary,
@@ -136,7 +151,9 @@ function deriveVars(mcu, sourceHex, isDark) {
         "--ll-brand-tint": mcu.hexFromArgb(tp.tone(isDark ? 24 : 90)),
         "--ll-brand-weak": mcu.hexFromArgb(tp.tone(isDark ? 32 : 88)),
         "--ll-brand-line": mcu.hexFromArgb(tp.tone(isDark ? 48 : 60)),
-        "--ll-on-brand": mcu.hexFromArgb(s.onPrimary),
+        "--ll-on-brand": onPrimary,
+        // 实底强调色上的描边要带 alpha（壁纸选框四角手柄），另给一个三元组，值同 onPrimary。
+        "--ll-on-brand-rgb": rgbTriplet(onPrimary),
         "--ll-secondary": mcu.hexFromArgb(s.secondary),
         "--ll-tertiary": mcu.hexFromArgb(s.tertiary),
         "--ll-tertiary-container": mcu.hexFromArgb(s.tertiaryContainer),
@@ -145,9 +162,15 @@ function deriveVars(mcu, sourceHex, isDark) {
         "--ll-on-secondary-container": mcu.hexFromArgb(s.onSecondaryContainer),
         "--ll-on-glass": mcu.hexFromArgb(s.onSurface),
         "--ll-on-glass-rgb": rgbTriplet(mcu.hexFromArgb(s.onSurface)),
-        "--ll-on-glass-2": mcu.hexFromArgb(s.onSurfaceVariant),
-        "--ll-on-glass-2-rgb": rgbTriplet(mcu.hexFromArgb(s.onSurfaceVariant)),
+        // 文字角色以「没有壁纸」为基准：亮色底纯白、暗色底纯黑（liuli.css #app 底色）。
+        // 在这个基准上 M3 的 onSurface / onSurfaceVariant / tone 40(66) 三级都远高于 4.5:1，层级也清楚；
+        // 壁纸太暗 / 太亮时靠用户调不透明度和遮罩（滑条提示里有推荐区间），不再把文字压深来硬扛。
+        "--ll-on-glass-2": glass2,
+        "--ll-on-glass-2-rgb": rgbTriplet(glass2),
         "--ll-on-glass-3": mcu.hexFromArgb(nv.tone(isDark ? 66 : 40)),
+        // 气泡里的发送者名字（markdown.css）= tertiary；玻璃上的链接 / @别人 = 强调色
+        "--ll-name": mcu.hexFromArgb(s.tertiary),
+        "--ll-link": primary,
         "--ll-on-glass-4": mcu.hexFromArgb(s.outlineVariant),
         "--ll-app-bg": sc(st.appBg),
         "--ll-surface-low": cLow,
@@ -165,17 +188,39 @@ function deriveVars(mcu, sourceHex, isDark) {
         "--ll-acrylic-high": rgbTriplet(alphaComposite(primary, cHighest, SCRIM.highest)),
         "--ll-stroke-1": mcu.hexFromArgb(s.outline),
         "--ll-stroke-2": mcu.hexFromArgb(s.outlineVariant),
-        // DSH border-l1 = stroke3（nv tone 40 / 90）：卡片发丝线
-        "--ll-stroke-3": mcu.hexFromArgb(nv.tone(isDark ? 40 : 90)),
+        // DSH border-l1 = stroke3：卡片发丝线。
+        // 亮色原来是 tone 90（近白），叠在同样近白的玻璃上等于没有；改 tone 80 才看得见。
+        // 暗色仍是 tone 40，视觉与改前完全一致。
+        "--ll-stroke-3": mcu.hexFromArgb(nv.tone(isDark ? 40 : 80)),
         // DSH 侧栏选中项 = primaryContainer + onPrimaryContainer 指示条
         "--ll-primary-container": mcu.hexFromArgb(s.primaryContainer),
         "--ll-on-primary-container": mcu.hexFromArgb(s.onPrimaryContainer),
         "--ll-popup-bg": isDark ? sc(st.high) : sc(st.highest),
+        // 壁纸遮罩的两种候选颜色（需求 A）：亮色主题默认盖白、暗色主题默认盖黑，
+        // 具体用哪一种由设置里的 veilLight / veilDark 决定，最终写进 --ll-veil-rgb
+        // （见 llApplyModeSettings）。这里只提供两者，不再按当前明暗写死。
+        // 白色遮罩固定取中性色 tone 98（不论当前明暗都是同一档"纸白"）；
+        // 弹窗遮罩 --ll-scrim-rgb 仍是黑（M3 scrim 语义）。
+        "--ll-veil-white-rgb": rgbTriplet(sc(98)),
+        "--ll-veil-black-rgb": "0, 0, 0",
+        // 亮色下压在壁纸文字后面的浅色光晕（CSS 侧引用 --ll-halo-rgb）
+        "--ll-halo-rgb": rgbTriplet(sc(98)),
+        // 阴影基色：亮色用墨色（neutral tone 10），暗色保持纯黑（与改前一致）
+        "--ll-shadow-rgb": isDark ? "0, 0, 0" : rgbTriplet(sc(10)),
         "--ll-danger": mcu.hexFromArgb(s.error),
         "--ll-danger-rgb": rgbTriplet(mcu.hexFromArgb(s.error)),
         "--ll-danger-bg": mcu.hexFromArgb(s.errorContainer),
+        // M3 onError：压在 error 实底上的文字 / 图标（标题栏关闭按钮悬停、未读角标）。
+        // 亮色的 error 是深红、暗色的 error 是浅红，写死白字在暗色下根本读不清。
+        "--ll-on-danger": mcu.hexFromArgb(s.onError),
+        // M3 inverseSurface / inverseOnSurface：轻提示（snackbar，QQ 的 .q-toast-item）用。
+        // 和当前明暗反着来，暗色下是浅底深字、亮色下是深底浅字，压在什么界面上都看得清。
+        "--ll-inverse-surface": mcu.hexFromArgb(s.inverseSurface),
+        "--ll-inverse-on-surface": mcu.hexFromArgb(s.inverseOnSurface),
         "--ll-success": mcu.hexFromArgb(s.tertiary),
-        "--ll-warn": mcu.hexFromArgb(s.tertiaryContainer)
+        // 警告色：亮色的 tertiaryContainer 是 tone 90 近白，当成警告图标 / 文字色根本看不见，
+        // 亮色改用 tertiary（tone 40）；暗色保持 tertiaryContainer，视觉不变。
+        "--ll-warn": mcu.hexFromArgb(isDark ? s.tertiaryContainer : s.tertiary)
     };
 }
 
@@ -186,19 +231,22 @@ async function applyDynamicPalette() {
     try { source = await extractSource(); } catch (e) { source = DEFAULT_SOURCE; }
     const mcu = await import(ASSET_BASE + "mcu.js");
     const isDark = llIsDark();
-    const vars = deriveVars(mcu, source, isDark);
-    // 自己的气泡：照搬 DSH bubblePal —— 取「相反明暗」方案的 primaryContainer，
-    // 暗色主题下是浅色气泡 + 深字，对比度由 M3 保证。
+    const roles = loadRoles();
+    const vars = deriveVars(mcu, source, isDark, roles);
+    // 选中项 / 气泡用哪个 M3 角色：见 color-roles.js（#7 #12）。
+    // 旧版自己的气泡固定取「相反明暗」方案的 primaryContainer，现在默认同方案，「反相」保留旧样子。
     try {
-        const opp = mcu.themeFromSourceColor(mcu.argbFromHex(source)).schemes[isDark ? "light" : "dark"];
-        vars["--ll-bubble-self"] = mcu.hexFromArgb(opp.primaryContainer);
-        vars["--ll-bubble-self-fg"] = mcu.hexFromArgb(opp.onPrimaryContainer);
-        // 自己气泡里的链接：用同一方案的第三色（tertiary），和正文颜色分开，压在 primaryContainer 上对比度够
-        vars["--ll-bubble-self-link"] = mcu.hexFromArgb(opp.tertiary);
+        const theme = mcu.themeFromSourceColor(mcu.argbFromHex(source));
+        Object.assign(vars, roleVars(mcu, theme, isDark, roles));
     } catch (e) {}
     const body = document.body;
-    for (const k in vars) body.style.setProperty(k, vars[k]);
+    for (const k in vars) {
+        if (vars[k] === null) body.style.removeProperty(k);
+        else body.style.setProperty(k, vars[k]);
+    }
     body.dataset.liuliSource = source;
+    // 色板换了明暗，随模式变化的遮罩 / 阴影也要跟着重写（需求 A.2）
+    llApplyModeSettings();
     console.log("[liuli-dsh-theme] wallpaper source = " + source + " (brand " + vars["--ll-brand"] + ")");
 }
 
@@ -347,12 +395,44 @@ function ensureStyle() {
 }
 
 const SETTINGS_KEY = SLUG;
-const DEFAULT_SETTINGS = { blur: 18, opacity: 0.5, glow: 0.15, shadow: 0.6, dim: 0.18 };
+const DEFAULT_SETTINGS = {
+    blur: 18, opacity: 0.5, glow: 0.15, shadow: 0.6,
+    // 壁纸遮罩（需求 A）：亮色 / 暗色主题各一份浓度，外加各自的遮罩颜色
+    //   veilX = "light" → 盖一层白；veilX = "dark" → 盖一层黑
+    dimLight: 0.18, dimDark: 0.18,
+    veilLight: "light", veilDark: "dark"
+};
+const DIM_MAX = 0.8;
+const DIM_FALLBACK = 0.18;
+
+/* 旧配置迁移（纯函数，不碰 DOM / localStorage，方便单独测）：
+ * 早期只有一个 dim，读到就亮色 / 暗色两头都取它；顺手丢掉 dim 本身，
+ * 并把 veilLight / veilDark 收窄到合法取值（缺省分别是 light / dark）。 */
+function llMigrateSettings(raw) {
+    const out = Object.assign({}, raw || {});
+    const legacy = out.dim;
+    if (legacy !== undefined && legacy !== null && legacy !== "") {
+        // 新代码保存时一定会删掉 dim，所以还带着 dim 就说明是旧版写的，以它为准。
+        // 不能只在 dimLight 缺失时才迁移：LiteLoader 的 config.get 会先把默认值
+        // （dimLight / dimDark = 0.18）合并进旧配置，dimLight 永远「存在」。
+        out.dimLight = legacy;
+        out.dimDark = legacy;
+    }
+    delete out.dim;
+    if (out.veilLight !== "light" && out.veilLight !== "dark") out.veilLight = "light";
+    if (out.veilDark !== "light" && out.veilDark !== "dark") out.veilDark = "dark";
+    return out;
+}
+
+/* 迁移 + 补默认值：读配置、收到别的窗口发来的配置，都走这里 */
+function llNormalizeSettings(raw) {
+    return Object.assign({}, DEFAULT_SETTINGS, llMigrateSettings(raw));
+}
 
 async function loadSettings() {
     try {
         const cfg = await LiteLoader.api.config.get(SETTINGS_KEY, DEFAULT_SETTINGS);
-        return Object.assign({}, DEFAULT_SETTINGS, cfg || {});
+        return llNormalizeSettings(cfg);
     } catch (e) {
         return Object.assign({}, DEFAULT_SETTINGS);
     }
@@ -370,18 +450,51 @@ function saveSettings(cfg) {
  * 其它窗口靠 storage 事件收到后自行应用（同源，实时）。 */
 const LL_STORAGE_KEY = "liuli-dsh-settings";
 let llSuppressBroadcast = false;
+/* 最近一次应用的配置（已归一化）。切换明暗时 llApplyModeSettings() 靠它取当前模式的遮罩 / 阴影。 */
+let llModeCfg = Object.assign({}, DEFAULT_SETTINGS);
+
+/* 某个模式该用哪一份遮罩浓度 / 遮罩颜色 */
+function llDimFor(cfg, dark) {
+    const v = dark ? cfg.dimDark : cfg.dimLight;
+    const n = Number(v);
+    return isFinite(n) && v !== null && v !== undefined ? n : DIM_FALLBACK;
+}
+function llVeilFor(cfg, dark) {
+    return (dark ? cfg.veilDark : cfg.veilLight) === "light" ? "light" : "dark";
+}
+const LL_VEIL_RGB = {
+    light: "var(--ll-veil-white-rgb, 255, 255, 255)",
+    dark: "var(--ll-veil-black-rgb, 0, 0, 0)"
+};
+
+/* 按当前明暗应用「随模式变化」的那几项（需求 A.2 / B.4）：
+ *   --ll-wallpaper-dim  → 当前模式的遮罩浓度
+ *   --ll-veil-rgb       → 当前模式的遮罩颜色（亮 = 盖白 / 暗 = 盖黑）
+ *   --ll-shadow(-float) → 阴影浓度；亮色乘 0.6，暗色乘 1（暗色结果与改前完全一致）
+ * applySettings() 和 applyDynamicPalette() 都会调它，所以切换明暗时会自动重新应用。 */
+function llApplyModeSettings() {
+    const b = document.body;
+    const cfg = llModeCfg || DEFAULT_SETTINGS;
+    const dark = llIsDark();
+    const shadow = Number(cfg.shadow);
+    const s = isFinite(shadow) ? shadow : DEFAULT_SETTINGS.shadow;
+    const k = dark ? 1 : 0.6;
+    b.style.setProperty("--ll-wallpaper-dim", String(llDimFor(cfg, dark)));
+    b.style.setProperty("--ll-veil-rgb", LL_VEIL_RGB[llVeilFor(cfg, dark)]);
+    b.style.setProperty("--ll-shadow", "0 2px 10px rgba(var(--ll-shadow-rgb), " + (s * 0.4 * k).toFixed(2) + ")");
+    b.style.setProperty("--ll-shadow-float", "0 8px 28px rgba(var(--ll-shadow-rgb), " + (s * 0.47 * k).toFixed(2) + ")");
+}
 
 function applySettings(cfg, broadcast) {
     const b = document.body;
-    b.style.setProperty("--ll-material-blur", "blur(" + cfg.blur + "px) saturate(1.6)");
-    b.style.setProperty("--ll-material-opacity", String(cfg.opacity));
-    b.style.setProperty("--ll-glow-strength", String(cfg.glow));
-    b.style.setProperty("--ll-shadow", "0 2px 10px rgba(var(--ll-shadow-rgb), " + (cfg.shadow * 0.4).toFixed(2) + ")");
-    b.style.setProperty("--ll-shadow-float", "0 8px 28px rgba(var(--ll-shadow-rgb), " + (cfg.shadow * 0.47).toFixed(2) + ")");
-    b.style.setProperty("--ll-wallpaper-dim", String(cfg.dim === undefined ? 0.18 : cfg.dim));
+    llModeCfg = llNormalizeSettings(cfg);
+    b.style.setProperty("--ll-material-blur", "blur(" + llModeCfg.blur + "px) saturate(1.6)");
+    b.style.setProperty("--ll-material-opacity", String(llModeCfg.opacity));
+    b.style.setProperty("--ll-glow-strength", String(llModeCfg.glow));
+    llApplyModeSettings();
 
     if (broadcast !== false && !llSuppressBroadcast) {
-        try { localStorage.setItem(LL_STORAGE_KEY, JSON.stringify(cfg)); } catch (e) {}
+        try { localStorage.setItem(LL_STORAGE_KEY, JSON.stringify(llModeCfg)); } catch (e) {}
     }
 }
 
@@ -390,7 +503,8 @@ try {
     window.addEventListener("storage", function (e) {
         if (e.key !== LL_STORAGE_KEY || !e.newValue) return;
         try {
-            const incoming = JSON.parse(e.newValue);
+            // 别的窗口可能还是旧版（只写 dim），进来先统一迁移一遍
+            const incoming = llNormalizeSettings(JSON.parse(e.newValue));
             llSuppressBroadcast = true;
             applySettings(incoming, false);
             // 面板若存在，同步滑条位置
@@ -404,6 +518,8 @@ try {
                     }
                 });
             }
+            // 「遮罩颜色」分段按钮也跟着刷新（需求 A.4）
+            llRefreshVeilSegs(incoming);
         } catch (err) {
         } finally {
             llSuppressBroadcast = false;
@@ -411,12 +527,24 @@ try {
     });
 } catch (e) { /* 静默 */ }
 
+/* 「遮罩颜色」分段按钮的刷新登记表：亮色 / 暗色各一个。
+ * 别的窗口改了配置要跟着刷新；面板重建时清空，免得旧节点越积越多。 */
+let llVeilSegRefreshers = [];
+function llRefreshVeilSegs(cfg) {
+    const c = cfg || llModeCfg;
+    for (const fn of llVeilSegRefreshers) {
+        try { fn(c); } catch (e) {}
+    }
+}
+
 const FIELDS = [
     { key: "blur", label: "材质模糊", min: 0, max: 40, step: 1, unit: "px", hint: "玻璃层的 backdrop-filter 半径" },
-    { key: "opacity", label: "不透明度", min: 0.1, max: 0.9, step: 0.01, unit: "", hint: "亚克力底的 alpha，越高越实", pct: v => ((v - 0.1) / 0.8) * 100 },
+    { key: "opacity", label: "不透明度", min: 0.1, max: 0.9, step: 0.01, unit: "", hint: "亚克力底的 alpha，越高越实。按最极端的纯黑 / 纯白壁纸估算：亮色主题不低于 0.6、推荐 0.8；暗色主题不低于 0.75、推荐 0.8。开了遮罩可以相应调低", pct: v => ((v - 0.1) / 0.8) * 100 },
     { key: "glow", label: "泛光强度", min: 0, max: 1, step: 0.01, unit: "", hint: "品牌色在边缘的发光量", pct: v => v * 100 },
     { key: "shadow", label: "阴影强度", min: 0, max: 1, step: 0.01, unit: "", hint: "玻璃卡片的投影浓度", pct: v => v * 100 },
-    { key: "dim", label: "壁纸压暗", min: 0, max: 0.8, step: 0.01, unit: "", hint: "壁纸上的黑色遮罩浓度，越高文字越好读", pct: v => (v / 0.8) * 100 }
+    // 壁纸遮罩拆成亮色 / 暗色两条（需求 A.1），各自下面挂一个「遮罩颜色」分段按钮
+    { key: "dimLight", veilKey: "veilLight", label: "亮色主题遮罩", min: 0, max: DIM_MAX, step: 0.01, unit: "", hint: "只作用于亮色主题：盖在壁纸上的遮罩浓度，越高壁纸越淡、文字越好读。颜色选「亮」时和不透明度叠加，不透明度 0.5 时建议不低于 0.2、推荐 0.6；选「暗」会让亮色界面发灰，不推荐", pct: v => (v / DIM_MAX) * 100 },
+    { key: "dimDark", veilKey: "veilDark", label: "暗色主题遮罩", min: 0, max: DIM_MAX, step: 0.01, unit: "", hint: "只作用于暗色主题：盖在壁纸上的遮罩浓度，越高壁纸越淡、文字越好读。颜色选「暗」时和不透明度叠加，不透明度 0.5 时建议不低于 0.5、推荐 0.6；选「亮」会让暗色界面发灰，不推荐", pct: v => (v / DIM_MAX) * 100 }
 ];
 
 function toast(text) {
@@ -1228,11 +1356,12 @@ function installRevealTracker() {
      * 那两个事件在 QQ 里会晚一拍到达，且离开时偶尔不来，标记就卡住不收。
      *   左边缘 ≤8px（整条）           → 展开导航；展开后指针在导航卡上就保持
      *   顶边 ≤8px 的左 / 右 200px     → 唤出左上 / 右上胶囊；指针在胶囊上就保持
-     * 离开后 250ms 收起。 */
-    var EDGE = 8, HOLD = 250, PAD = 10, CORNER = 200;
+     * 离开后收起：导航 250ms；胶囊 600ms（#4 #10：给鼠标从感应条挪到按钮上留余量）。 */
+    var EDGE = 8, PAD = 18, CORNER = 200;
+    var HOLD = { nav: 250, l: 600, r: 600 };
     var KEYS = { l: "liuliRL", r: "liuliRR", nav: "liuliRNav" };
-    var state = {}, timers = {};
-    function set(k, on) {
+    var state = {}, timers = {}, last = { x: -1, y: -1 };
+    function set(k, on, hold) {
         if (on) {
             if (timers[k]) { clearTimeout(timers[k]); timers[k] = 0; }
             if (!state[k]) { state[k] = true; document.body.dataset[KEYS[k]] = "1"; }
@@ -1240,8 +1369,19 @@ function installRevealTracker() {
             timers[k] = setTimeout(function () {
                 timers[k] = 0; state[k] = false;
                 delete document.body.dataset[KEYS[k]];
-            }, HOLD);
+                if (k === "nav") releaseNavFocus();
+            }, hold || HOLD[k]);
         }
+    }
+    /* #5：点了导航按钮后焦点留在按钮上，旧版 CSS 用 :focus-within 保持展开，
+     * 鼠标移开导航也不收（而且没有展开态的材质）。现在 CSS 只认 :focus-visible，
+     * 这里再把鼠标点出来的焦点还给页面，双保险。 */
+    function releaseNavFocus() {
+        try {
+            var sb = document.querySelector(".container-sidebar");
+            var a = document.activeElement;
+            if (sb && a && a !== document.body && sb.contains(a) && !a.matches(":focus-visible")) a.blur();
+        } catch (e) { /* 静默 */ }
     }
     function over(sel, x, y) {
         var el = document.querySelector(sel);
@@ -1249,16 +1389,28 @@ function installRevealTracker() {
         var r = el.getBoundingClientRect();
         return r.width > 0 && x >= r.left - PAD && x <= r.right + PAD && y >= r.top - PAD && y <= r.bottom + PAD;
     }
+    function nativeBar() { return document.body.dataset.liuliTb === "native"; }
     function onMove(e) {
         var x = e.clientX, y = e.clientY, w = window.innerWidth;
+        last.x = x; last.y = y;
         set("nav", x <= EDGE || (state.nav && over(".container-sidebar", x, y)));
+        if (nativeBar()) { set("l", false); set("r", false); return; }
         set("l", (y <= EDGE && x >= 56 && x <= CORNER + 56) || (state.l && over(".topbar-profile", x, y)));
         set("r", (y <= EDGE && x >= w - CORNER) || (state.r && over(".window-control-area", x, y)));
     }
-    function leaveAll() { set("nav", false); set("l", false); set("r", false); }
+    /* 鼠标进到拖动区 / 离开窗口时页面只收到一次 mouseleave，之后不再有 mousemove。
+     * 如果离开前指针就在胶囊附近，多半只是经过了一小段拖动区，晚一点再收。 */
+    function onLeave() {
+        set("nav", false);
+        ["l", "r"].forEach(function (k) {
+            var sel = k === "l" ? ".topbar-profile" : ".window-control-area";
+            set(k, false, state[k] && over(sel, last.x, last.y) ? 1500 : HOLD[k]);
+        });
+    }
+    function onBlur() { set("nav", false); set("l", false); set("r", false); }
     document.addEventListener("mousemove", onMove, true);
-    document.documentElement.addEventListener("mouseleave", leaveAll);
-    window.addEventListener("blur", leaveAll);
+    document.documentElement.addEventListener("mouseleave", onLeave);
+    window.addEventListener("blur", onBlur);
 }
 
 /* ---------- 悬浮控件与侧栏的指向入口 ----------
@@ -1324,9 +1476,44 @@ function markQuoteRoots() {
  * dsh 用 localStorage 存壁纸 dataURL；这里同样：
  *   - 用户选图 → FileReader → dataURL → localStorage
  *   - 用一条独立 <style> 覆盖 #app::before 的 background-image
- *   - 压暗值走 --ll-wallpaper-dim，由滑条实时驱动
+ *   - 遮罩浓度走 --ll-wallpaper-dim、遮罩颜色走 --ll-veil-rgb，
+ *     两个值都由 llApplyModeSettings() 按当前明暗写入（亮色 / 暗色各一份设置）
  */
 const LL_WALLPAPER_KEY = "liuli-dsh-wallpaper";
+// 跨窗口同步兜底（契约第四节第 3 条）：每次保存壁纸写一个毫秒字符串的小键，
+// 主窗口只读它判断"是否变了"，避免每 1.5 秒解析 783KB 的壁纸 dataURL。
+const LL_WALLPAPER_REV_KEY = "liuli-dsh-wallpaper-rev";
+
+function llErrText(e) {
+    if (!e) return "";
+    try {
+        const name = e.name ? String(e.name) : "";
+        const msg = e.message != null ? String(e.message) : String(e);
+        // 普通 Error 不显示 "Error: " 前缀；QuotaExceededError 之类保留异常名
+        return name && name !== "Error" && msg.indexOf(name) !== 0 ? name + ": " + msg : msg;
+    } catch (err) {
+        return "[unprintable error]";
+    }
+}
+
+function llScopeName() {
+    try {
+        return (document.body && document.body.dataset && document.body.dataset.liuliScope) || "unknown";
+    } catch (e) {
+        return "unknown";
+    }
+}
+
+function llWallpaperRev() {
+    try { return localStorage.getItem(LL_WALLPAPER_REV_KEY) || ""; } catch (e) { return ""; }
+}
+
+function llFmtBytes(n) {
+    const v = Number(n) || 0;
+    if (v >= 1024 * 1024) return (v / 1024 / 1024).toFixed(2) + "MB";
+    if (v >= 1024) return (v / 1024).toFixed(1) + "KB";
+    return v + "B";
+}
 
 /* ════════════════════════════════════════════════════════════
  * 壁纸：选区模型 + 框选编辑（照搬 dsh liuli-theme）
@@ -1354,12 +1541,39 @@ function loadWallpaperState() {
     }
 }
 
+/* 保存壁纸：不再吞异常（契约第四节第 1 条）。
+ * 返回 { ok, error }，失败时由调用方 toast + 审计；同时写 revision 小键供主窗口轮询。 */
 function saveWallpaperState(state, broadcast) {
-    try { localStorage.setItem(LL_WALLPAPER_KEY, JSON.stringify(state)); } catch (e) {}
+    let ok = false;
+    let error = "";
+    let valueLen = 0;
+    let revOk = false;
+    let revError = "";
+    try {
+        const raw = JSON.stringify(state);
+        valueLen = raw.length;
+        localStorage.setItem(LL_WALLPAPER_KEY, raw);
+        ok = true;
+    } catch (e) {
+        error = llErrText(e);
+    }
+    if (ok) {
+        try {
+            localStorage.setItem(LL_WALLPAPER_REV_KEY, String(Date.now()));
+            revOk = true;
+        } catch (e) {
+            revError = llErrText(e);
+        }
+    }
+    auditWallpaper("persist", {
+        ok: ok, error: error, key: LL_WALLPAPER_KEY, valueLen: valueLen,
+        revOk: revOk, revError: revError
+    });
     if (broadcast !== false) {
         window.__liuliPaletteApplied = false;
         applyDynamicPalette();
     }
+    return { ok: ok, error: error };
 }
 
 /* 图片宽高比缓存：按 src 存，避免异步竞态拿到旧图的比例 */
@@ -1367,6 +1581,8 @@ const llImageRatioCache = new Map();
 function getImageRatio(src) {
     return llImageRatioCache.get(src) || null;
 }
+// 让诊断快照能读到 imageRatioCached（diag.js 不直接依赖本模块）
+setImageRatioReader(getImageRatio);
 function primeImageRatio(src) {
     return new Promise(function (resolve) {
         const img = new Image();
@@ -1438,11 +1654,19 @@ function ensureWallpaperStyle() {
     return el;
 }
 
-function renderWallpaper(state) {
+function renderWallpaper(state, reason) {
     const el = ensureWallpaperStyle();
     llWpLast = state;
     if (!state || !state.src) {
         el.textContent = "";
+        // 只有明确"为什么渲染"时才写审计（resize 之类的重绘不刷屏）
+        if (reason) {
+            auditWallpaper("apply", {
+                scope: llScopeName(), styleLen: 0, ratioKnown: false,
+                fit: (state && state.fit) || "cover", area: null,
+                cleared: true, reason: reason, rev: llWallpaperRev()
+            });
+        }
         return;
     }
     const g = bgGeometry(state.area, getImageRatio(state.src), window.innerWidth / window.innerHeight, state.fit || "cover");
@@ -1452,13 +1676,47 @@ function renderWallpaper(state) {
         "#app::before {" +
         "  content: \"\" !important; position: absolute !important; inset: 0 !important;" +
         "  z-index: 0 !important; pointer-events: none !important;" +
-        "  background-image: linear-gradient(rgba(var(--ll-scrim-rgb), var(--ll-wallpaper-dim, 0.18))," +
-        "    rgba(var(--ll-scrim-rgb), var(--ll-wallpaper-dim, 0.18))),\n" +
+        "  background-image: linear-gradient(rgba(var(--ll-veil-rgb, var(--ll-scrim-rgb)), var(--ll-wallpaper-dim, 0.18))," +
+        "    rgba(var(--ll-veil-rgb, var(--ll-scrim-rgb)), var(--ll-wallpaper-dim, 0.18))),\n" +
         "    url(\"" + state.src + "\") !important;" +
         "  background-position: " + g.position + " !important;" +
         "  background-size: " + g.size + " !important;" +
         "  background-repeat: no-repeat !important;" +
         "}";
+    if (reason) {
+        auditWallpaper("apply", {
+            scope: llScopeName(), styleLen: el.textContent.length,
+            ratioKnown: !!getImageRatio(state.src), fit: state.fit || "cover",
+            area: state.area || null, reason: reason, rev: llWallpaperRev()
+        });
+    }
+}
+
+/* 启动兜底（契约第四节第 4 条）：localStorage 里明明有壁纸，但 #app::before
+ * 没有背景图（样式注入过早/被覆盖），600ms 后再渲染一次。 */
+function llWallpaperPseudoApplied() {
+    try {
+        const app = document.getElementById("app");
+        if (!app) return false;
+        const cs = getComputedStyle(app, "::before");
+        return !!cs && (cs.backgroundImage || "").indexOf("url(") >= 0;
+    } catch (e) {
+        return false;
+    }
+}
+
+function scheduleWallpaperBootRetry() {
+    setTimeout(function () {
+        try {
+            if (llWallpaperPseudoApplied()) return;
+            const st = loadWallpaperState();
+            if (!st || !st.src) return;
+            console.warn("[liuli-dsh-theme] 壁纸已保存但 #app::before 没有背景图，重渲染一次");
+            renderWallpaper(st, "boot-retry");
+            window.__liuliPaletteApplied = false;
+            applyDynamicPalette();
+        } catch (e) { /* 静默 */ }
+    }, 600);
 }
 
 /* 窗口拉伸：选区算出的 background-size 是按当时的窗口比例定的，比例一变图就被拉歪。
@@ -1480,39 +1738,135 @@ try {
     window.addEventListener("storage", function (e) {
         if (e.key !== LL_WALLPAPER_KEY) return;
         const st = loadWallpaperState();
+        auditWallpaper("storage", {
+            scope: llScopeName(), key: LL_WALLPAPER_KEY, hasSrc: !!(st && st.src)
+        });
+        // storage 事件已经到了，就把 revision 记成最新：1500ms 轮询不用再重复渲染一次大图
+        try {
+            const rev = localStorage.getItem(LL_WALLPAPER_REV_KEY);
+            if (rev) llWpRevSeen = rev;
+        } catch (err) {}
         if (st.src && !getImageRatio(st.src)) {
-            primeImageRatio(st.src).then(function () { (function(){ var st = loadWallpaperState(); if (st.src) { primeImageRatio(st.src).then(function(){ renderWallpaper(loadWallpaperState()); }); } else { renderWallpaper(st); } })(); });
+            primeImageRatio(st.src).then(function () {
+                renderWallpaper(loadWallpaperState(), "storage");
+                refreshWallpaperPreview();
+            });
         }
-        renderWallpaper(st);
+        renderWallpaper(st, "storage");
         window.__liuliPaletteApplied = false;
         applyDynamicPalette();
         if (typeof refreshWallpaperPreview === "function") refreshWallpaperPreview();
     });
 } catch (e) {}
 
-function readImageFile(file, maxW) {
+/* revision 轮询兜底（契约第四节第 3 条）：
+ * 设置窗口和主窗口可能不在同一个 session，storage 事件根本到不了。
+ * 主窗口只读这个小键（毫秒字符串），变了才 loadWallpaperState + renderWallpaper，
+ * 大图 dataURL 只在真正需要时才解析。 */
+let llWpRevSeen = "";
+try { llWpRevSeen = localStorage.getItem(LL_WALLPAPER_REV_KEY) || ""; } catch (e) {}
+setInterval(function () {
+    try {
+        if (!document.body || document.body.dataset.liuliScope !== "main") return;
+        const rev = localStorage.getItem(LL_WALLPAPER_REV_KEY) || "";
+        if (rev === llWpRevSeen) return;
+        const fromRev = llWpRevSeen;
+        llWpRevSeen = rev;
+        if (!rev) return;
+        auditWallpaper("poll", { fromRev: fromRev, toRev: rev, scope: llScopeName() });
+        const st = loadWallpaperState();
+        if (st.src && !getImageRatio(st.src)) {
+            primeImageRatio(st.src).then(function () {
+                renderWallpaper(loadWallpaperState(), "poll");
+                refreshWallpaperPreview();
+            });
+        }
+        renderWallpaper(st, "poll");
+        refreshWallpaperPreview();
+        window.__liuliPaletteApplied = false;
+        applyDynamicPalette();
+    } catch (e) { /* 静默 */ }
+}, 1500);
+
+/* 选图压缩：自适应宽度与质量（契约第四节第 2 条）。
+ * 目标 dataURL ≤3.5MB：2560 → 1920 → 1440 → 1080 宽、质量 0.86 → 0.8；
+ * 全部档位都超限时仍返回最小结果（over=true），由调用方提示并允许保存。 */
+const LL_WP_DATAURL_BUDGET = 3.5 * 1024 * 1024;
+const LL_WP_ENCODE_WIDTHS = [2560, 1920, 1440, 1080];
+const LL_WP_ENCODE_QUALITIES = [0.86, 0.8];
+
+function llReadFileAsDataUrl(file) {
     return new Promise(function (resolve, reject) {
         const reader = new FileReader();
-        reader.onerror = reject;
-        reader.onload = function () {
-            const img = new Image();
-            img.onerror = reject;
-            img.onload = function () {
-                try {
-                    const sc = Math.min(1, maxW / img.naturalWidth);
-                    const w = Math.round(img.naturalWidth * sc);
-                    const h = Math.round(img.naturalHeight * sc);
-                    const cvs = document.createElement("canvas");
-                    cvs.width = w;
-                    cvs.height = h;
-                    cvs.getContext("2d").drawImage(img, 0, 0, w, h);
-                    resolve({ dataUrl: cvs.toDataURL("image/jpeg", 0.86), ratio: w / h });
-                } catch (e) { reject(e); }
-            };
-            img.src = reader.result;
-        };
+        reader.onerror = function () { reject(new Error("读取文件失败")); };
+        reader.onload = function () { resolve(String(reader.result || "")); };
         reader.readAsDataURL(file);
     });
+}
+
+function llDecodeImage(src) {
+    return new Promise(function (resolve, reject) {
+        const img = new Image();
+        img.onerror = function () { reject(new Error("图片解码失败")); };
+        img.onload = function () { resolve(img); };
+        img.src = src;
+    });
+}
+
+async function readImageFile(file, maxW) {
+    const started = Date.now();
+    try {
+        const raw = await llReadFileAsDataUrl(file);
+        const img = await llDecodeImage(raw);
+        const cap = Number(maxW) > 0 ? Number(maxW) : LL_WP_ENCODE_WIDTHS[0];
+        // 候选宽度：原图（不超过上限）优先，再按 2560→1080 逐档压缩。
+        // 之前直接取 <=2560 的档位，小图（如 1200 宽）会被无谓缩到 1080，白白损失清晰度。
+        const widths = [];
+        if (img.naturalWidth > 0 && img.naturalWidth <= cap) widths.push(img.naturalWidth);
+        for (const w of LL_WP_ENCODE_WIDTHS) {
+            if (w <= cap && widths.indexOf(w) < 0) widths.push(w);
+        }
+        if (!widths.length) widths.push(cap);
+        const tries = [];
+        let last = null;
+        let prevDims = "";
+        for (const targetW of widths) {
+            const sc = Math.min(1, targetW / img.naturalWidth);
+            const w = Math.max(1, Math.round(img.naturalWidth * sc));
+            const h = Math.max(1, Math.round(img.naturalHeight * sc));
+            const dims = w + "x" + h;
+            if (dims === prevDims) continue;   // 原图比目标宽还小：同一尺寸没必要重复编码
+            prevDims = dims;
+            const cvs = document.createElement("canvas");
+            cvs.width = w;
+            cvs.height = h;
+            const ctx = cvs.getContext("2d");
+            if (!ctx) throw new Error("canvas 2d 不可用");
+            ctx.drawImage(img, 0, 0, w, h);
+            for (const q of LL_WP_ENCODE_QUALITIES) {
+                const dataUrl = cvs.toDataURL("image/jpeg", q);
+                tries.push({ w: w, q: q, len: dataUrl.length });
+                last = { dataUrl: dataUrl, ratio: w / h, width: w, height: h, quality: q };
+                if (dataUrl.length <= LL_WP_DATAURL_BUDGET) {
+                    auditWallpaper("encode", {
+                        ok: true, dataUrlLen: dataUrl.length, width: w, height: h,
+                        quality: q, ms: Date.now() - started, tries: tries
+                    });
+                    return last;
+                }
+            }
+        }
+        if (!last) throw new Error("没有可用的编码结果");
+        const over = last.dataUrl.length > LL_WP_DATAURL_BUDGET;
+        auditWallpaper("encode", {
+            ok: true, dataUrlLen: last.dataUrl.length, width: last.width, height: last.height,
+            quality: last.quality, ms: Date.now() - started, over: over, tries: tries
+        });
+        return Object.assign({ over: over }, last);
+    } catch (e) {
+        auditWallpaper("encode", { ok: false, error: llErrText(e), ms: Date.now() - started });
+        throw e;
+    }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1542,12 +1896,17 @@ function llBtn(text, variant) {
 }
 
 function llApplyWallpaper(st) {
-    saveWallpaperState(st, true);
+    const saved = saveWallpaperState(st, true);
     if (st && st.src && !getImageRatio(st.src)) {
-        primeImageRatio(st.src).then(function () { renderWallpaper(loadWallpaperState()); refreshWallpaperPreview(); });
+        primeImageRatio(st.src).then(function () { renderWallpaper(loadWallpaperState(), "user"); refreshWallpaperPreview(); });
     }
-    renderWallpaper(st);
+    renderWallpaper(st, "user");
     refreshWallpaperPreview();
+    if (!saved.ok) {
+        // 契约第四节第 1 条：不再静默；把异常名/消息直接告诉用户
+        toast("壁纸保存失败：" + saved.error + "（仅本次生效，重启后可能丢失）");
+    }
+    return saved;
 }
 
 /* 主界面视口比例：壁纸铺在主聊天界面上，预览/框选必须按主界面的实时宽高比算，
@@ -1605,17 +1964,31 @@ function buildWallpaperControls(host) {
     fileName.className = "liuli-wp-filename";
     const removeBtn = llBtn("移除", "ghost");
     removeBtn.addEventListener("click", function () {
-        try { localStorage.removeItem(LL_WALLPAPER_KEY); } catch (e) {}
-        renderWallpaper(null);
+        let ok = true;
+        let error = "";
+        try {
+            localStorage.removeItem(LL_WALLPAPER_KEY);
+            // 写 revision 让主窗口的轮询也能收到"移除"（只删大键的话轮询会以为没变化）
+            localStorage.setItem(LL_WALLPAPER_REV_KEY, String(Date.now()));
+        } catch (e) {
+            ok = false;
+            error = llErrText(e);
+        }
+        auditWallpaper("remove", { ok: ok, error: error });
+        renderWallpaper(null, "remove");
         window.__liuliPaletteApplied = false;
         applyDynamicPalette();
         fileName.textContent = "";
         refreshWallpaperPreview();
-        toast("已恢复默认壁纸");
+        toast(ok ? "已恢复默认壁纸" : "移除壁纸失败：" + error);
     });
     pick.addEventListener("change", function () {
         const f = pick.files && pick.files[0];
         if (!f) return;
+        auditWallpaper("pick", {
+            file: { name: String(f.name || ""), size: Number(f.size) || 0, type: String(f.type || "") },
+            maxW: 2560
+        });
         chooseBtn.disabled = true;
         chooseBtn.textContent = "读取中…";
         readImageFile(f, 2560).then(function (r) {
@@ -1623,9 +1996,14 @@ function buildWallpaperControls(host) {
             const prev = loadWallpaperState();
             llApplyWallpaper({ src: r.dataUrl, area: null, fit: prev.fit || "cover" });
             fileName.textContent = f.name;
-            toast("壁纸已更新，主题色已按新壁纸取色");
+            if (r.over) {
+                toast("壁纸已更新，但压到最小仍约 " + llFmtBytes(r.dataUrl.length) + "，若显示异常请换一张更小的图");
+            } else {
+                toast("壁纸已更新，主题色已按新壁纸取色");
+            }
+            if (llModeAdviceRefresh) llModeAdviceRefresh();
         }).catch(function (e) {
-            toast("读取失败：" + (e && e.message));
+            toast("读取失败：" + llErrText(e));
         }).finally(function () {
             chooseBtn.disabled = false;
             chooseBtn.textContent = "选择图片";
@@ -1637,6 +2015,14 @@ function buildWallpaperControls(host) {
     row.appendChild(fileName);
     row.appendChild(pick);
     block.appendChild(row);
+
+    /* 壁纸亮度和明暗主题不搭时给一句提示（#7） */
+    const advice = document.createElement("div");
+    advice.className = "liuli-wp-advice";
+    advice.hidden = true;
+    block.appendChild(advice);
+    llModeAdviceRefresh = function () { return llCheckModeAdvice(advice); };
+    llModeAdviceRefresh();
 
     /* ── 适应模式 ── */
     const fitRow = document.createElement("div");
@@ -1933,6 +2319,8 @@ function llApplyMode(withTransition, x, y) {
 try {
     window.addEventListener("storage", function (e) {
         if (e.key === LL_MODE_KEY) { llApplyMode(false); if (typeof llModeRefresh === "function") llModeRefresh(); }
+        // 配色（颜色角色）在别的窗口改了：重新派生一次色板
+        if (e.key === ROLE_KEY) { window.__liuliPaletteApplied = false; applyDynamicPalette(); }
     });
 } catch (e) {}
 let llModeRefresh = null;
@@ -1943,6 +2331,105 @@ try {
         if (document.body.dataset.liuliDark !== d) llApplyMode(false);
     }).observe(document.body, { attributes: true, attributeFilter: ["q-theme", "class"] });
 } catch (e) {}
+
+/* ---------- 壁纸亮度 → 明暗主题建议（#7） ----------
+ * 会话列表、侧栏这些玻璃层是「亚克力 × 不透明度 + 压暗后的壁纸 × (1 - 不透明度)」，
+ * 文字就压在这层混合色上。亮色主题配暗壁纸时混出来是灰的，深色字看不清；反过来同理。
+ * 这里按壁纸平均亮度、两种模式各自的「壁纸遮罩浓度 + 遮罩颜色」和「不透明度」
+ * 估算两种主题下的文字对比度，
+ * 当前主题低于 4.5:1、另一种明显更好（≥1.5 倍）时提示切换。只提示，不自动改。 */
+const LL_WP_ADVICE_KEY = "liuli-wp-advice-dismissed";
+let llModeAdviceRefresh = null;
+const llSrgbToY = s => (s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4));
+const llYToSrgb = y => (y <= 0.0031308 ? y * 12.92 : 1.055 * Math.pow(y, 1 / 2.4) - 0.055);
+const llLstarToY = l => (l > 8 ? Math.pow((l + 16) / 116, 3) : l / 903.3);
+
+function llWallpaperFingerprint(src) {
+    return src ? src.length + ":" + src.slice(-48) : "";
+}
+
+/* 壁纸平均相对亮度（0~1），缩到 48×48 采样 */
+async function llWallpaperLuma(src) {
+    const img = await llDecodeImage(src);
+    const n = 48;
+    const c = document.createElement("canvas");
+    c.width = n; c.height = n;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, n, n);
+    const px = ctx.getImageData(0, 0, n, n).data;
+    let sum = 0, cnt = 0;
+    for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] < 128) continue;
+        sum += 0.2126 * llSrgbToY(px[i] / 255) + 0.7152 * llSrgbToY(px[i + 1] / 255) + 0.0722 * llSrgbToY(px[i + 2] / 255);
+        cnt++;
+    }
+    return cnt ? sum / cnt : 0.5;
+}
+
+/* 估算某种主题下玻璃层上正文的对比度。混合按 sRGB 做（和浏览器合成一致）；
+ * 玻璃 / 正文的明度取 M3 的 surface（亮 94 / 暗 12）和 onSurface（亮 10 / 暗 90）。
+ * dim / veil 是「目标模式」自己的那一份（需求 A.5）：
+ *   veil = "light" → 遮罩取 L*98 的纸白；veil = "dark" → 遮罩取黑。 */
+function llModeContrast(wallY, dim, opacity, dark, veil) {
+    const veilSrgb = veil === "light" ? llYToSrgb(llLstarToY(98)) : 0;
+    const wall = llYToSrgb(wallY) * (1 - dim) + veilSrgb * dim;
+    const glass = llYToSrgb(llLstarToY(dark ? 12 : 94));
+    const bgY = llSrgbToY(glass * opacity + wall * (1 - opacity));
+    const textY = llLstarToY(dark ? 90 : 10);
+    return (Math.max(bgY, textY) + 0.05) / (Math.min(bgY, textY) + 0.05);
+}
+
+async function llCheckModeAdvice(box) {
+    box.hidden = true;
+    box.textContent = "";
+    let src = null;
+    try { const st = loadWallpaperState(); src = st && st.src; } catch (e) {}
+    if (!src) return null;
+    const fp = llWallpaperFingerprint(src);
+    const dark = llIsDark();
+    try { if (localStorage.getItem(LL_WP_ADVICE_KEY) === fp + "|" + (dark ? "dark" : "light")) return null; } catch (e) {}
+    let y;
+    try { y = await llWallpaperLuma(src); } catch (e) { return null; }
+    // 两种模式各按自己的遮罩浓度 / 遮罩颜色估（body 上只有当前模式那一份，所以取配置）
+    const cfg = llModeCfg || DEFAULT_SETTINGS;
+    const op = Number(cfg.opacity);
+    const o = isFinite(op) ? op : 0.5;
+    const cur = llModeContrast(y, llDimFor(cfg, dark), o, dark, llVeilFor(cfg, dark));
+    const alt = llModeContrast(y, llDimFor(cfg, !dark), o, !dark, llVeilFor(cfg, !dark));
+    const result = { luma: y, current: cur, other: alt, advise: cur < 4.5 && alt >= cur * 1.5 };
+    if (!result.advise) return result;
+
+    const target = dark ? "light" : "dark";
+    const msg = document.createElement("div");
+    msg.className = "liuli-wp-advice__text";
+    msg.textContent = (dark ? "这张壁纸偏亮，暗色主题下的浅色文字不够清楚" : "这张壁纸偏暗，亮色主题下的深色文字不够清楚")
+        + "（估算对比度 " + cur.toFixed(1) + ":1）。换成" + (dark ? "亮色" : "暗色") + "主题约 " + alt.toFixed(1) + ":1。";
+    const acts = document.createElement("div");
+    acts.className = "liuli-wp-actions";
+    const go = llBtn("切换为" + (dark ? "亮色" : "暗色"), "primary");
+    go.addEventListener("click", function (e) {
+        try { localStorage.setItem(LL_MODE_KEY, target); } catch (err) {}
+        llApplyMode(true, e.clientX, e.clientY);
+        if (typeof llModeRefresh === "function") llModeRefresh();
+        box.hidden = true;
+    });
+    const keep = llBtn("保持现状", "ghost");
+    keep.addEventListener("click", function () {
+        try { localStorage.setItem(LL_WP_ADVICE_KEY, fp + "|" + (dark ? "dark" : "light")); } catch (err) {}
+        box.hidden = true;
+    });
+    acts.appendChild(go);
+    acts.appendChild(keep);
+    box.appendChild(msg);
+    box.appendChild(acts);
+    box.hidden = false;
+    return result;
+}
+window.__liuliModeAdvice = function () {
+    // 调试入口：返回当前壁纸在两种主题下的估算对比度
+    const box = document.createElement("div");
+    return llCheckModeAdvice(box).then(function (r) { return r && { luma: +r.luma.toFixed(3), current: +r.current.toFixed(2), other: +r.other.toFixed(2), advise: r.advise }; });
+};
 
 function buildModeControls(host) {
     const row = document.createElement("div");
@@ -1967,6 +2454,7 @@ function buildModeControls(host) {
             } catch (err) {}
             llApplyMode(true, e.clientX, e.clientY);
             refresh();
+            if (llModeAdviceRefresh) llModeAdviceRefresh();
         });
         seg.appendChild(b);
         btns[p[0]] = b;
@@ -1979,8 +2467,226 @@ function buildModeControls(host) {
     refresh();
 }
 
+/* ════════════════════════════════════════════════════════════
+ * 诊断（契约 3.5）：设置页「诊断」小节
+ * ------------------------------------------------------------
+ * 放在「恢复默认」之前。导出流程：
+ *   collectDiagnostics(opts) → window.liuli_api.diagExport(payload)
+ *   → 展示主进程返回的最终路径；失败 toast + 审计，不静默。
+ * preload / main 侧的 diagExport 由另一位同事实现（契约 3.1），
+ * 这里在接口不存在时给明确提示，方便判断是不是装到了旧版。
+ * ════════════════════════════════════════════════════════════ */
+function buildDiagSection(host) {
+    const block = document.createElement("div");
+    block.className = "liuli-wp-block liuli-diag";
+    host.appendChild(block);
+
+    const title = document.createElement("div");
+    title.className = "liuli-wp-title";
+    title.textContent = "诊断";
+    block.appendChild(title);
+
+    const desc = document.createElement("div");
+    desc.className = "liuli-diag-desc";
+    desc.textContent = "把环境、插件状态、日志、UI/壁纸状态打成 zip（不含聊天记录；设置页截图默认包含）。遇到「启动报错」「换了壁纸不显示」「设置页像原生控件」时，导出这个包发给开发者即可。";
+    block.appendChild(desc);
+
+    const checkRow = document.createElement("label");
+    checkRow.className = "liuli-diag-check";
+    const shots = document.createElement("input");
+    shots.type = "checkbox";
+    shots.checked = false;                       // 默认不勾：可能含当前聊天画面
+    const shotsText = document.createElement("span");
+    shotsText.textContent = "包含聊天窗口截图（可能包含当前聊天画面）";
+    checkRow.appendChild(shots);
+    checkRow.appendChild(shotsText);
+    block.appendChild(checkRow);
+
+    const shotsHint = document.createElement("div");
+    shotsHint.className = "liuli-diag-hint";
+    shotsHint.textContent = "设置页截图默认包含（不含聊天内容）；聊天窗口与壁纸缩略图只在勾选后采集。";
+    block.appendChild(shotsHint);
+
+    const actions = document.createElement("div");
+    actions.className = "liuli-wp-actions";
+    const exportBtn = llBtn("导出诊断包", "primary");
+    const openBtn = llBtn("打开文件夹", "ghost");
+    openBtn.disabled = true;
+    actions.appendChild(exportBtn);
+    actions.appendChild(openBtn);
+    block.appendChild(actions);
+
+    const status = document.createElement("div");
+    status.className = "liuli-diag-status";
+    status.textContent = "状态：就绪";
+    block.appendChild(status);
+
+    const errRow = document.createElement("div");
+    errRow.className = "liuli-diag-errors";
+    const errCount = document.createElement("span");
+    errCount.textContent = "最近错误：0 条";
+    const errToggle = document.createElement("button");
+    errToggle.type = "button";
+    errToggle.className = "liuli-diag-link";
+    errToggle.textContent = "查看";
+    errRow.appendChild(errCount);
+    errRow.appendChild(errToggle);
+    block.appendChild(errRow);
+
+    const errList = document.createElement("div");
+    errList.className = "liuli-diag-errlist";
+    block.appendChild(errList);
+
+    let lastPath = "";
+    let busy = false;
+
+    const setStatus = function (text, level) {
+        status.textContent = "状态：" + text;
+        status.classList.toggle("is-ok", level === "ok");
+        status.classList.toggle("is-bad", level === "bad");
+    };
+
+    const renderErrorList = function () {
+        errList.innerHTML = "";
+        const list = getErrors().slice(-10).reverse();
+        if (!list.length) {
+            const empty = document.createElement("div");
+            empty.className = "liuli-diag-err";
+            empty.textContent = "本次启动没有捕获到错误。";
+            errList.appendChild(empty);
+            return;
+        }
+        list.forEach(function (e) {
+            const item = document.createElement("div");
+            item.className = "liuli-diag-err";
+            const head = document.createElement("div");
+            head.className = "liuli-diag-err__head";
+            head.textContent = (e.t || "") + " · " + (e.level || "error") + " · " + (e.scope || "");
+            const msg = document.createElement("div");
+            msg.className = "liuli-diag-err__msg";
+            msg.textContent = String(e.msg || "");
+            item.appendChild(head);
+            item.appendChild(msg);
+            errList.appendChild(item);
+        });
+    };
+
+    const refreshErrors = function () {
+        errCount.textContent = "最近错误：" + getErrorCount() + " 条";
+        if (errList.classList.contains("is-open")) renderErrorList();
+    };
+    refreshErrors();
+    setInterval(refreshErrors, 3000);
+
+    errToggle.addEventListener("click", function () {
+        const open = errList.classList.toggle("is-open");
+        errToggle.textContent = open ? "收起" : "查看";
+        if (open) renderErrorList();
+    });
+
+    exportBtn.addEventListener("click", async function () {
+        if (busy) return;
+        busy = true;
+        exportBtn.disabled = true;
+        openBtn.disabled = true;
+        const oldLabel = exportBtn.textContent;
+        exportBtn.textContent = "正在收集…";
+        setStatus("正在收集…");
+        const started = Date.now();
+        const opts = { screenshots: !!shots.checked };
+        try {
+            const snap = await collectDiagnostics({
+                files: true, quota: true, wallpaperDecode: true, defaultWallpaper: true
+            });
+            const payload = buildExportPayload(opts, snap);
+            const api = window.liuli_api;
+            if (!api || typeof api.diagExport !== "function") {
+                throw new Error("主进程接口不可用：window.liuli_api.diagExport 不存在（preload 未更新到 1.3.0）");
+            }
+            const res = await api.diagExport(payload);
+            if (!res || !res.ok) throw new Error((res && res.error) || "主进程返回失败");
+            lastPath = res.path || "";
+            setStatus("已导出到 " + (lastPath || "(未返回路径)")
+                + (res.copiedTo ? "，已复制到 " + res.copiedTo : "")
+                + (res.size ? "（" + llFmtBytes(res.size) + "）" : ""), "ok");
+            openBtn.disabled = !lastPath;
+            toast("诊断包已导出：" + (lastPath || ""));
+            auditWallpaper("diag-export", {
+                ok: true, path: lastPath, copiedTo: res.copiedTo || "",
+                size: Number(res.size) || 0, ms: Date.now() - started, screenshots: opts.screenshots
+            });
+        } catch (e) {
+            const msg = llErrText(e);
+            setStatus("失败：" + msg, "bad");
+            toast("导出失败：" + msg);
+            auditWallpaper("diag-export", {
+                ok: false, error: msg, ms: Date.now() - started, screenshots: opts.screenshots
+            });
+        } finally {
+            busy = false;
+            exportBtn.disabled = false;
+            exportBtn.textContent = oldLabel;
+        }
+    });
+
+    openBtn.addEventListener("click", async function () {
+        if (!lastPath) return;
+        try {
+            const api = window.liuli_api;
+            if (!api || typeof api.diagOpenPath !== "function") {
+                throw new Error("主进程接口不可用：window.liuli_api.diagOpenPath 不存在（preload 未更新到 1.3.0）");
+            }
+            const ok = await api.diagOpenPath(lastPath);
+            if (!ok) throw new Error("系统没有打开该路径");
+        } catch (e) {
+            toast("打开文件夹失败：" + llErrText(e));
+        }
+    });
+}
+
+/* 「遮罩颜色」分段按钮（需求 A.4）：亮 | 暗，写进 veilLight / veilDark。
+ * 值存在面板的 settings 对象上，和滑条一样走 saveSettings + applySettings 广播。 */
+function buildVeilRow(veilKey, settings) {
+    const row = document.createElement("div");
+    row.className = "liuli-wp-fit liuli-mode-row liuli-veil-row";
+    const label = document.createElement("span");
+    label.textContent = "遮罩颜色";
+    const seg = document.createElement("div");
+    seg.className = "liuli-seg";
+    row.appendChild(label);
+    row.appendChild(seg);
+    const btns = {};
+    [["light", "亮"], ["dark", "暗"]].forEach(function (p) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "liuli-seg__item";
+        b.textContent = p[1];
+        b.addEventListener("click", function () {
+            settings[veilKey] = p[0];
+            saveSettings(settings);
+            applySettings(settings);
+            refresh();
+        });
+        seg.appendChild(b);
+        btns[p[0]] = b;
+    });
+    function refresh() {
+        const v = settings[veilKey] === "dark" ? "dark" : "light";
+        Object.keys(btns).forEach(function (k) { btns[k].classList.toggle("is-active", k === v); });
+    }
+    refresh();
+    // 别的窗口改了配置：跟随刷新选中项，并让面板的 settings 跟配置一致
+    llVeilSegRefreshers.push(function (cfg) {
+        const v = cfg && cfg[veilKey] === "dark" ? "dark" : "light";
+        settings[veilKey] = v;
+        refresh();
+    });
+    return row;
+}
+
 function buildPanelContent(host, settings) {
     host.innerHTML = "";
+    llVeilSegRefreshers = [];
 
     const head = document.createElement("div");
     head.className = "liuli-panel__head";
@@ -2058,11 +2764,21 @@ function buildPanelContent(host, settings) {
         slider.addEventListener("change", () => saveSettings(settings));
         sync();
         inputs[f.key] = slider;
+        // 「壁纸遮罩」两条各自带一个「遮罩颜色：亮 | 暗」分段按钮
+        if (f.veilKey) wrap.appendChild(buildVeilRow(f.veilKey, settings));
         host.appendChild(wrap);
     }
 
+    // 两条遮罩共用的说明（需求 A.4 要求的提示文字）
+    const veilNote = document.createElement("div");
+    veilNote.className = "liuli-field__hint liuli-veil__note";
+    veilNote.textContent = "亮色、暗色主题各用各的遮罩：「亮」是盖一层白，「暗」是盖一层黑；遮罩越高壁纸越淡，文字越好读。";
+    host.appendChild(veilNote);
+
+    buildRoleControls(host, function () { window.__liuliPaletteApplied = false; applyDynamicPalette(); });
     buildWallpaperControls(host);
     buildLayoutSection(host);
+    buildDiagSection(host);   // 契约 3.5：诊断小节放在「恢复默认」之前
 
     const reset = document.createElement("div");
     reset.className = "liuli-field__hint";
@@ -2074,6 +2790,7 @@ function buildPanelContent(host, settings) {
             inputs[f.key].value = settings[f.key];
             inputs[f.key].dispatchEvent(new Event("input"));
         }
+        llRefreshVeilSegs(settings);   // 遮罩颜色也回到「亮 / 暗」
         saveSettings(settings);
         toast("已恢复默认");
     });
@@ -2126,7 +2843,10 @@ async function initPanel() {
         try { await applyDynamicPalette(); }
         catch (e) { console.warn("[liuli-dsh-theme] dynamic palette failed:", e && e.message); }
 
-        renderWallpaper(loadWallpaperState());
+        const bootWallpaper = loadWallpaperState();
+        renderWallpaper(bootWallpaper, "boot");
+        // 启动兜底：有壁纸但 #app::before 没画出来时再渲染一次（契约第四节第 4 条）
+        if (bootWallpaper && bootWallpaper.src) scheduleWallpaperBootRetry();
         applyOverrides();
         fixContrast();
         normalizeColors();
@@ -2142,9 +2862,14 @@ async function initPanel() {
         liuliMessagePass();
         try { await initPanel(); } catch (e) { console.warn("[liuli-dsh-theme] panel failed:", e && e.message); }
         console.log("[liuli-dsh-theme] ready in " + (Date.now() - started) + "ms");
+        markBootReady();
     } catch (error) {
-        console.error("[liuli-dsh-theme] inject failed:", error && error.message);
+        const reason = (error && error.message) || String(error || "未知异常");
+        console.error("[liuli-dsh-theme] inject failed:", reason);
+        // 契约 S3：保留 failed 标记，并把异常消息交给 diag，快照 theme.failedReason 会带上
         try { document.body.dataset.liuliTheme = "failed"; } catch (e) {}
+        try { noteThemeFailure(reason); } catch (e) {}
+        markBootFailed(error);
     }
 })();
 
@@ -2160,8 +2885,17 @@ export const onSettingWindowCreated = async view => {
     const box = document.createElement("div");
     box.id = "liuli-embedded";
     box.className = "liuli-embedded";
-    view.appendChild(box);
-    buildPanelContent(box, embeddedSettings);
+    try {
+        view.appendChild(box);
+        buildPanelContent(box, embeddedSettings);
+        // 契约 S3：诊断快照要能证明"面板构建了但样式没生效"还是"面板压根没构建"
+        try { notePanelBuild(true); } catch (e) {}
+    } catch (error) {
+        const reason = (error && error.message) || String(error || "未知异常");
+        try { notePanelBuild(false, reason); } catch (e) {}
+        try { console.error("[liuli-dsh-theme] settings panel build failed:", reason); } catch (e) {}
+        throw error;
+    }
 };
 
 

@@ -5,6 +5,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 const api = {
     selfUid: () => ipcRenderer.invoke("LiteLoader.liuli.selfUid"),
     openExternal: url => ipcRenderer.invoke("LiteLoader.liuli.openExternal", url),
+    // 诊断包（契约 installer/DIAG-COVERAGE.md 3.1）
+    diagExport: payload => ipcRenderer.invoke("LiteLoader.liuli.diagExport", payload),
+    diagLog: entry => ipcRenderer.send("LiteLoader.liuli.diagLog", entry),
+    diagOpenPath: path => ipcRenderer.invoke("LiteLoader.liuli.diagOpenPath", path),
 };
 
 const exists = contextBridge.executeInMainWorld({ func: key => key in globalThis, args: ["liuli_api"] });

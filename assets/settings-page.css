@@ -38,7 +38,7 @@
   border: none !important;
   transition: background-color 160ms ease !important;
 }
-.nav-item:hover { background: rgba(var(--ll-specular), 0.07) !important; }
+.nav-item:hover { background: rgba(var(--ll-tint-rgb), 0.07) !important; }
 .nav-item-active {
   background: rgba(var(--ll-brand-rgb), 0.18) !important;
   color: var(--ll-on-glass) !important;
@@ -124,4 +124,114 @@
 .liuli-embedded {
   min-height: 0 !important;
   margin-bottom: 32px !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 诊断小节（契约 3.5）
+ * ------------------------------------------------------------
+ * 与壁纸卡片同款：.liuli-wp-block 提供材质与内边距，
+ * 这里只补诊断特有的排版（说明、截图勾选、状态行、错误列表）。
+ * ════════════════════════════════════════════════════════════ */
+.liuli-diag {
+  margin-top: 18px;
+}
+
+.liuli-diag-desc {
+  font-size: 12px;
+  line-height: 17px;
+  letter-spacing: 0.2px;
+  color: var(--ll-on-glass-2);
+}
+
+.liuli-diag-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ll-on-glass);
+  cursor: pointer;
+  user-select: none;
+}
+.liuli-diag-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--ll-brand);
+  cursor: pointer;
+}
+.liuli-diag-check span {
+  color: var(--ll-on-glass-2);
+}
+
+.liuli-diag-hint {
+  font-size: 11px;
+  line-height: 15px;
+  letter-spacing: 0.15px;
+  color: var(--ll-on-glass-3);
+}
+
+.liuli-diag-status {
+  font-size: 12px;
+  line-height: 17px;
+  letter-spacing: 0.2px;
+  color: var(--ll-on-glass-3);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+/* 诊断状态：本来就是 M3 角色（--ll-success = tertiary / --ll-danger = error），
+ * 后面那截字面色只是 var() 回退值 —— 只在 JS 动态色板没注入时兜底，
+ * 不参与配色，所以保留不动（--ll-success 在 palette.css 里没有静态值）。 */
+.liuli-diag-status.is-ok { color: var(--ll-success, #7ad8a9); }
+.liuli-diag-status.is-bad { color: var(--ll-danger, #ff8a80); }
+
+.liuli-diag-errors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--ll-on-glass-2);
+}
+.liuli-diag-link {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ll-brand);
+  cursor: pointer;
+}
+.liuli-diag-link:hover { text-decoration: underline; }
+
+.liuli-diag-errlist {
+  display: none;
+  max-height: 190px;
+  overflow: auto;
+  padding-right: 2px;
+  gap: 6px;
+}
+.liuli-diag-errlist.is-open {
+  display: flex;
+  flex-direction: column;
+}
+.liuli-diag-err {
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: rgba(var(--ll-on-glass-rgb), 0.05);
+  font-size: 11px;
+  line-height: 15px;
+  letter-spacing: 0.15px;
+}
+.liuli-diag-err__head {
+  color: var(--ll-on-glass-3);
+  font-variant-numeric: tabular-nums;
+}
+.liuli-diag-err__msg {
+  margin-top: 2px;
+  color: var(--ll-on-glass-2);
+  white-space: pre-wrap;
+  word-break: break-word;
 }

@@ -43,8 +43,19 @@
   --ll-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.045'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-body[q-theme="dark"],
-body.q-theme-tokens-dark {
+/* 亮色下的"看得见的白"载体（T2）：玻璃本身就是近白，白色高光在亮色下等于没有。
+ * 暗色保持纯白（与改前的 --ll-specular 完全等价），亮色换成玻璃上的正文色。
+ * --ll-on-glass-rgb 由 JS 内联写在 body 上，同一元素上的 var() 能取到。 */
+body {
+  --ll-tint-rgb: 255, 255, 255;
+}
+body[data-liuli-dark="0"] {
+  --ll-tint-rgb: var(--ll-on-glass-rgb, 31, 27, 22);
+}
+
+body[q-theme="dark"]:not([data-liuli-dark="0"]),
+body.q-theme-tokens-dark:not([data-liuli-dark="0"]),
+body[data-liuli-dark="1"] {
   --ll-material-opacity: 0.5;
   --ll-acrylic: 30, 37, 48;
   --ll-acrylic-low: 26, 32, 42;
@@ -62,6 +73,18 @@ body {
   font-family: "MiSans", "Inter", "Space Grotesk", "Segoe UI", system-ui,
     -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   background-color: transparent !important;
+}
+
+/* 没有壁纸时的基准底色：亮色纯白、暗色纯黑（2026-11-01）。
+ * 以前 #app 是透明的，没选壁纸时底下是什么取决于 QQ 和系统（acrylic 窗口会透出桌面），
+ * 颜色角色没有固定的基准可依。现在按琉璃的明暗模式铺底，壁纸（#app::before）盖在它上面。
+ * 语音 / 视频通话窗口（#/av）不铺，免得盖住原生视频层（#9）。
+ * 要 !important：下面「中间容器全部打透」那条 #app { background: transparent !important } 会压掉它。 */
+body[data-liuli-dark="0"]:not([data-hash^="#/av"]) #app {
+  background-color: #ffffff !important;
+}
+body[data-liuli-dark="1"]:not([data-hash^="#/av"]) #app {
+  background-color: #000000 !important;
 }
 
 /* 全局颗粒：已关闭（2026-10-30）。
@@ -169,7 +192,7 @@ body::after {
 }
 
 .recent-contact-item:hover {
-  background: rgba(var(--ll-specular), 0.07) !important;
+  background: rgba(var(--ll-tint-rgb), 0.07) !important;
 }
 
 .recent-contact-item.active,
@@ -217,8 +240,10 @@ body::after {
   color: var(--ll-tertiary) !important;
 }
 
-body[q-theme="light"] .q-tag--orange,
-body[q-theme="light"] .q-tag--orange .title {
+body[q-theme="light"]:not([data-liuli-dark="1"]) .q-tag--orange,
+body[data-liuli-dark="0"] .q-tag--orange,
+body[q-theme="light"]:not([data-liuli-dark="1"]) .q-tag--orange .title,
+body[data-liuli-dark="0"] .q-tag--orange .title {
   color: var(--ll-on-glass) !important;
 }
 
@@ -247,7 +272,7 @@ body[q-theme="light"] .q-tag--orange .title {
 /* 对方气泡：0.62 在亮壁纸上几乎看不见，提到 0.78 并加一圈极淡描边 */
 .msg-content-container.container--others {
   background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.28)) !important;
-  border: 1px solid rgba(var(--ll-specular), 0.1) !important;
+  border: 1px solid rgba(var(--ll-tint-rgb), 0.1) !important;
   color: var(--ll-on-glass) !important;
 }
 
@@ -275,6 +300,23 @@ body[q-theme="light"] .q-tag--orange .title {
 /* 聊天区文字：直接压壁纸，需要描边保证可读 */
 .chat-msg-area {
   text-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.4);
+}
+/* 亮色主题：直接压壁纸的字是深色，黑色投影只会让字糊进暗处。
+ * 改成底色（--ll-halo-rgb，浅色）的光晕，把字周围提亮。
+ * 注意：不能用 --ll-veil-rgb —— 它以后可能被用户设成黑色。 */
+body[data-liuli-dark="0"] .chat-msg-area,
+body[data-liuli-dark="0"] .msg-time,
+body[data-liuli-dark="0"] [class*="msg-time"],
+body[data-liuli-dark="0"] .message-container [class*="time"] {
+  text-shadow: 0 0 2px rgba(var(--ll-halo-rgb, 255, 255, 255), 0.9), 0 0 6px rgba(var(--ll-halo-rgb, 255, 255, 255), 0.7);
+}
+/* 消息时间分隔条（QQ 原生 .babble 是写死的 rgba(0,0,0,0.3)：暗色下融进黑底，亮色下是一块脏灰）。
+ * 按 M3 改成 surfaceContainerHigh 底 + onSurfaceVariant 字，两种模式都是同一套角色。 */
+.message__timestamp .babble,
+.gray-tip-message__inner.babble {
+  background: var(--ll-surface-high) !important;
+  color: var(--ll-on-glass-2) !important;
+  text-shadow: none !important;
 }
 /* 气泡里有底色，不需要描边；阴影会让字发虚（2026-10-30） */
 .chat-msg-area .msg-content-container,
@@ -309,9 +351,9 @@ a,
 /* 未读角标：只改文字色，绝不改 background / border-radius / 尺寸 ——
  * QQ 的 .q-badge.q-badge__red 是 36×36 的普通 span，一旦上色+圆角
  * 就会变成左栏那几个突兀的大蓝圆。 */
-.q-badge {
-  color: #ffffff !important;
-}
+/* 不要给 .q-badge 设文字色：它是包在别的内容外面的容器，比如「更多」菜单里的「检查更新」整行都在
+ * .q-badge.q-badge__red 里面，设成白色 / onError 后这行字在亮色、暗色下都只有 1.1:1（2026-11-01 实测）。
+ * 数字角标本身的颜色在 details.css 的 .q-badge-num 里。 */
 
 /* ════════════════════════════════════════════════════════════
  * 7. 弹层

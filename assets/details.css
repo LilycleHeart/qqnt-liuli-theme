@@ -52,7 +52,7 @@
   background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.14)) !important;
   backdrop-filter: blur(14px) saturate(1.4) !important;
   -webkit-backdrop-filter: blur(14px) saturate(1.4) !important;
-  border: 1px solid rgba(var(--ll-specular), 0.1) !important;
+  border: 1px solid rgba(var(--ll-tint-rgb), 0.1) !important;
   border-radius: var(--ll-radius-sm) !important;
   padding: 10px 12px !important;
 }
@@ -72,7 +72,7 @@
 .ark-msg-content-container,
 [class*="ark-msg"] {
   background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
-  border: 1px solid rgba(var(--ll-specular), 0.08) !important;
+  border: 1px solid rgba(var(--ll-tint-rgb), 0.08) !important;
   border-radius: var(--ll-radius-sm) !important;
 }
 
@@ -89,7 +89,7 @@
 a.text-link,
 [class*="text-link"],
 .msg-content-container .text-link {
-  color: var(--ll-brand) !important;
+  color: var(--ll-link, var(--ll-brand)) !important;
   text-decoration-color: rgba(var(--ll-brand-rgb), 0.5) !important;
 }
 

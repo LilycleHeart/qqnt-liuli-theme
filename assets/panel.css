@@ -7,6 +7,14 @@
  * 可调：材质模糊 / 不透明度 / 泛光 / 阴影，全部实时写 CSS 变量。
  * ============================================================ */
 
+/* ── 白色的两种用法 ──
+ * 交互反馈与"看得见的"白（悬停底色、发丝线、虚线框）统一走
+ *   rgba(var(--ll-tint-rgb, var(--ll-specular)), 原 alpha)
+ * --ll-tint-rgb 由 liuli.css 定义：暗色是纯白 255,255,255（与改前的 --ll-specular 等价），
+ * 亮色换成玻璃上的正文墨色，否则"白色的高光画在白玻璃上"等于没有。
+ * 玻璃外缘的装饰高光（#liuli-fab / #liuli-panel / #liuli-wp-editor 的 1px 边框）
+ * 继续用 --ll-specular，那是"光从边缘透进来"的质感，不跟着明暗反相。 */
+
 /* ── 浮动开关按钮 ── */
 #liuli-fab {
   position: fixed;
@@ -85,7 +93,7 @@
   opacity: 0.6;
   transition: background 140ms, opacity 140ms;
 }
-.liuli-panel__close:hover { background: rgba(var(--ll-specular), 0.1); opacity: 1; }
+.liuli-panel__close:hover { background: rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.1); opacity: 1; }
 .liuli-panel__sub {
   font-size: 12px;
   line-height: 16px;
@@ -180,11 +188,12 @@
   letter-spacing: 0.2px;
   color: var(--ll-on-glass-2);
 }
+/* 取色小色块：描边要看得见，跟着明暗走（亮色下白色描边等于没有） */
 .liuli-swatch {
   width: 16px; height: 16px;
   border-radius: 5px;
   flex: 0 0 auto;
-  border: 1px solid rgba(var(--ll-specular), 0.18);
+  border: 1px solid rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.18);
 }
 
 /* ── 按下效果 / 轻提示 ── */
@@ -295,7 +304,7 @@
 .liuli-wp-btn--ghost {
   background: rgba(var(--ll-on-glass-rgb), 0.07);
   color: var(--ll-on-glass-2);
-  border-color: rgba(var(--ll-specular), 0.1);
+  border-color: rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.1);
 }
 
 .liuli-wp-btn--ghost:hover {
@@ -316,7 +325,7 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  border: 1px dashed rgba(var(--ll-specular), 0.16);
+  border: 1px dashed rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.16);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -377,7 +386,7 @@
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
-  border: 1px solid rgba(var(--ll-specular), 0.12);
+  border: 1px solid rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.12);
   overflow: hidden;
   touch-action: none;
   cursor: crosshair;
@@ -389,7 +398,7 @@
   position: absolute;
   border: 1.5px solid var(--ll-brand);
   border-radius: 4px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 9999px rgba(var(--ll-scrim-rgb), 0.55);
   cursor: move;
   box-sizing: border-box;
 }
@@ -402,8 +411,8 @@
   right: 33.33%;
   top: 0;
   bottom: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.22);
-  border-right: 1px solid rgba(255, 255, 255, 0.22);
+  border-left: 1px solid rgba(var(--ll-specular), 0.22);
+  border-right: 1px solid rgba(var(--ll-specular), 0.22);
   pointer-events: none;
 }
 
@@ -414,8 +423,8 @@
   bottom: 33.33%;
   left: 0;
   right: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.22);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  border-top: 1px solid rgba(var(--ll-specular), 0.22);
+  border-bottom: 1px solid rgba(var(--ll-specular), 0.22);
   pointer-events: none;
 }
 
@@ -426,9 +435,9 @@
   height: 12px;
   border-radius: 3px;
   background: var(--ll-brand);
-  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(var(--ll-on-brand-rgb), 0.9);
   box-sizing: border-box;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 4px rgba(var(--ll-shadow-rgb), 0.4);
 }
 
 .liuli-wp-handle--tl { left: -6px; top: -6px; cursor: nwse-resize; }
@@ -529,13 +538,31 @@
   color: var(--ll-on-primary-container, var(--ll-on-glass));
 }
 
+/* ── 壁纸遮罩的「遮罩颜色：亮 | 暗」（需求 A.4）──
+ * 结构复用 .liuli-wp-fit（左右分栏）+ .liuli-seg（分段按钮），
+ * 这里只把它收进滑条块里：字号小一档、按钮矮一点，视觉上从属于上面的遮罩滑条。 */
+.liuli-veil-row {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  color: var(--ll-on-glass-2);
+}
+.liuli-veil-row > span { flex: 0 0 auto; }
+.liuli-veil-row .liuli-seg { padding: 2px; }
+.liuli-veil-row .liuli-seg__item {
+  height: 22px;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+/* 亮色 / 暗色两条遮罩共用的说明，和滑条提示同一档字号 */
+.liuli-veil__note { margin: 6px 0 0; }
+
 .liuli-wp-preview-host { display: flex; }
 .liuli-wp-stage2,
 .liuli-wp-context {
   position: relative;
   overflow: hidden;
   border-radius: var(--ll-radius-sm);
-  background: #000;
+  background: rgb(var(--ll-scrim-rgb));
   touch-action: none;
 }
 .liuli-wp-context.is-selecting {
@@ -549,18 +576,20 @@
   background-repeat: no-repeat;
 }
 .liuli-wp-full { background-size: 100% 100%; }
+/* 遮罩预览：--ll-veil-rgb / --ll-wallpaper-dim 现在由 llApplyModeSettings()
+ * 按当前明暗写入（亮色 / 暗色各一份设置），所以这里预览会自动跟随当前模式。 */
 .liuli-wp-effect::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(var(--ll-scrim-rgb), var(--ll-wallpaper-dim, 0.18));
+  background: rgba(var(--ll-veil-rgb, var(--ll-scrim-rgb)), var(--ll-wallpaper-dim, 0.18));
 }
 .liuli-wp-crop {
   position: absolute;
   box-sizing: border-box;
   border: 1.5px solid var(--ll-brand);
   background: rgba(var(--ll-brand-rgb), 0.12);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 9999px rgba(var(--ll-scrim-rgb), 0.4);
   cursor: move;
 }
 .liuli-wp-crop--static { pointer-events: none; }
@@ -580,6 +609,65 @@
 .liuli-wp-note {
   font-size: 12px;
   color: var(--ll-warn, var(--ll-on-glass-3));
+}
+
+/* 壁纸亮度与明暗主题不搭的提示（#7） */
+.liuli-wp-advice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--ll-radius-sm);
+  background: var(--ll-primary-container, rgba(var(--ll-brand-rgb), 0.16));
+  color: var(--ll-on-primary-container, var(--ll-on-glass));
+}
+.liuli-wp-advice[hidden] { display: none; }
+.liuli-wp-advice__text { font-size: 12.5px; line-height: 1.55; }
+.liuli-wp-advice .liuli-btn--ghost {
+  color: inherit;
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+/* 配色（颜色角色，#12） */
+.liuli-roles { margin-top: 4px; }
+.liuli-roles-row { align-items: flex-start; }
+.liuli-roles-row > span { padding-top: 6px; flex: 0 0 auto; }
+.liuli-roles-seg {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.liuli-roles-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+  padding: 12px;
+  border-radius: var(--ll-radius-sm);
+  background: rgba(var(--ll-on-glass-rgb), 0.05);
+}
+.liuli-roles-bubble {
+  max-width: 70%;
+  padding: 7px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.liuli-roles-bubble--other {
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+  background: var(--ll-bubble-other, rgba(var(--ll-acrylic), 0.86));
+  color: var(--ll-bubble-other-fg, var(--ll-on-glass));
+}
+.liuli-roles-bubble--self {
+  align-self: flex-end;
+  border-bottom-right-radius: 6px;
+  background: var(--ll-bubble-self, rgba(var(--ll-brand-rgb), 0.3));
+  color: var(--ll-bubble-self-fg, var(--ll-on-glass));
+}
+.liuli-roles-link {
+  color: var(--ll-bubble-self-link, var(--ll-tertiary));
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
 }
 
 /* 明暗切换：DSH 的圆形遮罩过渡 */
