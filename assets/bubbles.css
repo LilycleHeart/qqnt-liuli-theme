@@ -792,3 +792,34 @@ body .message-container:has(.msg-content-container.container--self):not(#ll) {
   border-radius: 0 !important;
   box-shadow: none !important;
 }
+
+/* ── 气泡装扮：按气泡方向取皮肤文字色（2026-11-02，补 #19）──
+ * 琉璃在 body 上把 --on_bubble_host_text / --bubble_guest_text 都定义成了主题前景色（qq-tokens.css），
+ * 子元素会继承下来，所以 var(--on_bubble_host_text, …) 永远命中第一项：
+ * 对方的装扮气泡拿到的是主题色，不是皮肤色（深色皮肤 + 亮色主题会看不清）。
+ *   自己的气泡：皮肤色在容器内联的 --on_bubble_host_text 上
+ *   对方的气泡：先找 --on_bubble_guest_text，没有再用 --bubble_guest_text（内联有就是皮肤色，没有就是继承来的主题色）
+ * 对方气泡也要写 --ll-bubble-other-fg / -link：「配色」里把对方气泡换成彩色时，body 上的这两个变量会盖过皮肤色。
+ * 不用 inherit 作兜底：var() 的兜底里写 CSS 关键字不生效。 */
+.message-container .message-content__wrapper .msg-content-container.container--personalization.container--self:not(#ll) {
+  --ll-skin-fg: var(--on_bubble_host_text);
+  --ll-on-glass: var(--ll-skin-fg) !important;
+  --ll-on-glass-2: var(--ll-skin-fg) !important;
+  --ll-on-glass-3: var(--ll-skin-fg) !important;
+  --ll-bubble-self-fg: var(--ll-skin-fg) !important;
+  --ll-bubble-self-link: var(--text_link, var(--ll-link)) !important;
+}
+.message-container .message-content__wrapper .msg-content-container.container--personalization.container--others:not(#ll) {
+  --ll-skin-fg: var(--on_bubble_guest_text, var(--bubble_guest_text));
+  --ll-on-glass: var(--ll-skin-fg) !important;
+  --ll-on-glass-2: var(--ll-skin-fg) !important;
+  --ll-on-glass-3: var(--ll-skin-fg) !important;
+  --ll-bubble-other-fg: var(--ll-skin-fg) !important;
+  --ll-bubble-other-link: var(--text_link, var(--ll-link)) !important;
+}
+/* 尾巴：上面 #19 的 content:none 优先级 (0,4,0) 低于尾巴规则 (0,5,0)，尾巴其实还在（只是底色透明看不见）。
+ * 加 :not(#ll) 压过去，真正去掉。 */
+.message-container .message-content__wrapper .msg-content-container.container--personalization:not(#ll)::before,
+.message-container .message-content__wrapper .msg-content-container.container--personalization:not(#ll)::after {
+  content: none !important;
+}
