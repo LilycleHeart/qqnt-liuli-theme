@@ -1227,9 +1227,10 @@ function installRevealTracker() {
     /* 按坐标判断，不依赖 mouseover/mouseout：
      * 那两个事件在 QQ 里会晚一拍到达，且离开时偶尔不来，标记就卡住不收。
      *   左边缘 ≤8px（整条）           → 展开导航；展开后指针在导航卡上就保持
-     *   顶边 ≤8px 的左 / 右 200px     → 唤出左上 / 右上胶囊；指针在胶囊上就保持
+     *   顶边 ≤8px 的左 320px（macOS）/ 右 200px → 唤出左上 / 右上胶囊；指针在胶囊上就保持
      * 离开后 250ms 收起。 */
     var EDGE = 8, HOLD = 250, PAD = 10, CORNER = 200;
+    var LEFT_CORNER = document.body.dataset.liuliPlatform === "darwin" ? 320 : CORNER;
     var KEYS = { l: "liuliRL", r: "liuliRR", nav: "liuliRNav" };
     var state = {}, timers = {};
     function set(k, on) {
@@ -1252,7 +1253,7 @@ function installRevealTracker() {
     function onMove(e) {
         var x = e.clientX, y = e.clientY, w = window.innerWidth;
         set("nav", x <= EDGE || (state.nav && over(".container-sidebar", x, y)));
-        set("l", (y <= EDGE && x >= 56 && x <= CORNER + 56) || (state.l && over(".topbar-profile", x, y)));
+        set("l", (y <= EDGE && x >= 56 && x <= LEFT_CORNER + 56) || (state.l && over(".topbar-profile", x, y)));
         set("r", (y <= EDGE && x >= w - CORNER) || (state.r && over(".window-control-area", x, y)));
     }
     function leaveAll() { set("nav", false); set("l", false); set("r", false); }
@@ -1286,6 +1287,23 @@ function ensureHoverEntries() {
                 'stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>';
             document.body.appendChild(h);
         }
+    } catch (e) { /* 静默 */ }
+}
+
+
+/* ---------- macOS：天气胶囊右边缘对齐会话列表右边缘 ----------
+ * 胶囊宽度会随昵称/天气文本变化，列表宽度也可能随窗口变化，
+ * 因此用列表卡片的右边缘反推胶囊中心，写入 CSS 变量供胶囊和顶部引导共用。 */
+function syncWeatherPosition() {
+    if (document.body.dataset.liuliPlatform !== "darwin") return;
+    try {
+        var list = document.querySelector(".two-col-layout__aside > .recent-contact") || document.querySelector(".recent-contact");
+        var capsule = document.querySelector(".topbar-content .user-profile-card.topbar-profile");
+        if (!list || !capsule) return;
+        var listRect = list.getBoundingClientRect();
+        var capsuleRect = capsule.getBoundingClientRect();
+        if (!listRect.width || !capsuleRect.width) return;
+        document.body.style.setProperty("--ll-weather-center", Math.round(listRect.right - capsuleRect.width / 2) + "px");
     } catch (e) { /* 静默 */ }
 }
 
@@ -2105,6 +2123,10 @@ async function initPanel() {
 
 (async () => {
     const started = Date.now();
+    try {
+        const platform = (typeof LiteLoader !== "undefined" && LiteLoader.os?.platform) || (/Mac/i.test(navigator.userAgent) ? "darwin" : "");
+        if (platform) document.body.dataset.liuliPlatform = platform;
+    } catch (e) {}
     installRouteScope();
     try {
         const chunks = [];
@@ -2130,12 +2152,14 @@ async function initPanel() {
         applyOverrides();
         fixContrast();
         normalizeColors();
-        setInterval(() => { if (window.__liuliPause) return; if (performance.now() - (window.__llScrollT || 0) < 600) return; /* 正在滚动：这一轮跳过，免得滚动中卡一下 */ if (document.querySelector(".q-dialog-modal")) { mountInputBar(); return; } applyOverrides(); fixContrast(); normalizeColors(); keepWindowControlsVisible(); mountInputBar(); groupMessages(); stickAvatars(); markQuoteRoots(); moveSenderIntoBubble(); ensureHoverEntries(); llWatchContactList(); llGroupMembersPass(); llMarkdownPass(); llLayoutPass(); }, 1500);
+        setInterval(() => { if (window.__liuliPause) return; if (performance.now() - (window.__llScrollT || 0) < 600) return; /* 正在滚动：这一轮跳过，免得滚动中卡一下 */ if (document.querySelector(".q-dialog-modal")) { mountInputBar(); return; } applyOverrides(); fixContrast(); normalizeColors(); keepWindowControlsVisible(); mountInputBar(); groupMessages(); stickAvatars(); markQuoteRoots(); moveSenderIntoBubble(); ensureHoverEntries(); llWatchContactList(); llGroupMembersPass(); llMarkdownPass(); syncWeatherPosition(); llLayoutPass(); }, 1500);
         try { installLayout(function () { llSyncPins(); }); } catch (e) { console.warn("[liuli-dsh-theme] layout failed:", e && e.message); }
         try { installArkExternal(window.liuli_api); } catch (e) { console.warn("[liuli-dsh-theme] ark external failed:", e && e.message); }
         installMarkdownObserver();
         installAvatarStick();
         ensureHoverEntries();
+        syncWeatherPosition();
+        window.addEventListener("resize", syncWeatherPosition);
         installMessageObserver();
         installSideListObserver();
         llWatchContactList();

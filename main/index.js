@@ -33,6 +33,22 @@ ipcMain.handle("LiteLoader.liuli.openExternal", async (_e, url) => {
 });
 
 module.exports = {
+    onBrowserWindowCreating(target, argArray) {
+        if (process.platform !== "darwin") return;
+        const options = argArray[0] ?? (argArray[0] = {});
+        options.trafficLightPosition = { x: 12, y: 13 };
+    },
+    onBrowserWindowCreated(window) {
+        if (process.platform !== "darwin") return;
+        const apply = () => {
+            try { window.setWindowButtonPosition({ x: 12, y: 13 }); }
+            catch (e) { log("set window button position failed: " + e.message); }
+        };
+        apply();
+        setTimeout(apply, 500);
+        setTimeout(apply, 2000);
+        window.once("ready-to-show", apply);
+    },
     onLogin(uid) {
         selfUid = String(uid || "");
         log("login uid=" + selfUid);

@@ -1413,3 +1413,51 @@ body .q-notification {
   --text_allwhite_primary: #ffffff !important;
   --icon_white: #ffffff !important;
 }
+
+/* ── macOS：原生红绿灯位于窗口左上角，默认 8px 顶部留白会让会话搜索/侧栏
+ * 压在按钮下面。主界面顶部统一让出 40px；天气胶囊回到左侧、与红绿灯保持间距，
+ * 并在顶部加一个同中心点的白色长胶囊作为 hover 引导。 ── */
+body[data-liuli-platform="darwin"] {
+  --ll-top-gap: 40px;
+  --ll-weather-center: 268px;
+}
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] .global-container .container-content {
+  padding-top: var(--ll-top-gap) !important;
+}
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] .global-container .container-content > .container-sidebar {
+  top: var(--ll-top-gap) !important;
+}
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile {
+  left: var(--ll-weather-center) !important;
+  transform: translateX(-50%) translateY(-8px) !important;
+}
+/* 悬停/顶边唤出时只去掉 Y 位移，X 居中保留 */
+body[data-liuli-platform="darwin"][data-liuli-scope="main"][data-liuli-r-l] .topbar-content .user-profile-card.topbar-profile,
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile:hover,
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] .topbar-content .user-profile-card.topbar-profile:focus-within {
+  transform: translateX(-50%) !important;
+}
+/* 顶部 hover 引导：与胶囊同中心点，白色长胶囊（参考左侧导航把手） */
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] #liuli-top-hint-l {
+  left: calc(var(--ll-weather-center) - 100px) !important;
+}
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] #liuli-top-hint-l::after {
+  display: block !important;
+  top: 3px !important;
+  left: 72px !important; /* 200px 感应区中心 - 28px */
+  width: 56px !important;
+  height: 6px !important;
+  border-radius: 3px !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  opacity: 0.85 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+}
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] #liuli-top-hint-l:hover::after,
+body[data-liuli-platform="darwin"][data-liuli-scope="main"][data-liuli-r-l] #liuli-top-hint-l::after {
+  opacity: 0 !important;
+}
+/* macOS 没有右侧 Windows 风格窗口按钮，隐藏右上角提示条和对应控件 */
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] #liuli-top-hint-r,
+body[data-liuli-platform="darwin"][data-liuli-scope="main"] .window-title-bar .window-control-area {
+  display: none !important;
+}
