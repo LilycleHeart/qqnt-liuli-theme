@@ -157,3 +157,63 @@ body .q-context-menu.aio-right-click-menu.liuli-menu-sorted > .q-context-menu-se
   color: var(--ll-brand) !important;
   margin-bottom: 6px;
 }
+
+/* ════════════════════════════════════════════════════════════
+ * 需求 B：左侧导航栏「固定」（body[data-liuli-nav-pin]）
+ * ------------------------------------------------------------
+ * layout.css 把 .container-sidebar 改成「脱离文档流」：
+ *   position: fixed + left/top/bottom 定位（第 267 行起）
+ *   translateX(-100% - var(--ll-dock-gap) - 4px) 收在屏幕外（第 537 行起）
+ *   鼠标指向左边缘（body[data-liuli-r-nav]）/ 悬停 / 聚焦时 translateX(0) 滑出，
+ *   z-index: 3000 盖在会话列表上（第 543 行起）
+ * QQ 原生排版则是：.container-content 是 display: flex / flex-direction: row，
+ * .container-sidebar 是 flex-shrink: 0 的第一列，其余区域在 .container-content-view
+ * （flex: 1 1 0%）。固定模式把上面这一整套逐条反向覆盖回文档流：
+ *   占自己的一列（flex: 0 0 auto），不再 transform 隐藏、不再浮起来；
+ *   会话列表（.two-col-layout__aside > .recent-contact）跟着右移，与导航卡留出
+ *   --ll-dock-gap 的统一缝隙。
+ * 选择器统一用 body[data-liuli-nav-pin][data-liuli-scope="main"] 前缀、
+ * 两个 :not(#ll)（ID 级特异性）+ !important，才能压过 layout.css 里
+ * body[data-liuli-scope="main"][data-liuli-r-nav] … 那几条 !important。
+ * ════════════════════════════════════════════════════════════ */
+body[data-liuli-nav-pin][data-liuli-scope="main"] .global-container .container-content > .container-sidebar:not(#ll):not(#ll) {
+  position: relative !important;      /* 覆盖 layout.css:267 的 position: fixed */
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  height: auto !important;            /* flex 行里靠 align-items: stretch 撑满 */
+  margin: 0 !important;
+  transform: none !important;         /* 覆盖 layout.css:537 的 translateX(-100% …) */
+  transition: none !important;
+  z-index: auto !important;           /* 覆盖 layout.css:273 的 z-index: 3000 */
+  flex: 0 0 auto !important;          /* 占自己的一列，不再被右侧内容压缩 */
+  box-shadow: var(--ll-card-shadow) !important;
+  /* 覆盖 layout.css:549 / 325 悬停加浓到 0.92：固定后不跟鼠标变材质 */
+  --ll-material-opacity: inherit !important;
+}
+/* 左边缘那条 14px 宽的感应区（layout.css:284）在固定模式没有意义，还会伸出卡片外 */
+body[data-liuli-nav-pin][data-liuli-scope="main"] .global-container .container-content > .container-sidebar:not(#ll):not(#ll)::before {
+  content: none !important;
+}
+/* 悬停 / 聚焦不再滑出、不再加投影、不再换模糊（layout.css:279-283、323-328、543-554） */
+body[data-liuli-nav-pin][data-liuli-scope="main"] .global-container .container-content > .container-sidebar:not(#ll):not(#ll):hover,
+body[data-liuli-nav-pin][data-liuli-scope="main"] .global-container .container-content > .container-sidebar:not(#ll):not(#ll):has(:focus-visible) {
+  transform: none !important;
+  box-shadow: var(--ll-card-shadow) !important;
+  --ll-material-opacity: inherit !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
+}
+
+/* 会话列表跟着右移：layout.css:315 把 margin-left 压成 0（导航原本浮在它上面），
+ * 固定后要退回「导航卡 + 8px + 会话列表卡」的排版，宽度同步让出这 8px。 */
+body[data-liuli-nav-pin][data-liuli-scope="main"] .two-col-layout__aside > .recent-contact:not(#ll) {
+  margin-left: var(--ll-dock-gap) !important;
+  width: calc(100% - var(--ll-dock-gap)) !important;
+}
+
+/* 固定时不再需要左边缘把手（整条感应带都没有意义了） */
+body[data-liuli-nav-pin] #liuli-nav-handle:not(#ll) {
+  display: none !important;
+}

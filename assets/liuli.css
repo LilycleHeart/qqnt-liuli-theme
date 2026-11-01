@@ -392,6 +392,21 @@ a,
   background: transparent;
 }
 
+/* QQ 的列表滚动区（.q-scroll-view：会话列表、群成员栏、设置页等）自己画滑块：
+ * 底色透明，用 inset box-shadow 的 currentColor 画，平时 color 透明、指向列表时才变灰。
+ * 上面那条全局的「滑块底色 = 品牌色」在这里变成了平时显示品牌色、指向时被 QQ 改回灰色，
+ * 看起来就是激活和未激活反了。这里统一成：平时淡（30%），指向列表 60%，指向滑块本身 90%。 */
+.q-scroll-view::-webkit-scrollbar-thumb {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 30%, transparent) !important;
+}
+.q-scroll-view:hover::-webkit-scrollbar-thumb {
+  box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 60%, transparent) !important;
+}
+.q-scroll-view::-webkit-scrollbar-thumb:hover,
+.q-scroll-view::-webkit-scrollbar-thumb:active {
+  box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 90%, transparent) !important;
+}
 /* 消息区的滚动条不是原生的：QQ 用 .v-scrollbar-thumb 的内阴影画成灰色 */
 .v-scrollbar-thumb {
   box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 55%, transparent) !important;

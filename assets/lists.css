@@ -185,3 +185,89 @@ body .group-member .group-user[data-liuli-active="hot"] .group-user__avatar {
   body .group-member .group-user[data-liuli-active="hot"] .group-user__avatar { animation: none; }
   body .recent-contact .recent-contact-item .item__avatar { transition: none; }
 }
+
+/* ════════════════════════════════════════════════════════════
+ * 会话选中：主色实底（2026-11-01，用户选定方案 B 后细化）
+ * ------------------------------------------------------------
+ * M3 的 primary + onPrimary 配对，暗色是浅主色深字，亮色是深主色浅字。
+ *   底：主色 + 顶部 10% 高光渐变 + 1px 内描边，带一层主色投影，像浮起的一张卡
+ *   字：名字 onPrimary、加粗；摘要 / 时间是 onPrimary 和主色 84% / 76% 的混色，层级靠深浅
+ *   徽标反色（onPrimary 底、主色字）；免打扰图标、头像描边都跟 onPrimary 走
+ * 覆盖上面 18-36 行和 layout.css 的选中样式（primaryContainer + 竖条）。
+ * ════════════════════════════════════════════════════════════ */
+body .recent-contact .recent-contact-item.recent-contact-item--selected:not(#ll):not(#ll),
+body .recent-contact .recent-contact-item.recent-contact-item--selected:not(#ll):not(#ll):hover {
+  --ll-on-glass: var(--ll-on-brand);
+  --ll-on-glass-2: color-mix(in srgb, var(--ll-on-brand) 84%, var(--ll-brand));
+  --ll-on-glass-3: color-mix(in srgb, var(--ll-on-brand) 76%, var(--ll-brand));
+  --text_primary: var(--ll-on-brand);
+  --text_secondary: color-mix(in srgb, var(--ll-on-brand) 84%, var(--ll-brand));
+  --text_tertiary: color-mix(in srgb, var(--ll-on-brand) 76%, var(--ll-brand));
+  --icon_primary: var(--ll-on-brand);
+  --icon_secondary: color-mix(in srgb, var(--ll-on-brand) 76%, var(--ll-brand));
+  color: var(--ll-on-brand) !important;
+}
+body .recent-contact .recent-contact-item.recent-contact-item--selected:not(#ll):not(#ll)::before {
+  inset: 2px 0 !important;
+  border-radius: 12px !important;
+  background:
+    linear-gradient(180deg, rgba(var(--ll-specular), 0.10), rgba(var(--ll-specular), 0) 55%),
+    var(--ll-brand) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--ll-specular), 0.10),
+    0 6px 16px -6px rgba(var(--ll-brand-rgb), 0.6) !important;
+  transition: background-color 160ms ease, box-shadow 160ms ease !important;
+}
+body .recent-contact .recent-contact-item.recent-contact-item--selected:not(#ll):not(#ll):hover::before {
+  background:
+    linear-gradient(180deg, rgba(var(--ll-specular), 0.14), rgba(var(--ll-specular), 0) 55%),
+    var(--ll-brand) !important;
+}
+body .recent-contact .recent-contact-item--selected:not(#ll) .contact-name__text,
+body .recent-contact .recent-contact-item--selected:not(#ll) .contact-name__text * {
+  color: var(--ll-on-brand) !important;
+  font-weight: 600 !important;
+}
+body .recent-contact .recent-contact-item--selected:not(#ll) .item__summary,
+body .recent-contact .recent-contact-item--selected:not(#ll) .item__summary * {
+  color: color-mix(in srgb, var(--ll-on-brand) 84%, var(--ll-brand)) !important;
+  opacity: 1 !important;
+}
+body .recent-contact .recent-contact-item--selected:not(#ll) .secondary-info,
+body .recent-contact .recent-contact-item--selected:not(#ll) .secondary-info * {
+  color: color-mix(in srgb, var(--ll-on-brand) 76%, var(--ll-brand)) !important;
+}
+/* 徽标反色 */
+body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll),
+body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) * {
+  background: var(--ll-on-brand) !important;
+  color: var(--ll-brand) !important;
+  box-shadow: none !important;
+}
+body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) * {
+  background: transparent !important;
+}
+/* 免打扰图标 */
+body .recent-contact .recent-contact-item--selected:not(#ll) .no-disturb-icon,
+body .recent-contact .recent-contact-item--selected:not(#ll) .no-disturb-icon * {
+  color: color-mix(in srgb, var(--ll-on-brand) 76%, var(--ll-brand)) !important;
+  fill: currentColor !important;
+}
+/* 头像外圈一道 onPrimary 细描边，和实底分开 */
+body .recent-contact .recent-contact-item--selected:not(#ll) .item__avatar .avatar {
+  box-shadow: 0 0 0 2px rgba(var(--ll-on-brand-rgb, 255, 255, 255), 0.55) !important;
+}
+
+/* ── 会话列表的滚动条不再压在内容上（2026-11-01）──
+ * QQ 的列表滚动区是 overflow: overlay，滚动条盖在会话项右侧（时间、未读数上）。
+ * 给滚动区右侧留出滚动条的宽度（liuli.css 里是 8px），内容和滚动条各占各的。 */
+body .recent-contact .q-scroll-view:not(#ll) {
+  padding-right: 8px !important;
+  box-sizing: border-box !important;
+}
+
+/* 会话项本身也越界了：QQ 给它 width:100%，琉璃又加了左右 6px 外边距，右边多出 12px 伸进滚动条那一列。
+ * 宽度减掉两侧外边距。 */
+body .recent-contact .recent-contact-item:not(#ll) {
+  width: calc(100% - 12px) !important;
+}

@@ -233,8 +233,10 @@
    *   宽度   —— 铺满主区（之前 max-width:760px 把卡片卡窄了 250px）
    *   左右   —— 主区那圈留白（之前 margin 左右是 0，内容贴边）
    *   顶部   —— 让开标题栏高度（之前 margin-top:12px 直接顶到窗口边） */
-  margin: 44px 24px 28px !important;
-  padding: 24px 30px 30px !important;
+  /* 顶部不再留 44px + 24px：设置页现在自带「琉璃通用」标题栏，内容区从标题栏下面开始，
+   * 再留这么多就是一大块空白，内容看起来整体往下错了一截（2026-11-01）。 */
+  margin: 0 24px 28px !important;
+  padding: 4px 30px 30px !important;
   width: auto !important;
   max-width: none !important;
   min-height: 60vh !important;
@@ -682,4 +684,59 @@
 }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-new(root) { animation: none; }
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 设置页顶部页签（需求 A）
+ * ------------------------------------------------------------
+ * 页签栏吸在设置区顶部：设置页的滚动容器是 .setting-layout .setting-main
+ * （见 settings-page.css「设置页主区可滚动」一节），sticky 以它为参照。
+ * 底色跟设置页同源（--ll-acrylic + --ll-material-opacity），不写死颜色；
+ * 不透明度至少 0.86，滚过去的滑条 / 按钮不会从字缝里透出来。
+ * ════════════════════════════════════════════════════════════ */
+.liuli-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px;
+  margin: 0 0 10px;
+  border-radius: 14px;
+  background: rgba(var(--ll-acrylic), max(var(--ll-material-opacity, 0.86), 0.86));
+  backdrop-filter: var(--ll-material-blur);
+  -webkit-backdrop-filter: var(--ll-material-blur);
+  box-shadow: 0 1px 0 rgba(var(--ll-tint-rgb, var(--ll-specular)), 0.08),
+    0 2px 10px rgba(var(--ll-shadow-rgb), 0.16);
+}
+/* 段按钮撑满整行：六个页签均分宽度，窄窗口下自动换行 */
+.liuli-tabs .liuli-seg__item {
+  flex: 1 1 auto;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* 页容器：切换只切 hidden，不销毁 DOM（滑条 / 分段按钮的节点必须一直在文档里） */
+.liuli-tabpage { display: block; }
+.liuli-tabpage[hidden] { display: none !important; }
+
+/* 设置页里的勾选框（诊断「包含聊天窗口截图」）：QQ 的全局样式把 input 压成了 0×0、appearance:none，
+ * 勾选框整个看不见，只剩文字（2026-11-01）。还原成系统勾选框，勾上时用品牌色。 */
+.liuli-embedded input[type="checkbox"] {
+  appearance: auto !important;
+  -webkit-appearance: checkbox !important;
+  display: inline-block !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 8px 0 0 !important;
+  vertical-align: -3px !important;
+  accent-color: var(--ll-brand);
+  cursor: pointer;
+  flex: 0 0 auto;
 }

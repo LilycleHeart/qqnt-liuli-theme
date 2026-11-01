@@ -565,17 +565,31 @@
   display: block !important;
   position: absolute !important;
   bottom: 0 !important;
-  width: 9px !important;
+  /* 宽 10px：外面 9px 是尾巴，里面 1px 压进气泡（#16）。
+   * 气泡和尾巴是两块分别取整到设备像素的绘制，125% / 175% 这类缩放下两边各舍入一次，
+   * 中间会漏出 1 设备像素的缝。压进去 1px 就盖住了。 */
+  width: 10px !important;
   height: 17px !important;
   background: inherit !important;
   pointer-events: none !important;
-  -webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 17'%3E%3Cpath d='M9 0v17H0c4.5-.5 8-3.5 9-9z'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100% !important;
-  mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 17'%3E%3Cpath d='M9 0v17H0c4.5-.5 8-3.5 9-9z'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100% !important;
+  -webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 17'%3E%3Cpath d='M10 0v17H0c4.5-.5 8-3.5 9-9V0z'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100% !important;
+  mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 17'%3E%3Cpath d='M10 0v17H0c4.5-.5 8-3.5 9-9V0z'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100% !important;
 }
 
 .message-container .msg-content-container.container--others::before {
   left: -9px !important;
   right: auto !important;
+}
+/* 对方的气泡默认是半透明的（acrylic 0.86），尾巴压进去的那 1px 会叠两层透明度，
+ * 变成一条更亮 / 更暗的细线，所以默认不压进去（还是 9px）；选了彩色（实底）配色时才压进去。 */
+.message-container .msg-content-container.container--others::before {
+  width: 9px !important;
+  -webkit-mask-size: 10px 100% !important;
+  mask-size: 10px 100% !important;
+}[data-liuli-other-solid] .message-container .msg-content-container.container--others::before {
+  width: 10px !important;
+  -webkit-mask-size: 100% 100% !important;
+  mask-size: 100% 100% !important;
 }
 
 .message-container .msg-content-container.container--self::before {

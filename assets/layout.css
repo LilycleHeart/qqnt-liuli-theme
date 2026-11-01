@@ -613,19 +613,13 @@ body[data-liuli-scope="main"]:has(.container-sidebar:hover) #liuli-nav-handle {
  * 现在只有一套配方（DSH 对话框/菜单的做法：亚克力 + 噪点 + 强模糊）：
  * ════════════════════════════════════════════════════════════ */
 body {
-  --ll-float-bg: rgba(var(--ll-acrylic), 0.9);
-  --ll-float-blur: blur(28px) saturate(1.6);
+  /* 浮层统一用界面同款材质（2026-11-02，用户确认）：右键菜单、三横菜单、表情面板、输入框「更多」、
+   * 搜索结果、资料卡、展开的侧栏，都和会话列表 / 输入框一样是「亚克力 × 不透明度滑条 + 材质模糊滑条」，
+   * 跟着设置里的「不透明度」「材质模糊」一起变。之前是固定 92% + 28px 模糊，几乎是实底，和界面不是一种东西。 */
+  --ll-float-bg: rgba(var(--ll-acrylic), var(--ll-material-opacity));
+  --ll-float-blur: var(--ll-material-blur);
   --ll-float-shadow: var(--ll-glow-brand), var(--ll-shadow-float);
-  /* 浮层（右键菜单、资料卡、表情面板、搜索结果等）比输入区 / 气泡高一级：M3 里浮得越高底色越靠 surfaceContainerHighest。
-   * 以前和对方气泡同为 acrylic，无壁纸的暗色基准下菜单和压在下面的气泡分不开。 */
-  /* 用 M3 surfaceContainerHighest（中性 tone 22），不用 acrylic-high：后者混了 14% 主色，
-   * 暗色下亮到 L≈31，菜单 / 搜索结果里的次要文字只剩 4.3:1（2026-11-01 实测）。 */
-  --ll-menu-bg: color-mix(in srgb, var(--ll-surface-highest) 94%, transparent);
-}
-/* 亮色下浮层靠投影和下面分开（白底上阴影看得见）。底色用 M3 surfaceContainerLow（中性 tone 96）：
- * 以前用 --ll-float-bg（混了主色的 acrylic），悬停态再叠 7% 墨色后，搜索结果里的品牌色高亮只有 4.25:1。 */
-body[data-liuli-dark="0"] {
-  --ll-menu-bg: color-mix(in srgb, var(--ll-surface-low) 94%, transparent);
+  --ll-menu-bg: var(--ll-float-bg);
 }
 
 /* 1. 输入区 / 工具栏面板 / 展开的侧栏：同一底色 */
@@ -640,10 +634,11 @@ body .chat-input-area > .chat-func-bar.liuli-expanded {
   border-radius: var(--ll-radius) !important;
   box-shadow: var(--ll-float-shadow) !important;
 }
+/* 展开的导航盖在会话列表正上方，跟着 0.4 这类低不透明度会看不清下面的字，保持原来的 90% + 28px 模糊 */
 body[data-liuli-r-nav] .global-container .container-content > .container-sidebar.container-sidebar {
-  background: var(--ll-noise), var(--ll-float-bg) !important;
-  backdrop-filter: var(--ll-float-blur) !important;
-  -webkit-backdrop-filter: var(--ll-float-blur) !important;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), 0.9) !important;
+  backdrop-filter: blur(28px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.6) !important;
   box-shadow: var(--ll-float-shadow) !important;
 }
 
@@ -1043,9 +1038,10 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::before {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: var(--ll-noise), rgba(var(--ll-acrylic), max(var(--ll-material-opacity), 0.86));
-  backdrop-filter: var(--ll-card-blur-strong, blur(40px) saturate(1.6));
-  -webkit-backdrop-filter: var(--ll-card-blur-strong, blur(40px) saturate(1.6));
+  /* 统一浮层材质（见 --ll-float-bg） */
+  background: var(--ll-noise), var(--ll-float-bg);
+  backdrop-filter: var(--ll-float-blur);
+  -webkit-backdrop-filter: var(--ll-float-blur);
   box-shadow: var(--ll-card-shadow);
   pointer-events: none;
 }
@@ -1241,7 +1237,7 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll)
   grid-auto-rows: 38px !important;
   gap: 4px !important;
   padding: 6px !important;
-  animation: liuli-fade-in 160ms ease both !important;
+  animation: liuli-fade-in 160ms ease backwards !important;  /* backwards：见 motion.css 开头，both 会让模糊失效 */
   transform: none !important;
 }
 body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon {
@@ -1492,4 +1488,99 @@ body .q-toast-item:not(#ll) {
 }
 body .q-toast-item:not(#ll) * {
   color: var(--ll-inverse-on-surface) !important;
+}
+
+/* ── 输入卡底边的泛光（#17，2026-11-01）──
+ * 输入卡底边和两侧卡片对齐，正好贴着 .aio / .message-panel 的底边，两者都是 overflow:hidden，
+ * :focus-within 的泛光和 1px 描边在底下被裁掉，只剩上、左、右三边。
+ * 改成 overflow:clip + overflow-clip-margin，往外多留 8px（= 窗口底部的空隙），裁剪范围之外的其它行为不变。 */
+body .message-panel:has(.aio .chat-input-area),
+body .aio:has(.chat-input-area) {
+  overflow: clip !important;
+  overflow-clip-margin: var(--ll-dock-gap, 8px) !important;
+}
+
+/* ── 右侧群资料栏收起后，展开按钮常驻（2026-11-01）──
+ * QQ 的展开 / 收起按钮平时隐藏，只在指向按钮或资料栏时显示。资料栏收起后宽度是 0，
+ * 只剩按钮自己那 20px 能触发；琉璃去掉了分隔线，鼠标一移开就完全看不出按钮在哪，
+ * 切到别的会话再回来就找不到了。收起状态（箭头带 toggle-button--unfold）下让它一直显示，
+ * 底色用 M3 surfaceContainerHighest，箭头用 onSurfaceVariant。 */
+body .group-box__toggle:has(.toggle-button--unfold) .group-box__toggle-bg:not(#ll),
+body .group-box__toggle:has(.toggle-button--unfold) .group-box__toggle-button:not(#ll) {
+  visibility: visible !important;
+}
+body .group-box__wrapper .group-box__toggle:has(.toggle-button--unfold) i.group-box__toggle-bg:not(#ll) svg,
+body .group-box__wrapper .group-box__toggle:has(.toggle-button--unfold) i.group-box__toggle-bg:not(#ll) svg > path {
+  fill: var(--ll-surface-highest) !important;
+}
+body .group-box__wrapper .group-box__toggle:has(.toggle-button--unfold):hover i.group-box__toggle-bg:not(#ll) svg > path {
+  fill: color-mix(in srgb, var(--ll-surface-highest), var(--ll-on-glass) 10%) !important;
+}
+body .group-box__wrapper .group-box__toggle:has(.toggle-button--unfold) i.group-box__toggle-button:not(#ll) path {
+  stroke: var(--ll-on-glass-2) !important;
+}
+
+/* ── 会话面板收起后的拖动区（2026-11-01）──
+ * 再点一次已选中的会话，QQ 会收起聊天面板，显示空白页（.empty-panel.empty-aio）。
+ * 这时没有聊天标题栏，能拖窗口的只剩顶部 8px。空白页里没有可点的东西，整块都设成拖动区；
+ * 万一里面出现按钮、链接、输入框（例如广告位），仍然保持可点。 */
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .empty-panel.empty-aio,
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .empty-panel.empty-aio .draggable-view__container {
+  -webkit-app-region: drag !important;
+}
+body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .empty-panel.empty-aio :is(a, button, input, textarea, [role="button"], [tabindex]:not([tabindex="-1"])) {
+  -webkit-app-region: no-drag !important;
+}
+
+/* 表情面板只留一层材质：外层 .expression-panel-inner 和里面的 .sticker-panel 都命中了浮层规则，
+ * 两层 92% 叠在一起比其它浮层更实、更暗（2026-11-01）。 */
+body .expression-panel .expression-panel-inner .sticker-panel:not(#ll) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* 工具栏格子上的子菜单入口（截图 ▸ 录屏 / 长截图 / 隐藏当前窗口 …，文件 ▸ …）
+ * 原来是右下角 12px、弱化色的小三角，用户反馈「截图时隐藏 QQ 窗口」的入口找不到（2026-11-01）。
+ * 第一版做成伸出格子外的实底小标，和玻璃面板是两种材质，看着像贴上去的（2026-11-02 用户反馈「割裂」）。
+ * 现在收进格子里：右下角 14px 圆角块，底色和格子悬停同一套墨色（on-glass 10%），没有投影；
+ * 指向格子时加深到 16%，指向角标本身换品牌色。 */
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow {
+  top: auto !important;
+  left: auto !important;
+  right: 2px !important;
+  bottom: 2px !important;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 5px !important;
+  background: rgba(var(--ll-on-glass-rgb), 0.10) !important;
+  color: var(--ll-on-glass-2) !important;
+  box-shadow: none !important;
+  z-index: 2 !important;
+  transition: background-color 140ms ease, color 140ms ease !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon:hover > .arrow {
+  background: rgba(var(--ll-on-glass-rgb), 0.16) !important;
+  color: var(--ll-on-glass) !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow:hover {
+  background: var(--ll-brand) !important;
+  color: var(--ll-on-brand) !important;
+}
+body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow svg {
+  width: 12px !important;
+  min-width: 12px !important;
+  height: 12px !important;
+  fill: currentColor !important;
+  color: inherit !important;
+}
+
+/* 子菜单和「更多」面板分开（2026-11-02 用户反馈「割裂」）：
+ * QQ 把子菜单的左边放在小三角的中心、底边贴着格子上沿，结果它横着错出去半个格子，
+ * 底边又和面板上沿压住 2px，两块半透明玻璃叠出一道深边。
+ * 往上让出 8px（和卡片之间的缝一样），左边对齐所在的格子。 */
+body .chat-func-bar.liuli-expanded .bar-more-menu .bar-more-menu-inner.q-context-menu:not(#ll) {
+  margin-top: -10px !important;
+  margin-left: -29px !important;  /* 小三角中心在格子左边 + 29px */
 }

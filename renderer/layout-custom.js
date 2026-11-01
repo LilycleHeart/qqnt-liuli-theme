@@ -8,7 +8,7 @@
 
 const KEY = "liuli-layout";
 const SEEN_KEY = "liuli-layout-seen";
-const DEFAULTS = { menuCompact: false, menuOrder: [], barOrder: [], barPinned: 1, navHidden: [], titlebar: "float" };
+const DEFAULTS = { menuCompact: false, menuOrder: [], barOrder: [], barPinned: 1, navHidden: [], titlebar: "float", navPin: false };
 
 const ICON_UP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>';
 const ICON_DOWN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>';
@@ -174,6 +174,13 @@ export function applyAll() {
         document.body.toggleAttribute("data-liuli-menu-compact", !!cfg.menuCompact);
         const tb = cfg.titlebar === "native" ? "native" : "float";
         if (document.body.dataset.liuliTb !== tb) document.body.dataset.liuliTb = tb;
+        /* 左侧导航栏「固定」（需求 B）：body[data-liuli-nav-pin]，
+         * 固定时的排版还原写在后加载的 layout-custom.css 里。
+         * renderer/index.js 的 installRevealTracker 看到这个属性就不再展开 / 收起导航。
+         * 顺手清掉「展开」标记：切到固定后鼠标不动时，残留下的 data-liuli-r-nav
+         * 会让 CSS 继续按展开态算材质（唯一一处跨模块清理）。 */
+        document.body.toggleAttribute("data-liuli-nav-pin", !!cfg.navPin);
+        if (cfg.navPin && document.body.dataset.liuliRNav) delete document.body.dataset.liuliRNav;
         applyNav();
         applyBar();
         document.querySelectorAll(".q-context-menu.aio-right-click-menu").forEach(applyMenu);
@@ -308,6 +315,13 @@ export function buildLayoutControls(host) {
 
     /* 左侧边栏 */
     host.appendChild(el("div", "liuli-panel__group", "左侧边栏"));
+    /* 需求 B：导航栏「自动隐藏 / 固定」。固定时导航栏回到正常排版，
+     * 占自己的一列，会话列表和右边内容跟着右移（见 layout-custom.css）。 */
+    seg(host, "导航栏", [["0", "自动隐藏"], ["1", "固定"]], cfg.navPin ? "1" : "0", v => {
+        cfg.navPin = v === "1";
+        save();
+    });
+    host.appendChild(el("div", "liuli-field__hint", "固定后导航栏一直显示，不再盖在会话列表上。自动隐藏：鼠标移到窗口左边缘时滑出，移开收起。"));
     host.appendChild(el("div", "liuli-field__hint", "点眼睛图标隐藏或显示侧边栏上的按钮。"));
     sortList(host, seen.nav.slice(), {
         sortable: false,

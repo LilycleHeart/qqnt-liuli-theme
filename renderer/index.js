@@ -245,6 +245,8 @@ async function applyDynamicPalette() {
         else body.style.setProperty(k, vars[k]);
     }
     body.dataset.liuliSource = source;
+    // 对方的气泡选了彩色（实底）配色：气泡尾巴可以压进气泡 1px 盖住缝（bubbles.css，#16）
+    body.toggleAttribute("data-liuli-other-solid", vars["--ll-bubble-other"] != null);
     // 色板换了明暗，随模式变化的遮罩 / 阴影也要跟着重写（需求 A.2）
     llApplyModeSettings();
     console.log("[liuli-dsh-theme] wallpaper source = " + source + " (brand " + vars["--ll-brand"] + ")");
@@ -539,12 +541,12 @@ function llRefreshVeilSegs(cfg) {
 
 const FIELDS = [
     { key: "blur", label: "材质模糊", min: 0, max: 40, step: 1, unit: "px", hint: "玻璃层的 backdrop-filter 半径" },
-    { key: "opacity", label: "不透明度", min: 0.1, max: 0.9, step: 0.01, unit: "", hint: "亚克力底的 alpha，越高越实。按最极端的纯黑 / 纯白壁纸估算：亮色主题不低于 0.6、推荐 0.8；暗色主题不低于 0.75、推荐 0.8。开了遮罩可以相应调低", pct: v => ((v - 0.1) / 0.8) * 100 },
+    { key: "opacity", label: "不透明度", min: 0.1, max: 0.9, step: 0.01, unit: "", hint: "玻璃底有多实。过低会影响可读性", pct: v => ((v - 0.1) / 0.8) * 100 },
     { key: "glow", label: "泛光强度", min: 0, max: 1, step: 0.01, unit: "", hint: "品牌色在边缘的发光量", pct: v => v * 100 },
     { key: "shadow", label: "阴影强度", min: 0, max: 1, step: 0.01, unit: "", hint: "玻璃卡片的投影浓度", pct: v => v * 100 },
     // 壁纸遮罩拆成亮色 / 暗色两条（需求 A.1），各自下面挂一个「遮罩颜色」分段按钮
-    { key: "dimLight", veilKey: "veilLight", label: "亮色主题遮罩", min: 0, max: DIM_MAX, step: 0.01, unit: "", hint: "只作用于亮色主题：盖在壁纸上的遮罩浓度，越高壁纸越淡、文字越好读。颜色选「亮」时和不透明度叠加，不透明度 0.5 时建议不低于 0.2、推荐 0.6；选「暗」会让亮色界面发灰，不推荐", pct: v => (v / DIM_MAX) * 100 },
-    { key: "dimDark", veilKey: "veilDark", label: "暗色主题遮罩", min: 0, max: DIM_MAX, step: 0.01, unit: "", hint: "只作用于暗色主题：盖在壁纸上的遮罩浓度，越高壁纸越淡、文字越好读。颜色选「暗」时和不透明度叠加，不透明度 0.5 时建议不低于 0.5、推荐 0.6；选「亮」会让暗色界面发灰，不推荐", pct: v => (v / DIM_MAX) * 100 }
+    { key: "dimLight", veilKey: "veilLight", label: "亮色主题遮罩", min: 0, max: DIM_MAX, step: 0.01, unit: "", hint: "亮色主题下盖在壁纸上的遮罩。过低会影响可读性", pct: v => (v / DIM_MAX) * 100 },
+    { key: "dimDark", veilKey: "veilDark", label: "暗色主题遮罩", min: 0, max: DIM_MAX, step: 0.01, unit: "", hint: "暗色主题下盖在壁纸上的遮罩。过低会影响可读性", pct: v => (v / DIM_MAX) * 100 }
 ];
 
 function toast(text) {
@@ -862,6 +864,11 @@ function llSyncPins(overlay) {
     if (!pins) return;
     var labels = applyBar();
     if (!labels.length && !document.querySelector(".chat-input-area .chat-func-bar")) return;
+    // 只放当前会话里 QQ 真的有的按钮（#20）：「我的手机」这类会话 QQ 原生工具栏没有「表情」「图片」，
+    // 以前照样摆出代理按钮，点了找不到原生按钮就什么都不做，看起来就是「按了没反应」。
+    if (document.querySelector(".chat-input-area .chat-func-bar .bar-icon")) {
+        labels = labels.filter(function (label) { return !!nativeBarItem(label); });
+    }
     var key = labels.join("\u0001");
     var complete = !pins.querySelector("[data-noicon]");
     if (pins.dataset.key === key && complete) return;
@@ -1160,13 +1167,36 @@ function llGroupMembersPass() {
         var rows = gm.querySelectorAll(".group-user");
         if (!rows.length) return;
 
-        // 换群 → 成员行入场
+        // 换群 → 成员行入场。
+        // 标题先变，成员列表要等 QQ 拉完数据才换（2026-11-01 用户反馈：先给上一个群的成员播一遍入场动画，再突然刷新成新群）。
+        // 所以换群时先记下当前（旧）成员的签名，等签名变了、也就是新成员真的到了，再播动画；
+        // 1.5 秒内没变（两个群前几位成员恰好一样）就不播了，免得晚一拍突然动一下。
         var title = document.querySelector(".chat-header .panel-header__title");
         var key = llNorm(title && title.textContent);
+        var host = gm.querySelector(".group-member-list") || gm;
+        var sig = function () {
+            return Array.prototype.slice.call(host.querySelectorAll(".group-user__name"), 0, 6)
+                .map(function (n) { return n.textContent; }).join("|");
+        };
         if (key && key !== llGM.key) {
+            // 只有这次启动后第一次看到群成员栏才直接播；之后（包括中间切去私聊再回来）都等新成员到了再播
+            var first = !llGM.seen;
+            llGM.seen = true;
             llGM.key = key;
-            var host = gm.querySelector(".group-member-list") || gm;
-            requestAnimationFrame(function () { llRiseIn(llVisibleIn(host, ".group-user"), 16); });
+            if (first) {
+                requestAnimationFrame(function () { llRiseIn(llVisibleIn(host, ".group-user"), 16); });
+            } else {
+                llGM.pendingSig = sig();
+                llGM.pendingAt = Date.now();
+            }
+        } else if (llGM.pendingSig != null) {
+            var now = sig();
+            if (now !== llGM.pendingSig) {
+                llGM.pendingSig = null;
+                requestAnimationFrame(function () { llRiseIn(llVisibleIn(host, ".group-user"), 16); });
+            } else if (Date.now() - llGM.pendingAt > 1500) {
+                llGM.pendingSig = null;
+            }
         }
 
         // 管理团队：群主 + 管理员排在最前面且连续，画成一整块
@@ -1361,7 +1391,17 @@ function installRevealTracker() {
     var HOLD = { nav: 250, l: 600, r: 600 };
     var KEYS = { l: "liuliRL", r: "liuliRR", nav: "liuliRNav" };
     var state = {}, timers = {}, last = { x: -1, y: -1 };
+    /* 需求 B：导航栏切成「固定」（body[data-liuli-nav-pin]）后常驻显示，
+     * 不再跟鼠标展开 / 收起，也不释放焦点（releaseNavFocus 只在收起时调）。 */
+    function navPinned() { return document.body.dataset.liuliNavPin === "1"; }
+    function dropNav() {
+        if (timers.nav) { clearTimeout(timers.nav); timers.nav = 0; }
+        if (!state.nav && !document.body.dataset.liuliRNav) return;
+        state.nav = false;
+        delete document.body.dataset.liuliRNav;   // 固定时不该再有「展开」标记，否则 CSS 仍按展开态算
+    }
     function set(k, on, hold) {
+        if (k === "nav" && navPinned()) { dropNav(); return; }
         if (on) {
             if (timers[k]) { clearTimeout(timers[k]); timers[k] = 0; }
             if (!state[k]) { state[k] = true; document.body.dataset[KEYS[k]] = "1"; }
@@ -2684,6 +2724,87 @@ function buildVeilRow(veilKey, settings) {
     return row;
 }
 
+/* ════════════════════════════════════════════════════════════
+ * 设置页顶部页签（需求 A）
+ * ------------------------------------------------------------
+ * 每个页签一个 div.liuli-tabpage，原有分组原样移进对应页；
+ * 不显示的页只加 hidden（display: none），**不销毁 DOM**，原因：
+ *   1. storage 同步按 document.querySelectorAll(".liuli-slider") 的下标取滑条，
+ *      数量必须恒等于 FIELDS.length；
+ *   2. 「遮罩颜色」分段按钮的刷新登记表 llVeilSegRefreshers 拿的是节点引用，
+ *      节点一旦被移出文档就再也刷不到。
+ * 选中的页签存 localStorage("liuli-settings-tab")，无效值回到第一页（外观）。
+ * ════════════════════════════════════════════════════════════ */
+const LL_TAB_KEY = "liuli-settings-tab";
+const LL_TABS = [
+    { key: "look", label: "外观" },
+    { key: "wallpaper", label: "壁纸" },
+    { key: "color", label: "配色" },
+    { key: "layout", label: "布局" },
+    { key: "text", label: "文字" },
+    { key: "diag", label: "诊断" }
+];
+
+/* 上次打开的页签；不认识的值回到第一页（外观） */
+function llSavedTab() {
+    try {
+        const v = localStorage.getItem(LL_TAB_KEY);
+        return LL_TABS.some(function (t) { return t.key === v; }) ? v : LL_TABS[0].key;
+    } catch (e) { return LL_TABS[0].key; }
+}
+
+/* 建页签栏 + 页容器，返回 { bar, pages, show }。
+ * 嵌入页（#liuli-embedded）和任何另一个宿主（浮动面板）都走这一个函数：
+ * container 是挂载点，groups 默认用 LL_TABS；pages 是 key → 容器，
+ * 调用方把原有分组 append 进去即可。 */
+function llBuildTabs(container, groups) {
+    const list = (Array.isArray(groups) && groups.length) ? groups : LL_TABS;
+    const bar = document.createElement("div");
+    bar.className = "liuli-seg liuli-tabs";       // 复用 .liuli-seg / .liuli-seg__item 的分段按钮样式
+    bar.setAttribute("role", "tablist");
+    bar.setAttribute("aria-label", "琉璃设置分区");
+    container.appendChild(bar);
+    const btns = {};
+    const pages = {};
+    function show(key) {
+        if (!pages[key]) key = list[0].key;
+        Object.keys(pages).forEach(function (k) {
+            const on = k === key;
+            pages[k].classList.toggle("is-active", on);
+            pages[k].hidden = !on;                 // 只隐藏，不销毁（见上面的原因）
+        });
+        Object.keys(btns).forEach(function (k) {
+            const on = k === key;
+            btns[k].classList.toggle("is-active", on);
+            btns[k].setAttribute("aria-selected", on ? "true" : "false");
+            btns[k].tabIndex = on ? 0 : -1;
+        });
+        try { localStorage.setItem(LL_TAB_KEY, key); } catch (e) {}
+    }
+    list.forEach(function (t) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "liuli-seg__item";
+        b.textContent = t.label;
+        b.dataset.tab = t.key;
+        b.setAttribute("role", "tab");
+        b.addEventListener("click", function () { show(t.key); });
+        bar.appendChild(b);
+        btns[t.key] = b;
+    });
+    list.forEach(function (t) {
+        const p = document.createElement("div");
+        p.className = "liuli-tabpage";
+        p.dataset.tab = t.key;
+        p.setAttribute("role", "tabpanel");
+        p.hidden = true;
+        container.appendChild(p);
+        pages[t.key] = p;
+    });
+    show(llSavedTab());
+    return { bar: bar, pages: pages, show: show };
+}
+
 function buildPanelContent(host, settings) {
     host.innerHTML = "";
     llVeilSegRefreshers = [];
@@ -2698,6 +2819,15 @@ function buildPanelContent(host, settings) {
     sub.textContent = "材质与外观 · 实时生效";
     host.appendChild(sub);
 
+    /* 顶部页签（需求 A）：页签栏吸在设置区顶部，六个页各是一个 .liuli-tabpage 容器 */
+    const tabs = llBuildTabs(host, LL_TABS);
+    const pageLook = tabs.pages.look;
+    const pageWp = tabs.pages.wallpaper;
+    const pageColor = tabs.pages.color;
+    const pageLayout = tabs.pages.layout;
+    const pageText = tabs.pages.text;
+    const pageDiag = tabs.pages.diag;
+
     const info = document.createElement("div");
     info.className = "liuli-info";
     const swatch = document.createElement("div");
@@ -2705,10 +2835,14 @@ function buildPanelContent(host, settings) {
     const infoText = document.createElement("span");
     info.appendChild(swatch);
     info.appendChild(infoText);
-    host.appendChild(info);
-    buildModeControls(host);
-    buildMarkdownControls(host);
-    buildFontControls(host);
+    /* 取色信息条属于「配色」页：它显示的就是壁纸取色 → 品牌色这条链路的结果 */
+    pageColor.appendChild(info);
+    /* 「主题」分组：明暗模式（跟随 QQ / 亮色 / 暗色） */
+    const themeGroup = document.createElement("div");
+    themeGroup.className = "liuli-panel__group";
+    themeGroup.textContent = "主题";
+    pageLook.appendChild(themeGroup);
+    buildModeControls(pageLook);
     const refreshInfo = () => {
         const src = document.body.dataset.liuliSource || DEFAULT_SOURCE;
         const brand = getComputedStyle(document.body).getPropertyValue("--ll-brand").trim();
@@ -2721,7 +2855,7 @@ function buildPanelContent(host, settings) {
     const group = document.createElement("div");
     group.className = "liuli-panel__group";
     group.textContent = "材质";
-    host.appendChild(group);
+    pageLook.appendChild(group);
 
     const inputs = {};
     for (const f of FIELDS) {
@@ -2766,20 +2900,28 @@ function buildPanelContent(host, settings) {
         inputs[f.key] = slider;
         // 「壁纸遮罩」两条各自带一个「遮罩颜色：亮 | 暗」分段按钮
         if (f.veilKey) wrap.appendChild(buildVeilRow(f.veilKey, settings));
-        host.appendChild(wrap);
+        pageLook.appendChild(wrap);
     }
 
     // 两条遮罩共用的说明（需求 A.4 要求的提示文字）
     const veilNote = document.createElement("div");
     veilNote.className = "liuli-field__hint liuli-veil__note";
-    veilNote.textContent = "亮色、暗色主题各用各的遮罩：「亮」是盖一层白，「暗」是盖一层黑；遮罩越高壁纸越淡，文字越好读。";
-    host.appendChild(veilNote);
+    veilNote.textContent = "遮罩颜色：「亮」盖一层白，「暗」盖一层黑。";
+    pageLook.appendChild(veilNote);
 
-    buildRoleControls(host, function () { window.__liuliPaletteApplied = false; applyDynamicPalette(); });
-    buildWallpaperControls(host);
-    buildLayoutSection(host);
-    buildDiagSection(host);   // 契约 3.5：诊断小节放在「恢复默认」之前
+    /* ── 其余各页：原有分组函数原样调用，只是容器从 host 换成对应页 ── */
+    buildRoleControls(pageColor, function () { window.__liuliPaletteApplied = false; applyDynamicPalette(); });
+    buildWallpaperControls(pageWp);      // 壁纸选择 / 裁剪适应 / 壁纸亮度提示
+    buildLayoutSection(pageLayout);      // layout-custom.js 的全部分组
+    const textGroup = document.createElement("div");
+    textGroup.className = "liuli-panel__group";
+    textGroup.textContent = "文字";
+    pageText.appendChild(textGroup);
+    buildMarkdownControls(pageText);
+    buildFontControls(pageText);
+    buildDiagSection(pageDiag);   // 契约 3.5：诊断小节放在「恢复默认」之前
 
+    /* 「恢复默认」只把材质 / 遮罩打回默认值，放在外观页末尾 */
     const reset = document.createElement("div");
     reset.className = "liuli-field__hint";
     reset.style.cssText = "cursor:pointer;color:var(--ll-brand);margin-top:14px;";
@@ -2794,7 +2936,7 @@ function buildPanelContent(host, settings) {
         saveSettings(settings);
         toast("已恢复默认");
     });
-    host.appendChild(reset);
+    pageLook.appendChild(reset);
 }
 
 let embeddedSettings = null;

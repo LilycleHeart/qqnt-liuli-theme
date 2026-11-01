@@ -15,6 +15,10 @@ body {
   --ll-dur: 220ms;
 }
 
+/* 弹层入场动画一律用 fill-mode: backwards，不用 both（2026-11-02）：
+ * 带 both 的透明度动画播完后仍然「在生效」，Chromium 会把元素当成透明度效果节点，
+ * 它就成了 backdrop root，里面（含 ::before）的 backdrop-filter 只能采到自己，模糊整个失效——
+ * 菜单、表情面板、「更多」菜单后面的字清清楚楚透出来。backwards 只在动画开始前生效，播完就不再影响。 */
 /* ── 1. 弹层入场：右键菜单、下拉、对话框、提示、资料卡等 ── */
 @keyframes liuli-pop-in {
   from { opacity: 0; transform: translateY(6px) scale(0.96); }
@@ -33,12 +37,12 @@ body .q-tooltips-v2,
 body .sidebar-tooltips__content,
 body .menu-stickers-panel,
 body .q-float-card {
-  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) both;
+  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) backwards;
   transform-origin: top left;
 }
 /* 右键菜单只淡入：位移/缩放动画会让父菜单变成内嵌 fixed 子菜单的定位参照（见 layout.css） */
 body .q-context-menu:not(.is-pure) {
-  animation: liuli-fade-in var(--ll-dur) var(--ll-ease) both;
+  animation: liuli-fade-in var(--ll-dur) var(--ll-ease) backwards;
 }
 /* @ 面板、快捷表情面板：QQ 用 translateY(-100%) 把它们顶到输入框上方，
  * 动画终点不能是 transform:none（fill:both 会盖掉定位，面板掉到输入框上）。 */
@@ -48,21 +52,21 @@ body .q-context-menu:not(.is-pure) {
 }
 body .editor-at-panel,
 body .editor-qqface-short-panel {
-  animation: liuli-pop-up-anchored var(--ll-dur) var(--ll-ease) both;
+  animation: liuli-pop-up-anchored var(--ll-dur) var(--ll-ease) backwards;
   transform-origin: bottom left;
 }
 body .q-popup__main,
 body .q-dialog-main,
 body .form-modal {
-  animation: liuli-pop-in 260ms var(--ll-ease) both;
+  animation: liuli-pop-in 260ms var(--ll-ease) backwards;
   transform-origin: center;
 }
 body .q-popup__modal {
-  animation: liuli-fade-in var(--ll-dur) ease both;
+  animation: liuli-fade-in var(--ll-dur) ease backwards;
 }
 /* 表情面板：从输入框处向上长出来 */
 body .expression-panel .sticker-panel {
-  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) both;
+  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) backwards;
   transform-origin: bottom left;
 }
 
@@ -72,7 +76,7 @@ body .expression-panel .sticker-panel {
   to { opacity: 1; transform: none; }
 }
 body .chat-input-area > .chat-func-bar.liuli-expanded {
-  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) both;
+  animation: liuli-pop-in var(--ll-dur) var(--ll-ease) backwards;
   transform-origin: bottom left;
 }
 body .chat-func-bar.liuli-expanded .icon-item {
