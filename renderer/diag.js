@@ -5,7 +5,8 @@
 //      console.error|warn 环形缓冲（≤60 条、单条 ≤2KB），并转发主进程 session.log。
 //   2. window.__liuliDiagSnapshot()：同步 JSON 快照（契约 3.2 全字段）。
 //   3. collectDiagnostics(opts)：异步增强版（资源逐个 fetch、壁纸 Image.decode、
-//      localStorage 配额探测、默认壁纸文件存在性），并给出中文 checks 结论。
+//      localStorage 配额探测、默认壁纸文件存在性、性能采样：rAF 帧率 / backdrop-filter /
+//      材质变量 / 壁纸原始分辨率），并给出中文 checks 结论。
 //   4. 壁纸操作审计（契约 3.3）：pick / encode / persist / apply / storage /
 //      remove / poll，内存 20 条 + localStorage[liuli-dsh-wallpaper-audit]（≤4KB）
 //      + diagLog 落主进程 session.log。
@@ -49,6 +50,14 @@ const DIAG_LOG_MAX = 4000;         // diagLog 单条序列化上限（主进程�
 const QUOTA_PROBE_MB = [0.5, 1, 2, 4, 8, 12];
 const SENSITIVE_KEY = /token|pass|cookie|session|uid|device|guid|imei|serial/i;
 const WALLPAPER_DATAURL_BUDGET = 3.5 * 1024 * 1024;
+
+// ---- 性能采样（卡顿取证：帧率 / backdrop-filter 数量 / 材质变量）----
+const PERF_MATERIAL_VARS = ["--ll-material-blur", "--ll-material-opacity", "--ll-glow-strength"];
+const PERF_MAX_ELEMENTS = 5000;        // DOM 扫描上限（QQ 页面元素上万，全量扫会自己把页面卡住）
+const PERF_SCAN_BUDGET_MS = 2500;      // 扫描时间预算：超了就提前停，宁可少算也别把页面冻住
+const PERF_FPS_SAMPLE_MS = 2000;       // requestAnimationFrame 采样时长
+const PERF_FPS_TIMEOUT_MS = 3000;      // 采样硬超时（页面在后台时 rAF 不触发，只能靠它收尾）
+const PERF_LONG_FRAME_MS = 50;         // 长帧阈值
 
 const bootState = {
     startedAt: null,
@@ -1092,6 +1101,298 @@ function domInfo() {
     };
 }
 
+/* ------------------------------------------------------------
+ * 性能采样（对应主进程 performance.txt 的第 7 节）
+ * 只在当前页面里取；同步部分只读一次 body 的计算样式（材质变量），DOM 全量扫描
+ * 放在异步 collectDiagnostics 里，避免 __liuliDiagSnapshot() 把页面卡住。
+ * ------------------------------------------------------------ */
+function perfNow() {
+    const w = win();
+    try {
+        if (w && w.performance && typeof w.performance.now === "function") return w.performance.now();
+    } catch (e) { /* 退回 Date.now */ }
+    return Date.now();
+}
+
+function visibilityInfo() {
+    const d = doc();
+    return {
+        state: safe(() => String(d.visibilityState), ""),
+        hidden: safe(() => !!d.hidden, false)
+    };
+}
+
+function viewportInfo() {
+    const w = win();
+    return {
+        w: safe(() => Number(w.innerWidth) || 0, 0),
+        h: safe(() => Number(w.innerHeight) || 0, 0),
+        dpr: safe(() => Number(w.devicePixelRatio) || 1, 1)
+    };
+}
+
+/** 琉璃的材质设置值（原样输出字符串，不做任何转换） */
+function materialVars() {
+    const d = doc();
+    const cs = computed(d && d.body, null);
+    const out = {};
+    PERF_MATERIAL_VARS.forEach(name => {
+        out[name] = cs ? safe(() => String(cs.getPropertyValue(name) || "").trim(), "") : "";
+    });
+    return out;
+}
+
+/** 同步可拿到的廉价字段（材质 / 视口 / 可见性），异步部分再补齐帧率与 DOM 统计 */
+function performanceBaseInfo() {
+    return {
+        at: nowIso(),
+        sampled: false,
+        visibility: visibilityInfo(),
+        viewport: viewportInfo(),
+        material: materialVars(),
+        backdrop: null,
+        animations: null,
+        fps: null,
+        wallpaper: null
+    };
+}
+
+function backdropFilterOf(cs) {
+    if (!cs) return "";
+    const raw = safe(() => String(cs.backdropFilter || ""), "");
+    const webkit = safe(() => String(cs.webkitBackdropFilter || ""), "");
+    const value = String(raw || webkit || "").trim();
+    return (!value || value === "none") ? "" : value;
+}
+
+function elementVisible(el, cs) {
+    if (!el || el.nodeType !== 1) return false;
+    if (cs) {
+        if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") return false;
+        if (cs.opacity !== "" && Number(cs.opacity) === 0) return false;
+    }
+    const rects = safe(() => (typeof el.getClientRects === "function" ? el.getClientRects() : null), null);
+    return !!(rects && rects.length > 0);
+}
+
+/**
+ * 统计可见的 backdrop-filter 元素（含 ::before 伪元素 —— 琉璃很多材质画在伪元素上）。
+ * 限制：最多 PERF_MAX_ELEMENTS 个元素、PERF_SCAN_BUDGET_MS 时间预算，超了记 truncated/budgetHit。
+ */
+function countBackdropInfo() {
+    const out = {
+        visible: 0,          // 元素自身 backdrop-filter 不为 none 且可见
+        pseudoBefore: 0,     // ::before 上有 backdrop-filter 且元素可见（琉璃很多卡片画在伪元素上）
+        total: 0,            // visible + pseudoBefore：卡顿判据用这个
+        anyBackdrop: 0,      // 有 backdrop-filter 的元素（不论可见性）
+        pseudoScanned: 0,
+        scanned: 0,
+        elements: 0,         // 页面元素总数（document.querySelectorAll("*").length）
+        maxElements: PERF_MAX_ELEMENTS,
+        truncated: false,
+        budgetHit: false,
+        scanMs: 0,
+        note: "",
+        error: ""
+    };
+    const d = doc();
+    if (!d || typeof d.querySelectorAll !== "function") {
+        out.error = "document.querySelectorAll 不可用";
+        return out;
+    }
+    const all = safe(() => d.querySelectorAll("*"), null);
+    if (!all) {
+        out.error = "遍历 DOM 失败";
+        return out;
+    }
+    out.elements = Number(all.length) || 0;
+    const count = Math.min(out.elements, PERF_MAX_ELEMENTS);
+    out.truncated = out.elements > count;
+    const started = perfNow();
+    for (let i = 0; i < count; i++) {
+        if (perfNow() - started > PERF_SCAN_BUDGET_MS) {
+            out.budgetHit = true;
+            break;
+        }
+        const el = all[i];
+        if (!el || el.nodeType !== 1) continue;
+        out.scanned++;
+        const cs = computed(el, null);
+        const backdrop = backdropFilterOf(cs);
+        if (backdrop) out.anyBackdrop++;
+        const visible = elementVisible(el, cs);
+        if (backdrop && visible) out.visible++;
+        // ::before 上的材质只对可见元素查，省掉一半 getComputedStyle 调用
+        if (visible) {
+            out.pseudoScanned++;
+            const pseudo = computed(el, "::before");
+            if (pseudo && pseudo.content !== "none" && pseudo.content !== "normal" && backdropFilterOf(pseudo)) {
+                out.pseudoBefore++;
+            }
+        }
+    }
+    out.total = out.visible + out.pseudoBefore;
+    out.scanMs = Math.round(perfNow() - started);
+    if (out.budgetHit) {
+        out.note = "扫描超过 " + PERF_SCAN_BUDGET_MS + "ms 预算，提前停止，计数可能偏小";
+    } else if (out.truncated) {
+        out.note = "元素超过 " + PERF_MAX_ELEMENTS + " 个上限，只统计了前 " + PERF_MAX_ELEMENTS + " 个";
+    }
+    return out;
+}
+
+function countRunningAnimations() {
+    const d = doc();
+    if (!d || typeof d.getAnimations !== "function") return null;
+    const list = safe(() => d.getAnimations(), null);
+    if (!Array.isArray(list)) return null;
+    let running = 0;
+    for (const anim of list) {
+        if (!anim) continue;
+        if (safe(() => String(anim.playState || ""), "") === "running") running++;
+    }
+    return { total: list.length, running: running };
+}
+
+/**
+ * requestAnimationFrame 采 2 秒：平均 FPS、最差帧间隔、>50ms 长帧数。
+ * 页面在后台（document.hidden）时 rAF 不会触发，直接写原因；另外还有 3 秒硬超时兜底。
+ */
+function sampleFrameRate() {
+    const out = {
+        ok: false,
+        hidden: false,
+        sampled: false,
+        partial: false,
+        frames: 0,
+        ms: 0,
+        avgFps: null,
+        worstFrameMs: null,
+        longFrames: 0,
+        longFrameMs: PERF_LONG_FRAME_MS,
+        sampleTargetMs: PERF_FPS_SAMPLE_MS,
+        timeoutMs: PERF_FPS_TIMEOUT_MS,
+        error: ""
+    };
+    const w = win();
+    const d = doc();
+    out.hidden = safe(() => !!(d && d.hidden), false);
+    if (!w || typeof w.requestAnimationFrame !== "function") {
+        out.error = "requestAnimationFrame 不可用";
+        return Promise.resolve(out);
+    }
+    if (out.hidden) {
+        out.error = "页面在后台（document.hidden=true），requestAnimationFrame 不会触发，未采样";
+        return Promise.resolve(out);
+    }
+    return new Promise(resolve => {
+        let done = false;
+        let frames = 0;
+        let worst = 0;
+        let longFrames = 0;
+        let start = 0;
+        let last = 0;
+        const finish = reason => {
+            if (done) return;
+            done = true;
+            safe(() => clearTimeout(timer), null);
+            out.hidden = safe(() => !!(d && d.hidden), out.hidden);
+            const elapsed = (start && last) ? (last - start) : 0;
+            out.frames = frames;
+            out.ms = Math.round(elapsed);
+            if (frames > 1 && elapsed > 0) {
+                out.avgFps = Math.round(((frames - 1) / (elapsed / 1000)) * 10) / 10;
+                out.worstFrameMs = Math.round(worst * 10) / 10;
+                out.longFrames = longFrames;
+                out.partial = elapsed < PERF_FPS_SAMPLE_MS * 0.8;
+                out.ok = true;
+                out.sampled = true;
+                resolve(out);
+                return;
+            }
+            if (out.hidden) {
+                out.error = "页面在后台（document.hidden=true），requestAnimationFrame 不会触发，未采样";
+            } else if (reason === "timeout") {
+                out.error = "采样超时（" + PERF_FPS_TIMEOUT_MS + "ms 内只拿到 " + frames + " 帧，页面可能卡死）";
+            } else if (!out.error) {
+                out.error = "采样期间没有拿到足够的帧（" + frames + " 帧）";
+            }
+        };
+        const timer = setTimeout(() => finish("timeout"), PERF_FPS_TIMEOUT_MS);
+        const tick = ts => {
+            if (done) return;
+            const now = typeof ts === "number" ? ts : perfNow();
+            if (!start) {
+                start = now;
+                last = now;
+                frames = 1;
+            } else {
+                const delta = now - last;
+                last = now;
+                frames++;
+                if (delta > worst) worst = delta;
+                if (delta > PERF_LONG_FRAME_MS) longFrames++;
+            }
+            if (now - start >= PERF_FPS_SAMPLE_MS) {
+                finish("done");
+                return;
+            }
+            safe(() => w.requestAnimationFrame(tick), null);
+        };
+        safe(() => w.requestAnimationFrame(tick), null);
+    });
+}
+
+/**
+ * 异步性能采集（collectDiagnostics 的一路任务）：先采帧率再扫 DOM，
+ * 免得自己的 getComputedStyle 循环污染 FPS 采样。永不 reject。
+ */
+export async function collectPerformance() {
+    const started = Date.now();
+    const perf = performanceBaseInfo();
+    try {
+        perf.fps = await sampleFrameRate();
+    } catch (e) {
+        perf.fps = {
+            ok: false, hidden: false, sampled: false, frames: 0,
+            avgFps: null, worstFrameMs: null, longFrames: 0,
+            error: errorText(e) || "帧率采样异常"
+        };
+    }
+    try {
+        perf.backdrop = countBackdropInfo();
+    } catch (e) {
+        perf.backdrop = { visible: null, pseudoBefore: null, error: errorText(e) || "DOM 扫描异常" };
+    }
+    try {
+        perf.animations = countRunningAnimations();
+    } catch (e) {
+        perf.animations = null;
+    }
+    // 壁纸：复用已有采集，只补原始分辨率与文件大小（naturalWidth/Height 由 buildSnapshot 从解码结果补上）
+    try {
+        const wp = wallpaperInfo();
+        perf.wallpaper = {
+            key: wp.key,
+            present: !!wp.present,
+            mime: wp.mime,
+            srcLen: Number(wp.srcLen) || 0,
+            approxBytes: Number(wp.approxBytes) || 0,
+            fit: wp.fit,
+            naturalWidth: wp.naturalWidth == null ? null : wp.naturalWidth,
+            naturalHeight: wp.naturalHeight == null ? null : wp.naturalHeight,
+            decodeOk: wp.decodeOk == null ? null : wp.decodeOk
+        };
+    } catch (e) {
+        perf.wallpaper = { error: errorText(e) || "壁纸信息采集异常" };
+    }
+    perf.visibility = visibilityInfo();
+    perf.viewport = viewportInfo();
+    perf.sampled = true;
+    perf.sampleMs = Date.now() - started;
+    return perf;
+}
+
 function buildSnapshot(asyncInfo) {
     const snap = {
         schema: DIAG_SCHEMA,
@@ -1105,7 +1406,8 @@ function buildSnapshot(asyncInfo) {
         events: eventsInfo(),
         errors: getErrors(),
         settings: settingsInfo(),
-        dom: domInfo()
+        dom: domInfo(),
+        performance: performanceBaseInfo()
     };
     if (asyncInfo && typeof asyncInfo === "object") {
         if (asyncInfo.themeFiles) snap.theme.files = asyncInfo.themeFiles;
@@ -1117,6 +1419,22 @@ function buildSnapshot(asyncInfo) {
         }
         if (asyncInfo.defaultWallpaper) snap.wallpaper.defaultWallpaper = asyncInfo.defaultWallpaper;
         if (Array.isArray(asyncInfo.quotaProbe)) snap.storage.quotaProbe = asyncInfo.quotaProbe;
+        if (asyncInfo.performance && typeof asyncInfo.performance === "object") {
+            snap.performance = asyncInfo.performance;
+            // 壁纸原始分辨率/大小来自解码结果：把同步那侧（本次或上次采集）的值补进性能块
+            const perfWallpaper = snap.performance.wallpaper;
+            const wp = snap.wallpaper || {};
+            if (perfWallpaper && typeof perfWallpaper === "object" && !perfWallpaper.error) {
+                perfWallpaper.present = !!wp.present;
+                perfWallpaper.srcLen = Number(wp.srcLen) || 0;
+                perfWallpaper.approxBytes = Number(wp.approxBytes) || 0;
+                perfWallpaper.mime = wp.mime || "";
+                perfWallpaper.fit = wp.fit || "cover";
+                if (wp.naturalWidth != null) perfWallpaper.naturalWidth = wp.naturalWidth;
+                if (wp.naturalHeight != null) perfWallpaper.naturalHeight = wp.naturalHeight;
+                perfWallpaper.decodeOk = wp.decodeOk == null ? null : wp.decodeOk;
+            }
+        }
     }
     snap.checks = buildChecks(snap);
     // 契约 3.2 的 theme 块里也有 checks（与顶层同一份，供只看 theme 块的人读）
@@ -1523,6 +1841,7 @@ export async function collectDiagnostics(opts) {
         quota: true,
         wallpaperDecode: true,
         defaultWallpaper: true,
+        performance: true,
         timeoutMs: 30000
     }, opts && typeof opts === "object" ? opts : {});
     const asyncInfo = {};
@@ -1531,11 +1850,15 @@ export async function collectDiagnostics(opts) {
     if (o.defaultWallpaper) tasks.push(probeDefaultWallpaper().then(v => { asyncInfo.defaultWallpaper = v; }));
     if (o.wallpaperDecode) tasks.push(decodeCurrentWallpaper().then(v => { asyncInfo.wallpaperDecode = v; }));
     if (o.quota) tasks.push(Promise.resolve().then(() => { asyncInfo.quotaProbe = probeLocalStorageQuota(); }));
+    if (o.performance) tasks.push(collectPerformance().then(v => { asyncInfo.performance = v; }));
     await withTimeout(Promise.all(tasks.map(p => Promise.resolve(p).catch(() => null))), o.timeoutMs, null);
     const snap = buildSnapshot(asyncInfo);
     snap.collect = {
         ms: Date.now() - started,
-        opts: { files: !!o.files, quota: !!o.quota, wallpaperDecode: !!o.wallpaperDecode, defaultWallpaper: !!o.defaultWallpaper }
+        opts: {
+            files: !!o.files, quota: !!o.quota, wallpaperDecode: !!o.wallpaperDecode,
+            defaultWallpaper: !!o.defaultWallpaper, performance: !!o.performance
+        }
     };
     return snap;
 }

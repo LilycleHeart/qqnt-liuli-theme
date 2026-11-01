@@ -3,9 +3,10 @@
 // 契约：installer/DIAG-COVERAGE.md 第三 / 3.1 / 3.4 节。要点：
 //   1. session.log：每次启动留痕，单文件 ≤256KB，超出轮转为 session.1.log，最多 2 个历史。
 //   2. diagLog：渲染进程单向转发错误，主进程再截断（≤8KB/条）后落 session.log。
-//   3. diagExport：采集环境 / 插件 / 配置 / 安装器日志 / QQ 日志尾部 / 窗口快照（可选截图），
-//      输出 report.txt + meta.json + environment.json + snapshots + logs [+ screenshots/wallpaper]，
-//      纯 JS 写 ZIP（zlib.deflateRawSync + 手写 CRC32/中央目录 + UTF-8 标志 0x0800）。
+//   3. diagExport：采集环境 / 插件 / 配置 / 安装器日志 / QQ 日志尾部 / 窗口快照（可选截图）/
+//      性能（GPU 合成 / 显卡 / 显示器 / 进程 / 渲染帧率），
+//      输出 report.txt + meta.json + environment.json + performance.txt + snapshots + logs
+//      [+ screenshots/wallpaper]，纯 JS 写 ZIP（zlib.deflateRawSync + 手写 CRC32/中央目录 + UTF-8 标志 0x0800）。
 //   4. 主输出 桌面 → documents → temp → data/liuli-dsh-theme/diag 回退；成功后复制一份到 diag/（保留 3 个）。
 //   5. 任何一项采集失败都不影响整包：失败写 report.txt 的「采集失败清单」。
 //   6. 所有文本过 sanitizeText 脱敏（uin=/uid=/u_xxx/邮箱/长 base64/sk-/Bearer），单行 ≤1000 字符。
@@ -38,11 +39,30 @@ const INSTALLER_TAIL_LINES = 200;
 
 const SHOT_MAX_BYTES = 4 * 1024 * 1024; // 单张截图上限
 const SHOTS_TOTAL_MAX = 12 * 1024 * 1024;
-const SNAPSHOT_TIMEOUT_MS = 6000;       // 异步 collectDiagnostics 限时（导出是用户主动操作，6s 可接受）
+// 窗口快照限时：异步 collectDiagnostics 现在多跑 ~2s 的 requestAnimationFrame 帧率采样，
+// 原有 6s 对慢机器（正是我们要诊断的那批机器）偏紧，放宽到 12s。
+const SNAPSHOT_TIMEOUT_MS = 12000;
 const SNAPSHOT_TIMEOUT_SYNC_MS = 3000;  // 回退同步 __liuliDiagSnapshot 限时
 const CAPTURE_TIMEOUT_MS = 5000;
 const SNAPSHOT_MAX_BYTES = 4 * 1024 * 1024;
 const REPORT_LINE_MAX = 1000;
+
+// ---- 性能小节（performance.txt）----
+const GPU_INFO_TIMEOUT_MS = 3000;       // app.getGPUInfo("basic") 超时：拿不到就只写错误
+const METRICS_SAMPLE_GAP_MS = 1000;     // app.getAppMetrics 两次采样间隔（第一次 percentCPUUsage 恒为 0）
+const PERF_FPS_WARN = 40;               // 平均 FPS 低于它 → [!]
+const PERF_BACKDROP_WARN = 30;          // 可见 backdrop-filter 元素超过它 → 提示
+const PERF_LONG_FRAME_MS = 50;          // 长帧阈值（与渲染进程保持一致）
+const PERF_FPS_SAMPLE_MS = 2000;        // 渲染进程 rAF 采样时长（文本里展示用）
+const PERF_ELEMENT_CAP = 5000;          // 渲染进程 DOM 扫描上限（文本里展示用）
+// 会让 backdrop-filter 走软件合成的可疑开关
+const GPU_SWITCH_KEYS = [
+    "disable-gpu", "disable-gpu-compositing", "disable-gpu-rasterization",
+    "disable-gpu-vsync", "disable-software-rasterizer", "disable-frame-rate-limit",
+    "disable-accelerated-2d-canvas", "in-process-gpu", "use-angle", "use-gl",
+    "use-cmd-decoder", "enable-unsafe-swiftshader"
+];
+const GPU_ARGV_RE = /gpu|angle|swiftshader|rasteriz|use-gl|disable-features/i;
 
 const ZIP_FLAG_UTF8 = 0x0800;
 const ZIP_METHOD_DEFLATE = 8;
@@ -122,6 +142,34 @@ function bytesText(n) {
     if (num < 1024 * 1024) return (num / 1024).toFixed(1) + " KB";
     if (num < 1024 * 1024 * 1024) return (num / 1024 / 1024).toFixed(2) + " MB";
     return (num / 1024 / 1024 / 1024).toFixed(2) + " GB";
+}
+
+/** 数字或 null（性能小节全程用它，避免 NaN 进文本 / JSON） */
+function numOrNull(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+/** 只挑对象上的标量字段（GPU 设备这类结构，字段名原样保留，不深挖嵌套） */
+function plainScalars(obj, maxKeys) {
+    const out = {};
+    if (!isObject(obj)) return out;
+    let i = 0;
+    for (const key of Object.keys(obj)) {
+        if (i++ >= (maxKeys || 60)) break;
+        const value = obj[key];
+        const t = typeof value;
+        if (t === "string") out[key] = clip(value, 400);
+        else if (t === "number" || t === "boolean") out[key] = value;
+        else if (value === null) out[key] = null;
+    }
+    return out;
+}
+
+function delay(ms) {
+    const wait = Math.max(0, Number(ms) || 0);
+    return new Promise(resolve => setTimeout(resolve, wait));
 }
 
 function pad2(n) { return String(n).padStart(2, "0"); }
@@ -760,9 +808,9 @@ function buildErrorsDigest(logFiles) {
 /**
  * 创建诊断实例。
  * @param {object} [deps] 可注入依赖（单测用），全部可选：
- *   electron / app / shell / webContents / BrowserWindow / ipcMain / liteLoader(LiteLoader) /
- *   fs / path / os / zlib / crypto / processRef / dataDir / pluginsRoot / profileDir / qqDir /
- *   pluginRoot / now
+ *   electron / app / shell / webContents / BrowserWindow / ipcMain / screen / powerMonitor /
+ *   liteLoader(LiteLoader) / fs / path / os / zlib / crypto / processRef / dataDir / pluginsRoot /
+ *   profileDir / qqDir / pluginRoot / now
  */
 function createDiag(deps) {
     const raw = deps || {};
@@ -783,6 +831,9 @@ function createDiag(deps) {
     D.webContents = raw.webContents || electron.webContents || null;
     D.BrowserWindow = raw.BrowserWindow || electron.BrowserWindow || null;
     D.ipcMain = raw.ipcMain || electron.ipcMain || null;
+    // 性能小节用：只有 app ready 之后才能读，取值一律在 collectPerformance 里 try/catch
+    D.screen = raw.screen || electron.screen || null;
+    D.powerMonitor = raw.powerMonitor || electron.powerMonitor || null;
     D.liteLoader = raw.liteLoader || raw.LiteLoader ||
         (typeof globalThis !== "undefined" ? globalThis.LiteLoader : null);
     D.pluginRoot = raw.pluginRoot || D.path.resolve(__dirname, "..");
@@ -1814,7 +1865,7 @@ function createDiag(deps) {
     }
 
     async function collectWindows(ctx) {
-        const out = { windows: [], snapshots: [], screenshots: [], preview: null, failures: [] };
+        const out = { windows: [], snapshots: [], screenshots: [], preview: null, failures: [], perf: [] };
         const wantShots = !!(ctx.payload && ctx.payload.opts && ctx.payload.opts.screenshots);
         out.screenshotsCaptured = wantShots;
 
@@ -1942,6 +1993,17 @@ function createDiag(deps) {
                     info.theme = { hash: derived.hash, ok: derived.issues.length === 0, issues: derived.issues };
                     themeResults.push(info.theme);
                     pushThemeChecks(ctx, id === null ? "x" + out.windows.length : id, derived, clean);
+
+                    // 性能采样（渲染进程 performance 块）：主窗口那份最有参考价值，原样带出去给性能小节用
+                    const perfSample = perfSampleOf(clean);
+                    if (perfSample) {
+                        info.performance = perfSample;
+                        out.perf.push({
+                            windowId: id === null ? "x" + out.windows.length : id,
+                            main: wc === mainWc,
+                            sample: perfSample
+                        });
+                    }
                 } else {
                     snapOk = false;
                     snapMode = "error";
@@ -2117,6 +2179,308 @@ function createDiag(deps) {
         return out;
     }
 
+    /* ---------- 7b. 性能（GPU 合成 / 显卡 / 显示器 / 进程 / 内存 / 渲染帧率） ---------- */
+
+    /**
+     * 采集性能小节。每一步都独立 try/catch：失败只写进该小节的 error 字段，
+     * 不抛异常、不进「采集失败清单」，整包照常生成。
+     * @returns {Promise<object>} 永远 resolve 的对象，交给 renderPerformanceText 渲染成文本
+     */
+    async function collectPerformance(ctx) {
+        const perf = {
+            schema: SCHEMA,
+            generatedAt: nowIso(),
+            gpu: { featureStatus: null, error: null },
+            gpuInfo: { ok: false, basic: null, error: null, ms: null, gpuDeviceCount: null, multiGpu: null },
+            commandLine: { switches: {}, values: {}, disabledList: [], argvGpu: [], argvTotal: 0, error: null },
+            cpu: { model: null, cores: null, speedMHz: null, error: null },
+            memory: { totalmem: null, freemem: null, usedRatio: null, system: null, systemError: null, error: null },
+            power: { onBatteryPower: null, error: null },
+            displays: { count: null, primaryId: null, items: [], error: null },
+            metrics: { gapMs: METRICS_SAMPLE_GAP_MS, samples: 0, processes: [], byType: {}, total: {}, error: null },
+            renderer: { samples: [], error: null },
+            errors: []
+        };
+        const record = (where, error) => {
+            perf.errors.push({ where: String(where), error: errMsg(error) });
+        };
+
+        /* 1. GPU 特性状态：全部字段原样输出 */
+        try {
+            const app = D.app;
+            if (!app || typeof app.getGPUFeatureStatus !== "function") {
+                perf.gpu.error = "app.getGPUFeatureStatus 不可用（app 未 ready / 非 Electron 环境）";
+            } else {
+                const raw = app.getGPUFeatureStatus();
+                if (!isObject(raw)) {
+                    perf.gpu.error = "app.getGPUFeatureStatus 返回类型异常：" + typeof raw;
+                } else {
+                    const mapped = {};
+                    for (const key of Object.keys(raw).sort()) {
+                        const value = raw[key];
+                        mapped[key] = (value === null || value === undefined) ? null : clip(String(value), 200);
+                    }
+                    perf.gpu.featureStatus = mapped;
+                }
+            }
+        } catch (e) {
+            perf.gpu.error = errMsg(e);
+            record("gpu.featureStatus", e);
+        }
+
+        /* 2. GPU 设备（basic，3s 超时；失败只记错误） */
+        try {
+            const app = D.app;
+            if (!app || typeof app.getGPUInfo !== "function") {
+                perf.gpuInfo.error = "app.getGPUInfo 不可用";
+            } else {
+                const gpuStarted = Date.now();
+                const info = await withTimeout(
+                    Promise.resolve().then(() => app.getGPUInfo("basic")),
+                    GPU_INFO_TIMEOUT_MS, "app.getGPUInfo(\"basic\")");
+                perf.gpuInfo.ms = Date.now() - gpuStarted;
+                if (isObject(info)) {
+                    const devices = Array.isArray(info.gpuDevice) ? info.gpuDevice : [];
+                    perf.gpuInfo.ok = true;
+                    perf.gpuInfo.gpuDeviceCount = devices.length;
+                    perf.gpuInfo.multiGpu = devices.length > 1;
+                    perf.gpuInfo.basic = {
+                        machineModelName: info.machineModelName === undefined ? null : clip(String(info.machineModelName), 200),
+                        machineModelVersion: info.machineModelVersion === undefined ? null : clip(String(info.machineModelVersion), 120),
+                        gpuDevice: devices.slice(0, 8).map((dev, i) => Object.assign({ index: i }, plainScalars(dev, 40)))
+                    };
+                } else {
+                    perf.gpuInfo.error = "app.getGPUInfo(\"basic\") 返回类型异常：" + typeof info;
+                }
+            }
+        } catch (e) {
+            perf.gpuInfo.ok = false;
+            perf.gpuInfo.error = errMsg(e);
+            record("gpu.info", e);
+        }
+
+        /* 3. 命令行开关 + process.argv 里含 gpu 的参数 */
+        try {
+            const cl = D.app && D.app.commandLine;
+            if (!cl) {
+                perf.commandLine.error = "app.commandLine 不可用";
+            } else {
+                for (const key of GPU_SWITCH_KEYS) {
+                    let has = null;
+                    try {
+                        if (typeof cl.hasSwitch === "function") has = !!cl.hasSwitch(key);
+                    } catch (e) { has = null; }
+                    perf.commandLine.switches[key] = has;
+                }
+                for (const key of ["disable-features", "enable-features", "use-angle", "use-gl", "gpu-preferences"]) {
+                    let value = null;
+                    try {
+                        if (typeof cl.getSwitchValue === "function") {
+                            const rawValue = cl.getSwitchValue(key);
+                            value = (rawValue === undefined || rawValue === null) ? "" : clip(String(rawValue), 400);
+                        }
+                    } catch (e) { value = null; }
+                    perf.commandLine.values[key] = value;
+                }
+                const disabled = perf.commandLine.values["disable-features"];
+                if (disabled) {
+                    perf.commandLine.disabledList = String(disabled)
+                        .split(",").map(s => s.trim()).filter(Boolean).slice(0, 40);
+                }
+            }
+            const argv = Array.isArray(D.processRef.argv) ? D.processRef.argv : [];
+            perf.commandLine.argvTotal = argv.length;
+            perf.commandLine.argvGpu = argv
+                .filter(a => GPU_ARGV_RE.test(String(a)))
+                .slice(0, 20)
+                .map(a => clip(String(a), 300));
+        } catch (e) {
+            perf.commandLine.error = errMsg(e);
+            record("commandLine", e);
+        }
+
+        /* 4. CPU / 内存 / 电源 */
+        try {
+            const cpus = (D.os && typeof D.os.cpus === "function") ? (D.os.cpus() || []) : [];
+            perf.cpu.cores = cpus.length || null;
+            if (cpus.length) {
+                perf.cpu.model = clip(String(cpus[0].model || "").trim(), 200) || null;
+                perf.cpu.speedMHz = numOrNull(cpus[0].speed);
+            } else {
+                perf.cpu.error = "os.cpus() 返回空数组";
+            }
+        } catch (e) {
+            perf.cpu.error = errMsg(e);
+            record("cpu", e);
+        }
+
+        try {
+            const total = safeCall(() => D.os.totalmem());
+            const free = safeCall(() => D.os.freemem());
+            perf.memory.totalmem = numOrNull(total);
+            perf.memory.freemem = numOrNull(free);
+            if (perf.memory.totalmem && perf.memory.freemem !== null) {
+                perf.memory.usedRatio = Math.round((1 - perf.memory.freemem / perf.memory.totalmem) * 1000) / 1000;
+            }
+        } catch (e) {
+            perf.memory.error = errMsg(e);
+            record("memory", e);
+        }
+
+        try {
+            const proc = D.processRef;
+            if (proc && typeof proc.getSystemMemoryInfo === "function") {
+                const info = proc.getSystemMemoryInfo();
+                if (isObject(info)) {
+                    perf.memory.system = {
+                        totalKB: numOrNull(info.total),
+                        freeKB: numOrNull(info.free),
+                        swapTotalKB: numOrNull(info.swapTotal),
+                        swapFreeKB: numOrNull(info.swapFree)
+                    };
+                } else {
+                    perf.memory.systemError = "process.getSystemMemoryInfo 返回类型异常：" + typeof info;
+                }
+            } else {
+                perf.memory.systemError = "process.getSystemMemoryInfo 不可用";
+            }
+        } catch (e) {
+            perf.memory.systemError = errMsg(e);
+        }
+
+        try {
+            const pm = D.powerMonitor;
+            if (pm && typeof pm.isOnBatteryPower === "function") {
+                perf.power.onBatteryPower = !!pm.isOnBatteryPower();
+            } else {
+                perf.power.error = "electron.powerMonitor.isOnBatteryPower 不可用";
+            }
+        } catch (e) {
+            perf.power.error = errMsg(e);
+        }
+
+        /* 5. 显示器 */
+        try {
+            const scr = D.screen;
+            if (!scr || typeof scr.getAllDisplays !== "function") {
+                perf.displays.error = "electron.screen 不可用（需 app ready 后调用）";
+            } else {
+                const primary = safeCall(() => scr.getPrimaryDisplay());
+                const list = scr.getAllDisplays() || [];
+                perf.displays.count = Array.isArray(list) ? list.length : null;
+                perf.displays.primaryId = (primary && primary.id !== undefined) ? primary.id : null;
+                perf.displays.items = (Array.isArray(list) ? list : []).slice(0, 8).map((d, i) => ({
+                    index: i,
+                    primary: !!(primary && d && primary.id === d.id),
+                    id: (d && d.id !== undefined) ? d.id : null,
+                    size: (d && d.size) ? { width: numOrNull(d.size.width), height: numOrNull(d.size.height) } : null,
+                    bounds: (d && d.bounds) ? {
+                        x: numOrNull(d.bounds.x), y: numOrNull(d.bounds.y),
+                        width: numOrNull(d.bounds.width), height: numOrNull(d.bounds.height)
+                    } : null,
+                    workAreaSize: (d && d.workAreaSize) ? {
+                        width: numOrNull(d.workAreaSize.width), height: numOrNull(d.workAreaSize.height)
+                    } : null,
+                    scaleFactor: d ? numOrNull(d.scaleFactor) : null,
+                    displayFrequency: d ? numOrNull(d.displayFrequency) : null,
+                    colorDepth: d ? numOrNull(d.colorDepth) : null,
+                    colorSpace: (d && d.colorSpace) ? String(d.colorSpace) : null,
+                    rotation: d ? numOrNull(d.rotation) : null,
+                    internal: (d && typeof d.internal === "boolean") ? d.internal : null,
+                    touchSupport: (d && typeof d.touchSupport === "string") ? clip(d.touchSupport, 40) : null,
+                    label: (d && d.label) ? clip(String(d.label), 120) : ""
+                }));
+            }
+        } catch (e) {
+            perf.displays.error = errMsg(e);
+            record("displays", e);
+        }
+
+        /* 6. 进程资源：采两次间隔 1 秒，用第二次（第一次 percentCPUUsage 恒为 0） */
+        try {
+            const app = D.app;
+            if (!app || typeof app.getAppMetrics !== "function") {
+                perf.metrics.error = "app.getAppMetrics 不可用";
+            } else {
+                const first = app.getAppMetrics();
+                if (!Array.isArray(first)) throw new Error("app.getAppMetrics 返回类型异常：" + typeof first);
+                let last = first;
+                perf.metrics.samples = 1;
+                if (first.length) {
+                    try {
+                        await delay(METRICS_SAMPLE_GAP_MS);
+                        const second = app.getAppMetrics();
+                        if (Array.isArray(second)) { last = second; perf.metrics.samples = 2; }
+                    } catch (e) {
+                        perf.metrics.error = "第二次采样失败（用第一次的值）：" + errMsg(e);
+                    }
+                }
+                const rows = [];
+                for (const m of last.slice(0, 80)) {
+                    if (!isObject(m)) continue;
+                    const cpu = isObject(m.cpu) ? m.cpu : {};
+                    const mem = isObject(m.memory) ? m.memory : {};
+                    rows.push({
+                        pid: numOrNull(m.pid),
+                        type: clip(String(m.type || m.serviceName || m.name || "unknown"), 60),
+                        name: m.name ? clip(String(m.name), 80) : "",
+                        serviceName: m.serviceName ? clip(String(m.serviceName), 80) : "",
+                        percentCPUUsage: numOrNull(cpu.percentCPUUsage),
+                        idleWakeupsPerSecond: numOrNull(cpu.idleWakeupsPerSecond),
+                        workingSetSizeKB: numOrNull(mem.workingSetSize),
+                        peakWorkingSetSizeKB: numOrNull(mem.peakWorkingSetSize),
+                        privateBytesKB: numOrNull(mem.privateBytes),
+                        sharedBytesKB: numOrNull(mem.sharedBytes)
+                    });
+                }
+                perf.metrics.processes = rows;
+
+                const byType = {};
+                const total = { count: 0, percentCPUUsage: 0, workingSetSizeKB: 0 };
+                for (const r of rows) {
+                    const key = r.type || "unknown";
+                    if (!byType[key]) byType[key] = { count: 0, percentCPUUsage: 0, workingSetSizeKB: 0 };
+                    const agg = byType[key];
+                    agg.count++;
+                    if (r.percentCPUUsage !== null) agg.percentCPUUsage += r.percentCPUUsage;
+                    if (r.workingSetSizeKB !== null) agg.workingSetSizeKB += r.workingSetSizeKB;
+                    total.count++;
+                    if (r.percentCPUUsage !== null) total.percentCPUUsage += r.percentCPUUsage;
+                    if (r.workingSetSizeKB !== null) total.workingSetSizeKB += r.workingSetSizeKB;
+                }
+                for (const key of Object.keys(byType)) {
+                    byType[key].percentCPUUsage = Math.round(byType[key].percentCPUUsage * 10) / 10;
+                    byType[key].workingSetSizeMB = Math.round(byType[key].workingSetSizeKB / 1024 * 10) / 10;
+                }
+                total.percentCPUUsage = Math.round(total.percentCPUUsage * 10) / 10;
+                total.workingSetSizeMB = Math.round(total.workingSetSizeKB / 1024 * 10) / 10;
+                perf.metrics.byType = byType;
+                perf.metrics.total = total;
+            }
+        } catch (e) {
+            perf.metrics.error = errMsg(e);
+            record("metrics", e);
+        }
+
+        /* 结论 1/3：GPU 合成是否开启（backdrop-filter 卡不卡的第一嫌疑） */
+        const status = perf.gpu.featureStatus;
+        const compositing = status ? status.gpu_compositing : null;
+        if (compositing && typeof ctx.check === "function") {
+            const hardSwitch = ["disable-gpu", "disable-gpu-compositing", "disable-software-rasterizer"]
+                .filter(key => perf.commandLine.switches[key] === true);
+            if (compositing === "enabled") {
+                ctx.check("perf.gpu", "ok", "GPU 合成已开启（gpu_compositing=enabled）");
+            } else {
+                ctx.check("perf.gpu", "warn",
+                    "GPU 合成未开启（gpu_compositing=" + compositing + "），模糊效果会很卡：backdrop-filter 会走软件合成"
+                    + (hardSwitch.length ? "；命令行带了 --" + hardSwitch.join(" / --") : "")
+                    + " <<==");
+            }
+        }
+
+        return perf;
+    }
+
     /* ---------- 8. payload 校验 ---------- */
 
     function normalizePayload(rawPayload) {
@@ -2201,7 +2565,8 @@ function createDiag(deps) {
             for (const t of m.outputFallbacks) push("   - " + t.label + " → " + (t.dir || "") + " ： " + (t.error || t.ok || "?"));
         }
         push("采集范围: 主进程环境 / 插件清单与注入文件 / 插件配置 / LiteLoader 配置 / 安装器日志与备份 / " +
-            "QQ 日志尾部 / 其它插件小日志尾部 / 窗口快照与 UI 主题结论 / 设置页截图（默认）" +
+            "QQ 日志尾部 / 其它插件小日志尾部 / 窗口快照与 UI 主题结论 / " +
+            "性能（GPU 合成 / 显卡 / 显示器 / 进程 / 帧率，见 performance.txt）/ 设置页截图（默认）" +
             (m.screenshotIncluded ? " / 聊天窗口截图（已勾选）" : ""));
         push("未采集: 聊天记录 nt_msg.db、表情图片、聊天内容正文、插件源码全文");
         push("包含截图: " + (m.screenshotSummary || (m.screenshotIncluded ? "是" : "否")));
@@ -2578,6 +2943,40 @@ function createDiag(deps) {
             let windows = { windows: [], snapshots: [], screenshots: [], preview: null, failures: [], screenshotsCaptured: false };
             try { windows = await collectWindows(ctx); } catch (e) { ctx.fail("窗口快照", e); }
 
+            /* --- 性能小节：GPU 合成 / 显卡 / 显示器 / 进程 + 渲染进程帧率，输出 performance.txt --- */
+            let performance = null;
+            try {
+                performance = await collectPerformance(ctx);
+            } catch (e) {
+                // collectPerformance 内部已逐步兜底，走到这里说明连对象都没建起来：记清单，整包继续
+                ctx.fail("性能采集", e);
+            }
+            try {
+                if (performance) {
+                    const samples = ((windows && Array.isArray(windows.perf)) ? windows.perf : [])
+                        .slice(0, 8)
+                        .map(item => ({ windowId: item.windowId, main: item.main === true, sample: item.sample }));
+                    if (payload.snapshot) {
+                        const fromPayload = perfSampleOf(payload.snapshot);
+                        if (fromPayload) samples.push({ windowId: "payload", main: true, sample: fromPayload });
+                    }
+                    performance.renderer = {
+                        samples: samples,
+                        error: samples.length ? null : "渲染进程快照里没有 performance 块（渲染进程诊断可能是旧版，或窗口快照失败）"
+                    };
+                    applyRendererPerfChecks(ctx, performance.renderer);
+                    ctx.addText("performance.txt", renderPerformanceText(performance));
+                } else {
+                    // 极端情况（连采集对象都没建起来）：也要留一个文件，别让维护者以为没采
+                    ctx.addText("performance.txt",
+                        "琉璃诊断包 · performance.txt（性能小节）\n" +
+                        "采集时间: " + ctx.generatedAt + "\n" +
+                        "采集失败：主进程性能采集初始化异常，详见 report.txt 的「采集失败清单」。\n");
+                }
+            } catch (e) {
+                ctx.fail("性能小节输出", e);
+            }
+
             /* --- 渲染进程上报的 checks 汇入结论 --- */
             if (payload.snapshot) {
                 const snapChecks = Array.isArray(payload.snapshot.checks) ? payload.snapshot.checks : [];
@@ -2708,6 +3107,7 @@ function createDiag(deps) {
                 },
                 checks: ctx.checks,
                 failures: ctx.failures,
+                performance: performanceSummary(performance),
                 windows: (windows.windows || []).map(w => ({
                     id: w.id,
                     type: w.type,
@@ -2721,6 +3121,7 @@ function createDiag(deps) {
                     sessionSameAsMain: w.sessionSameAsMain,
                     snapshot: w.snapshot,
                     theme: w.theme || null,
+                    performance: w.performance || null,
                     screenshot: w.screenshotInfo
                         ? {
                             captured: w.screenshotInfo.captured,
@@ -3110,7 +3511,12 @@ function createDiag(deps) {
             sanitizeText: sanitizeText,
             deepSanitize: deepSanitize,
             buildZip: buildZip,
-            crc32: crc32
+            crc32: crc32,
+            collectPerformance: collectPerformance,
+            renderPerformanceText: renderPerformanceText,
+            performanceSummary: performanceSummary,
+            applyRendererPerfChecks: applyRendererPerfChecks,
+            perfSampleOf: perfSampleOf
         }
     };
     return api;
@@ -3122,6 +3528,407 @@ function createDiag(deps) {
 
 function safeCall(fn) {
     try { return fn(); } catch (e) { return null; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 九、性能小节：渲染进程采样归一化 / performance.txt 文本 / 结论
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 从渲染进程快照里取 performance 块并归一化（缺字段一律 null，不编造）。
+ * @param {object} snapshot window.__liuliDiagSnapshot() 的返回值
+ * @returns {object|null}
+ */
+function perfSampleOf(snapshot) {
+    if (!isObject(snapshot) || !isObject(snapshot.performance)) return null;
+    const p = snapshot.performance;
+    const fps = isObject(p.fps) ? p.fps : {};
+    const bd = isObject(p.backdrop) ? p.backdrop : {};
+    const vis = isObject(p.visibility) ? p.visibility : {};
+    const mat = isObject(p.material) ? p.material : {};
+    const vp = isObject(p.viewport) ? p.viewport : {};
+    const anim = isObject(p.animations)
+        ? { total: numOrNull(p.animations.total), running: numOrNull(p.animations.running) }
+        : (numOrNull(p.animations) !== null ? { total: numOrNull(p.animations), running: null } : null);
+    return {
+        sampled: p.sampled === true,
+        sampleMs: numOrNull(p.sampleMs),
+        visibility: vis.state ? String(vis.state) : null,
+        hidden: vis.hidden === true || fps.hidden === true,
+        avgFps: numOrNull(fps.avgFps),
+        worstFrameMs: numOrNull(fps.worstFrameMs),
+        longFrames: numOrNull(fps.longFrames),
+        frames: numOrNull(fps.frames),
+        fpsMs: numOrNull(fps.ms),
+        fpsOk: fps.ok === true,
+        fpsPartial: fps.partial === true,
+        fpsError: fps.error ? String(fps.error) : null,
+        backdropVisible: numOrNull(bd.visible),
+        backdropPseudo: numOrNull(bd.pseudoBefore),
+        // 卡顿判据用「自身 + ::before」的总数：琉璃很多卡片把材质画在伪元素上，只看自身会大幅低估
+        backdropTotal: (() => {
+            const declared = numOrNull(bd.total);
+            if (declared !== null) return declared;
+            const own = numOrNull(bd.visible);
+            const pseudo = numOrNull(bd.pseudoBefore);
+            if (own === null && pseudo === null) return null;
+            return (own || 0) + (pseudo || 0);
+        })(),
+        backdropElements: numOrNull(bd.elements),
+        backdropScanned: numOrNull(bd.scanned),
+        backdropScanMs: numOrNull(bd.scanMs),
+        backdropTruncated: bd.truncated === true || bd.budgetHit === true,
+        backdropBudgetHit: bd.budgetHit === true,
+        backdropError: bd.error ? String(bd.error) : null,
+        animations: anim,
+        viewport: { w: numOrNull(vp.w), h: numOrNull(vp.h), dpr: numOrNull(vp.dpr) },
+        material: {
+            "--ll-material-blur": mat["--ll-material-blur"] === undefined ? null : String(mat["--ll-material-blur"]),
+            "--ll-material-opacity": mat["--ll-material-opacity"] === undefined ? null : String(mat["--ll-material-opacity"]),
+            "--ll-glow-strength": mat["--ll-glow-strength"] === undefined ? null : String(mat["--ll-glow-strength"])
+        },
+        wallpaper: isObject(p.wallpaper) ? p.wallpaper : null
+    };
+}
+
+/** meta.json 里的紧凑摘要（完整内容在 performance.txt） */
+function performanceSummary(perf) {
+    if (!isObject(perf)) return null;
+    const status = (isObject(perf.gpu) && isObject(perf.gpu.featureStatus)) ? perf.gpu.featureStatus : null;
+    const pick = key => (status && status[key] !== undefined ? status[key] : null);
+    const samples = (isObject(perf.renderer) && Array.isArray(perf.renderer.samples)) ? perf.renderer.samples : [];
+    const switches = isObject(perf.commandLine) && isObject(perf.commandLine.switches) ? perf.commandLine.switches : {};
+    return {
+        gpu_compositing: pick("gpu_compositing"),
+        rasterization: pick("rasterization"),
+        webgl: pick("webgl"),
+        gpuInfoOk: !!(isObject(perf.gpuInfo) && perf.gpuInfo.ok),
+        gpuDeviceCount: isObject(perf.gpuInfo) ? numOrNull(perf.gpuInfo.gpuDeviceCount) : null,
+        gpuInfoError: isObject(perf.gpuInfo) ? (perf.gpuInfo.error || null) : null,
+        gpuDisableSwitches: ["disable-gpu", "disable-gpu-compositing", "disable-software-rasterizer"]
+            .filter(key => switches[key] === true),
+        cpu: isObject(perf.cpu) ? { model: perf.cpu.model, cores: numOrNull(perf.cpu.cores) } : null,
+        totalmem: isObject(perf.memory) ? numOrNull(perf.memory.totalmem) : null,
+        freemem: isObject(perf.memory) ? numOrNull(perf.memory.freemem) : null,
+        onBatteryPower: isObject(perf.power) ? perf.power.onBatteryPower : null,
+        displays: isObject(perf.displays) ? numOrNull(perf.displays.count) : null,
+        renderer: samples.map(item => ({
+            windowId: item && item.windowId !== undefined ? item.windowId : null,
+            main: !!(item && item.main === true),
+            hidden: item && item.sample ? item.sample.hidden : null,
+            avgFps: item && item.sample ? item.sample.avgFps : null,
+            worstFrameMs: item && item.sample ? item.sample.worstFrameMs : null,
+            longFrames: item && item.sample ? item.sample.longFrames : null,
+            backdropVisible: item && item.sample ? item.sample.backdropVisible : null,
+            backdropPseudo: item && item.sample ? item.sample.backdropPseudo : null,
+            backdropTotal: item && item.sample ? item.sample.backdropTotal : null
+        })),
+        errors: Array.isArray(perf.errors) ? perf.errors.slice(0, 12) : []
+    };
+}
+
+/** 结论 2/3 + 3/3：帧率与可见 backdrop-filter 元素数（数据来自渲染进程快照） */
+function applyRendererPerfChecks(ctx, renderer) {
+    if (!ctx || typeof ctx.check !== "function") return;
+    const samples = (isObject(renderer) && Array.isArray(renderer.samples)) ? renderer.samples : [];
+    const valid = samples.filter(item => isObject(item) && isObject(item.sample));
+    if (!valid.length) {
+        ctx.check("perf.renderer", "warn",
+            "渲染进程快照里没有 performance 块（渲染进程诊断可能是旧版，或窗口快照失败），帧率 / backdrop-filter 数据缺失");
+        return;
+    }
+
+    const labelOf = item => (item.windowId === "payload"
+        ? "当前页面"
+        : ("窗口 " + item.windowId + (item.main ? "（主窗口）" : "")));
+
+    const withFps = valid.filter(item => item.sample.avgFps !== null && item.sample.avgFps !== undefined);
+    if (withFps.length) {
+        const worst = withFps.slice().sort((a, b) => a.sample.avgFps - b.sample.avgFps)[0];
+        const s = worst.sample;
+        if (Number(s.avgFps) < PERF_FPS_WARN) {
+            ctx.check("perf.fps", "warn",
+                labelOf(worst) + "平均帧率 " + s.avgFps + " FPS（低于 " + PERF_FPS_WARN + "），动画/滚动会明显卡：最差帧间隔 "
+                + (s.worstFrameMs === null ? "?" : s.worstFrameMs + "ms") + "，" + (s.longFrames === null ? "?" : s.longFrames)
+                + " 帧超过 " + PERF_LONG_FRAME_MS + "ms <<==");
+        } else {
+            ctx.check("perf.fps", "ok",
+                labelOf(worst) + "平均帧率 " + s.avgFps + " FPS（最差帧间隔 "
+                + (s.worstFrameMs === null ? "?" : s.worstFrameMs + "ms") + "，" + (s.longFrames === null ? "?" : s.longFrames)
+                + " 帧超过 " + PERF_LONG_FRAME_MS + "ms）");
+        }
+    } else if (valid.every(item => item.sample.hidden === true)) {
+        ctx.check("perf.fps", "warn",
+            "窗口在后台（document.hidden=true），requestAnimationFrame 不触发，没采到帧率；把琉璃窗口切到前台再导一次才有 FPS 数据");
+    } else {
+        ctx.check("perf.fps", "warn",
+            "帧率采样没有拿到有效数据（渲染进程只采到 "
+            + (valid.filter(item => item.sample.fpsError).length) + " 条错误，详见 performance.txt 第 7 节）");
+    }
+
+    const withBackdrop = valid.filter(item => item.sample.backdropTotal !== null && item.sample.backdropTotal !== undefined);
+    if (withBackdrop.length) {
+        const top = withBackdrop.slice().sort((a, b) => b.sample.backdropTotal - a.sample.backdropTotal)[0];
+        const s = top.sample;
+        const detail = "（自身 " + (s.backdropVisible === null ? "?" : s.backdropVisible)
+            + " 个 / ::before " + (s.backdropPseudo === null ? "?" : s.backdropPseudo) + " 个）";
+        if (Number(s.backdropTotal) > PERF_BACKDROP_WARN) {
+            ctx.check("perf.backdrop", "warn",
+                labelOf(top) + "可见 backdrop-filter 元素 " + s.backdropTotal + " 个" + detail
+                + "，超过 " + PERF_BACKDROP_WARN + " 个：模糊图层越多越吃 GPU"
+                + (s.backdropTruncated ? "（扫描被上限/预算截断，实际可能更多）" : ""));
+        } else {
+            ctx.check("perf.backdrop", "ok",
+                labelOf(top) + "可见 backdrop-filter 元素 " + s.backdropTotal + " 个" + detail + "，在合理范围");
+        }
+    }
+}
+
+/**
+ * 渲染 performance.txt（人能读的文本，分小节；关键字段名保持 Electron / Node 原名）。
+ * @param {object} perf collectPerformance() 的返回值（renderer 已由 exportDiag 补上）
+ * @returns {string}
+ */
+function renderPerformanceText(perf) {
+    const L = [];
+    const push = (...items) => { for (const it of items) L.push(it === undefined || it === null ? "" : String(it)); };
+    const fmtNum = (value, digits) => {
+        const n = numOrNull(value);
+        if (n === null) return "—";
+        const d = typeof digits === "number" ? digits : 0;
+        return d > 0 ? n.toFixed(d) : String(Math.round(n));
+    };
+    const fmtMB = kb => {
+        const n = numOrNull(kb);
+        return n === null ? "—" : (n / 1024).toFixed(1) + " MB";
+    };
+    const fmtGB = bytes => {
+        const n = numOrNull(bytes);
+        return n === null ? "—" : (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
+    };
+    const p = isObject(perf) ? perf : {};
+
+    push("琉璃诊断包 · performance.txt（性能小节）");
+    push("schema: " + (p.schema === undefined ? SCHEMA : p.schema));
+    push("采集时间: " + (p.generatedAt || "?") + "（本地 " + localStamp(new Date()) + " " + tzOffsetText(new Date()) + "）");
+    push("说明: 只列本次采集到的原始值，字段名保持 Electron / Node 原名；「—」表示这台机器拿不到该值" +
+        "（错误原因见同小节 error 那行）。数值不需要逐条读，重点看第 1 节 gpu_compositing 与第 7 节平均 FPS。");
+    push("");
+
+    /* 1. GPU 特性状态 */
+    push("==================== 1. GPU 特性状态（app.getGPUFeatureStatus） ====================");
+    const status = (isObject(p.gpu) && isObject(p.gpu.featureStatus)) ? p.gpu.featureStatus : null;
+    if (status) {
+        for (const key of Object.keys(status).sort()) {
+            const value = status[key];
+            const warnText = (key === "gpu_compositing" && value !== "enabled") ? "   [!] 不是 enabled" : "";
+            push("   " + key + ": " + (value === null ? "—" : value) + warnText);
+        }
+        if (isObject(p.gpu) && p.gpu.error) push("   error: " + p.gpu.error);
+    } else {
+        push("   （未取到）" + ((isObject(p.gpu) && p.gpu.error) ? "error: " + p.gpu.error : ""));
+    }
+    push("");
+
+    /* 2. GPU 设备 */
+    push("==================== 2. GPU 设备（app.getGPUInfo(\"basic\")） ====================");
+    const gpuInfo = isObject(p.gpuInfo) ? p.gpuInfo : {};
+    push("   ok: " + String(gpuInfo.ok === true) + "   ms: " + fmtNum(gpuInfo.ms)
+        + (gpuInfo.error ? "   error: " + gpuInfo.error : ""));
+    push("   gpuDeviceCount: " + fmtNum(gpuInfo.gpuDeviceCount) + "   multiGpu: "
+        + (gpuInfo.multiGpu === null || gpuInfo.multiGpu === undefined ? "—" : String(gpuInfo.multiGpu)));
+    const basic = isObject(gpuInfo.basic) ? gpuInfo.basic : null;
+    if (basic) {
+        if (basic.machineModelName) push("   machineModelName: " + basic.machineModelName);
+        if (basic.machineModelVersion) push("   machineModelVersion: " + basic.machineModelVersion);
+        const devices = Array.isArray(basic.gpuDevice) ? basic.gpuDevice : [];
+        if (!devices.length) push("   gpuDevice: （空）");
+        for (const dev of devices) {
+            const items = isObject(dev) ? dev : {};
+            push("   ── gpuDevice[" + String(items.index === undefined ? "?" : items.index) + "]");
+            for (const key of Object.keys(items).sort()) {
+                if (key === "index") continue;
+                const value = items[key];
+                push("      " + key + ": " + (value === null || value === undefined || value === "" ? "—" : value));
+            }
+        }
+    }
+    push("");
+
+    /* 3. 命令行开关 */
+    push("==================== 3. 命令行开关（app.commandLine / process.argv） ====================");
+    const cl = isObject(p.commandLine) ? p.commandLine : {};
+    const switches = isObject(cl.switches) ? cl.switches : {};
+    for (const key of Object.keys(switches).sort()) {
+        const value = switches[key];
+        push("   --" + key + ": " + (value === null ? "—（hasSwitch 不可用）" : (value ? "有" : "无")));
+    }
+    const values = isObject(cl.values) ? cl.values : {};
+    for (const key of Object.keys(values)) {
+        const value = values[key];
+        if (value === null) {
+            push("   --" + key + ": —（getSwitchValue 不可用）");
+        } else if (value !== "") {
+            push("   --" + key + "=" + value);
+        }
+    }
+    if (Array.isArray(cl.disabledList) && cl.disabledList.length) {
+        push("   disable-features 拆分: " + cl.disabledList.join(", "));
+    }
+    push("   argv 总数: " + fmtNum(cl.argvTotal));
+    if (Array.isArray(cl.argvGpu) && cl.argvGpu.length) {
+        push("   process.argv 里含 gpu 的参数:");
+        for (const arg of cl.argvGpu) push("     " + arg);
+    } else {
+        push("   process.argv 里含 gpu 的参数: （无）");
+    }
+    if (cl.error) push("   error: " + cl.error);
+    push("");
+
+    /* 4. CPU / 内存 / 电源 */
+    push("==================== 4. CPU / 内存 / 电源 ====================");
+    const cpu = isObject(p.cpu) ? p.cpu : {};
+    push("   os.cpus()[0].model: " + (cpu.model || "—"));
+    push("   os.cpus().length（逻辑核数）: " + fmtNum(cpu.cores) + "   speedMHz: " + fmtNum(cpu.speedMHz));
+    if (cpu.error) push("   error: " + cpu.error);
+    const memory = isObject(p.memory) ? p.memory : {};
+    push("   os.totalmem: " + fmtGB(memory.totalmem) + "（" + fmtNum(memory.totalmem) + " B）");
+    push("   os.freemem: " + fmtGB(memory.freemem) + "（" + fmtNum(memory.freemem) + " B）");
+    push("   已用比例: " + (numOrNull(memory.usedRatio) === null
+        ? "—"
+        : (Math.round(memory.usedRatio * 1000) / 10) + "%"));
+    const systemMem = isObject(memory.system) ? memory.system : null;
+    if (systemMem) {
+        push("   process.getSystemMemoryInfo: total=" + fmtNum(systemMem.totalKB) + "KB free=" + fmtNum(systemMem.freeKB)
+            + "KB swapTotal=" + fmtNum(systemMem.swapTotalKB) + "KB swapFree=" + fmtNum(systemMem.swapFreeKB) + "KB");
+    } else {
+        push("   process.getSystemMemoryInfo: —" + (memory.systemError ? "（" + memory.systemError + "）" : ""));
+    }
+    if (memory.error) push("   memory error: " + memory.error);
+    const power = isObject(p.power) ? p.power : {};
+    push("   powerMonitor.isOnBatteryPower: "
+        + (power.onBatteryPower === null || power.onBatteryPower === undefined
+            ? "—"
+            : (power.onBatteryPower ? "true（正在用电池）" : "false（已接电源）"))
+        + (power.error ? "（" + power.error + "）" : ""));
+    push("");
+
+    /* 5. 显示器 */
+    push("==================== 5. 显示器（electron.screen.getAllDisplays） ====================");
+    const displays = isObject(p.displays) ? p.displays : {};
+    if (displays.error) push("   error: " + displays.error);
+    push("   显示器数量: " + fmtNum(displays.count) + "   主屏 id: "
+        + (displays.primaryId === null || displays.primaryId === undefined ? "—" : displays.primaryId));
+    const displayItems = Array.isArray(displays.items) ? displays.items : [];
+    for (const d of displayItems) {
+        const size = isObject(d.size) ? d.size : {};
+        const work = isObject(d.workAreaSize) ? d.workAreaSize : {};
+        push("   [" + String(d.index) + "] primary=" + String(d.primary === true)
+            + "  size=" + fmtNum(size.width) + "x" + fmtNum(size.height)
+            + "  workArea=" + fmtNum(work.width) + "x" + fmtNum(work.height)
+            + "  scaleFactor=" + fmtNum(d.scaleFactor, 2)
+            + "  displayFrequency=" + (numOrNull(d.displayFrequency) === null ? "—" : fmtNum(d.displayFrequency) + "Hz")
+            + "  colorDepth=" + fmtNum(d.colorDepth)
+            + (d.rotation === null ? "" : "  rotation=" + fmtNum(d.rotation))
+            + (d.internal === null ? "" : "  internal=" + String(d.internal))
+            + (d.touchSupport ? "  touchSupport=" + d.touchSupport : "")
+            + (d.label ? "  label=" + d.label : ""));
+    }
+    push("");
+
+    /* 6. 进程资源 */
+    push("==================== 6. 进程资源（app.getAppMetrics，两次采样取第二次） ====================");
+    const metrics = isObject(p.metrics) ? p.metrics : {};
+    push("   采样次数: " + fmtNum(metrics.samples) + "   采样间隔: " + fmtNum(metrics.gapMs)
+        + "ms（第一次采样的 percentCPUUsage 恒为 0，所以用第二次）");
+    if (metrics.error) push("   error: " + metrics.error);
+    const rows = Array.isArray(metrics.processes) ? metrics.processes : [];
+    if (!rows.length && !metrics.error) push("   （没有进程数据）");
+    for (const r of rows) {
+        push("   pid=" + (r.pid === null || r.pid === undefined ? "?" : r.pid)
+            + "  type=" + (r.type || "unknown")
+            + "  percentCPUUsage=" + (r.percentCPUUsage === null ? "—" : fmtNum(r.percentCPUUsage, 1) + "%")
+            + "  workingSetSize=" + fmtMB(r.workingSetSizeKB) + " (" + fmtNum(r.workingSetSizeKB) + " KB)"
+            + (r.idleWakeupsPerSecond === null ? "" : "  idleWakeupsPerSecond=" + fmtNum(r.idleWakeupsPerSecond, 1))
+            + (r.name ? "  name=" + r.name : "")
+            + (r.serviceName ? "  serviceName=" + r.serviceName : ""));
+    }
+    const byType = isObject(metrics.byType) ? metrics.byType : {};
+    const typeKeys = Object.keys(byType);
+    if (typeKeys.length) {
+        push("   ── 按进程类型汇总");
+        for (const key of typeKeys) {
+            const agg = isObject(byType[key]) ? byType[key] : {};
+            push("      " + key + "  ×" + fmtNum(agg.count) + "  CPU 合计 " + fmtNum(agg.percentCPUUsage, 1)
+                + "%  内存合计 " + fmtNum(agg.workingSetSizeMB, 1) + " MB");
+        }
+        const total = isObject(metrics.total) ? metrics.total : {};
+        push("      合计  ×" + fmtNum(total.count) + "  CPU 合计 " + fmtNum(total.percentCPUUsage, 1)
+            + "%  内存合计 " + fmtNum(total.workingSetSizeMB, 1) + " MB");
+    }
+    push("");
+
+    /* 7. 渲染进程页面性能 */
+    push("==================== 7. 渲染进程页面性能（渲染进程快照里的 performance 块） ====================");
+    const renderer = isObject(p.renderer) ? p.renderer : {};
+    const samples = Array.isArray(renderer.samples) ? renderer.samples : [];
+    if (renderer.error) push("   error: " + renderer.error);
+    if (!samples.length) push("   （没有渲染进程性能采样：渲染进程诊断可能是旧版，或窗口快照失败）");
+    for (const item of samples) {
+        const s = isObject(item && item.sample) ? item.sample : {};
+        const source = item.windowId === "payload"
+            ? "渲染进程 payload（当前页面）"
+            : ("窗口 " + item.windowId + (item.main ? "（主窗口）" : ""));
+        push("");
+        push("   ── " + source);
+        push("      visibility: " + (s.visibility || "—") + "   hidden: " + String(s.hidden === true));
+        if (s.avgFps !== null && s.avgFps !== undefined) {
+            push("      平均 FPS: " + fmtNum(s.avgFps, 1) + "（" + fmtNum(s.frames) + " 帧 / " + fmtNum(s.fpsMs) + "ms）");
+            push("      最差帧间隔: " + fmtNum(s.worstFrameMs, 1) + "ms");
+            push("      长帧数（>" + PERF_LONG_FRAME_MS + "ms）: " + fmtNum(s.longFrames));
+            if (s.fpsPartial) push("      采样未采满 " + PERF_FPS_SAMPLE_MS + "ms（采样期间页面切到后台？）");
+        } else {
+            push("      平均 FPS: —（未采样" + (s.fpsError ? "：" + s.fpsError : "") + "）");
+        }
+        if (s.backdropTotal !== null && s.backdropTotal !== undefined) {
+            push("      可见 backdrop-filter 元素: " + fmtNum(s.backdropTotal)
+                + "（自身 " + fmtNum(s.backdropVisible) + " 个 / ::before 伪元素 " + fmtNum(s.backdropPseudo) + " 个）");
+            push("      DOM 扫描: " + fmtNum(s.backdropScanned) + " / " + fmtNum(s.backdropElements) + " 个元素，用时 "
+                + fmtNum(s.backdropScanMs) + "ms"
+                + (s.backdropTruncated ? "，已按 " + PERF_ELEMENT_CAP + " 个上限或时间预算截断（计数可能偏小）" : ""));
+        } else {
+            push("      可见 backdrop-filter 元素: —（未采集" + (s.backdropError ? "：" + s.backdropError : "") + "）");
+        }
+        push("      正在运行的动画（document.getAnimations）: total="
+            + fmtNum(s.animations ? s.animations.total : null)
+            + "  running=" + fmtNum(s.animations ? s.animations.running : null));
+        const viewport = isObject(s.viewport) ? s.viewport : {};
+        push("      viewport: " + fmtNum(viewport.w) + "x" + fmtNum(viewport.h)
+            + "   devicePixelRatio: " + fmtNum(viewport.dpr, 2));
+        const material = isObject(s.material) ? s.material : {};
+        push("      材质变量: --ll-material-blur=" + (material["--ll-material-blur"] || "—")
+            + "  --ll-material-opacity=" + (material["--ll-material-opacity"] || "—")
+            + "  --ll-glow-strength=" + (material["--ll-glow-strength"] || "—"));
+        const wallpaper = isObject(s.wallpaper) ? s.wallpaper : null;
+        if (wallpaper) {
+            if (wallpaper.error) {
+                push("      壁纸: —（" + wallpaper.error + "）");
+            } else if (!wallpaper.present) {
+                push("      壁纸: 未设置自定义壁纸");
+            } else {
+                const natural = (numOrNull(wallpaper.naturalWidth) && numOrNull(wallpaper.naturalHeight))
+                    ? (fmtNum(wallpaper.naturalWidth) + "x" + fmtNum(wallpaper.naturalHeight))
+                    : "—（本次未解码）";
+                push("      壁纸: 原始分辨率 " + natural
+                    + "  估算大小 " + bytesText(wallpaper.approxBytes)
+                    + "（dataURL " + fmtNum(wallpaper.srcLen) + " 字符，MIME " + (wallpaper.mime || "—")
+                    + "，fit=" + (wallpaper.fit || "—") + "）");
+            }
+        }
+    }
+    push("");
+    push("（完）");
+    return L.join("\n") + "\n";
 }
 
 module.exports = {
@@ -3137,6 +3944,8 @@ module.exports = {
     buildErrorsDigest: buildErrorsDigest,
     SNAP_SCRIPT: SNAP_SCRIPT,
     SNAP_SCRIPT_ASYNC: SNAP_SCRIPT_ASYNC,
+    perfSampleOf: perfSampleOf,
+    renderPerformanceText: renderPerformanceText,
     SLUG: SLUG,
     SCHEMA: SCHEMA
 };
