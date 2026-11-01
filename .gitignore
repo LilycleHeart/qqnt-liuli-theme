@@ -5,3 +5,7 @@ Thumbs.db
 # 本地默认壁纸，不发布
 assets/wallpaper.css
 assets/wallpaper.jpg
+
+# 静态检查脚本（tools/verify-renderer-static.cjs）的产物
+renderer-syntax/
+verify-renderer-static-result.json
