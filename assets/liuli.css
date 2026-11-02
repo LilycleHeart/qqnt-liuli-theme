@@ -407,6 +407,15 @@ a,
 .q-scroll-view::-webkit-scrollbar-thumb:active {
   box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 90%, transparent) !important;
 }
+/* 带 scroll-view--hide-scrollbar 的滚动区（聊天消息区等）用 QQ 自己画的 .v-scrollbar，原生滚动条只是没画出来：
+ * QQ 用 display:block !important 让它一直在，靠滑块透明藏起来。上面给滑块上色后它就露出来了，
+ * 聊天区出现两条滚动条（2026-11-02 用户反馈）。这里把它的滑块重新设成透明。 */
+.q-scroll-view.scroll-view--hide-scrollbar::-webkit-scrollbar-thumb,
+.q-scroll-view.scroll-view--hide-scrollbar:hover::-webkit-scrollbar-thumb,
+.q-scroll-view.scroll-view--hide-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+}
 /* 消息区的滚动条不是原生的：QQ 用 .v-scrollbar-thumb 的内阴影画成灰色 */
 .v-scrollbar-thumb {
   box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--ll-brand) 55%, transparent) !important;
