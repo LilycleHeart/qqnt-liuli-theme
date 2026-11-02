@@ -57,7 +57,7 @@ body .recent-contact-item .item__content {
 body .recent-contact-item:has(.q-badge-num) .contact-name__text {
   font-weight: 600 !important;
 }
-body .recent-contact-item:has(.q-badge-num):not(:has(.no-disturb-icon)):not(.recent-contact-item--selected) .item__content::before {
+body .recent-contact-item:has(.q-badge-num):not(:has(.no-disturb-icon)):not(:has(.q-badge__grey)):not(.recent-contact-item--selected) .item__content::before {
   content: "";
   position: absolute;
   left: 0;
@@ -70,21 +70,25 @@ body .recent-contact-item:has(.q-badge-num):not(:has(.no-disturb-icon)):not(.rec
   box-shadow: 0 0 10px rgba(var(--ll-brand-rgb), 0.85), 0 0 2px var(--ll-brand);
   pointer-events: none;
 }
-body .recent-contact-item:has(.q-badge-num):not(:has(.no-disturb-icon)) .q-badge-num:not(#ll) {
+body .recent-contact-item:has(.q-badge-num):not(:has(.no-disturb-icon)) .q-badge-num:not(.q-badge__grey):not(#ll) {
   box-shadow: 0 0 8px rgba(var(--ll-brand-rgb), 0.5) !important;
 }
 
-/* 免打扰：未读数改灰色胶囊，摘要淡一档 */
-body .recent-contact-item:has(.no-disturb-icon) .q-badge-num:not(#ll) {
+/* 免打扰：未读数改灰色胶囊，摘要淡一档。
+ * QQ 给免打扰会话的角标加 q-badge__grey，有的会话不显示免打扰图标，两种都认（#23）。 */
+body .recent-contact-item:has(.no-disturb-icon) .q-badge-num:not(#ll),
+body .recent-contact-item .q-badge-num.q-badge__grey:not(#ll) {
   background: rgba(var(--ll-on-glass-rgb), 0.16) !important;
   color: var(--ll-on-glass-2) !important;
   box-shadow: none !important;
 }
-body .recent-contact-item:has(.no-disturb-icon) .q-badge-num:not(#ll) * {
+body .recent-contact-item:has(.no-disturb-icon) .q-badge-num:not(#ll) *,
+body .recent-contact-item .q-badge-num.q-badge__grey:not(#ll) * {
   background: transparent !important;
   color: inherit !important;
 }
-body .recent-contact-item:has(.no-disturb-icon):not(.recent-contact-item--selected) .item__summary {
+body .recent-contact-item:has(.no-disturb-icon):not(.recent-contact-item--selected) .item__summary,
+body .recent-contact-item:has(.q-badge__grey):not(.recent-contact-item--selected) .item__summary {
   opacity: 0.72;
 }
 

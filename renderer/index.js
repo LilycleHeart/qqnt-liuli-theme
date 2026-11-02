@@ -1206,23 +1206,41 @@ function llGroupMembersPass() {
             if (!isNaN(i)) byIdx[i] = r;
         });
         var isStaff = function (r) { return !!(r && r.querySelector(".group-member-label")); };
-        Object.keys(byIdx).forEach(function (k) {
-            var i = Number(k), r = byIdx[i];
+        // #22：QQ 会把「Q群管家」这类机器人管理排在管理员中间，它没有管理员标签。
+        // 以前遇到它就当作管理团队结束：下面的管理员既不算进人数，也被画成另一块卡片。
+        // 现在夹在两个管理之间的非管理行（往后 3 行内还有管理）算进这一块，但不计人数。
+        var inBlock = {};
+        var blockEnd = -1;   // 管理团队之后第一个普通成员的 index；-1 表示还没渲染到
+        if (byIdx[0]) {
+            var j = 0;
+            while (byIdx[j]) {
+                if (isStaff(byIdx[j])) { inBlock[j] = true; j++; continue; }
+                var more = false;
+                for (var k = 1; k <= 3 && byIdx[j + k]; k++) if (isStaff(byIdx[j + k])) { more = true; break; }
+                if (j > 0 && more) { inBlock[j] = true; j++; continue; }
+                break;
+            }
+            if (byIdx[j]) blockEnd = j;
+        }
+        // 第 0 行没渲染（列表滚下去了）时没法确定整块范围，退回只看自己有没有管理员标签
+        var staffAt = function (i) { return byIdx[0] ? !!inBlock[i] : isStaff(byIdx[i]); };
+        Object.keys(byIdx).forEach(function (key2) {
+            var i = Number(key2), r = byIdx[i];
             var g = "";
-            if (isStaff(r)) {
-                var prev = i > 0;
-                var next = byIdx[i + 1] ? isStaff(byIdx[i + 1]) : true;
+            if (staffAt(i)) {
+                var prev = i > 0 && (byIdx[i - 1] ? staffAt(i - 1) : true);
+                var next = byIdx[i + 1] ? staffAt(i + 1) : true;
                 g = !prev && !next ? "single" : !prev ? "first" : !next ? "last" : "mid";
             }
             if ((r.dataset.liuliStaff || "") !== g) {
                 if (g) r.dataset.liuliStaff = g; else delete r.dataset.liuliStaff;
             }
         });
-        // 管理人数：从第 0 行数到第一个非管理行（必须都渲染出来才算数），按群缓存
-        if (byIdx[0]) {
+        // 管理人数：管理团队整块都渲染出来才算数（只数带管理员标签的行），按群缓存
+        if (blockEnd >= 0) {
             var n = 0;
-            while (byIdx[n] && isStaff(byIdx[n])) n++;
-            if (byIdx[n]) llGM.staff[key] = n;
+            for (var m = 0; m < blockEnd; m++) if (isStaff(byIdx[m])) n++;
+            llGM.staff[key] = n;
         }
         var span = gm.querySelector(".group-member-title > span");
         var cnt = llGM.staff[key];

@@ -141,14 +141,19 @@ a.text-link,
  *    上色会变成左栏那几个大蓝圆（早先踩过）。
  * ════════════════════════════════════════════════════════════ */
 .q-badge-sub.q-badge-num,
-.q-badge-num,
-.q-badge-num * {
+.q-badge-num {
   background: var(--ll-brand) !important;
   color: var(--ll-on-brand) !important;
   font-weight: 500 !important;
   font-variant-numeric: tabular-nums !important;
 }
 
+/* 数字在 <sub><i>99+</i></sub> 的 <i> 里。以前这条规则也给 <i> 上了品牌色底，<i> 是直角、比胶囊高，
+ * 胶囊上下露出方角（#23，2026-11-02）。子元素只继承文字色，不要底色。 */
+.q-badge-num * {
+  background: transparent !important;
+  color: inherit !important;
+}
 .q-badge-sub.q-badge-dot,
 .q-badge-dot {
   background: var(--ll-brand) !important;
