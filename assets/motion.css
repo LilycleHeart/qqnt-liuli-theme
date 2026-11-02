@@ -40,8 +40,21 @@ body .q-float-card {
   animation: liuli-pop-in var(--ll-dur) var(--ll-ease) backwards;
   transform-origin: top left;
 }
-/* 右键菜单只淡入：位移/缩放动画会让父菜单变成内嵌 fixed 子菜单的定位参照（见 layout.css） */
-body .q-context-menu:not(.is-pure) {
+/* 右键菜单只淡入：位移/缩放动画会让父菜单变成内嵌 fixed 子菜单的定位参照（见 layout.css）。
+ * 淡入不能加在菜单本身（2026-11-02 用户反馈「先弹出来，模糊再一帧一帧补上，像掉帧」）：
+ * 菜单的材质和模糊画在 ::before 上，菜单本身透明度 < 1 的那 220ms 里它是 backdrop root，
+ * ::before 的模糊采不到后面的内容，动画一结束模糊才突然出现。
+ * 所以菜单本身不动画，改成 ::before（材质）和菜单项各自淡入；投影也挪到 ::before 上跟着淡入。
+ * 内嵌的子菜单有自己的入场动画，不跟着淡。 */
+body .q-context-menu:not(.is-pure):not(#ll) {
+  animation: none !important;
+  box-shadow: none !important;
+}
+body .q-context-menu:not(.is-pure):not(#ll)::before {
+  animation: liuli-fade-in var(--ll-dur) var(--ll-ease) backwards;
+  box-shadow: var(--ll-float-shadow) !important;
+}
+body .q-context-menu:not(.is-pure):not(#ll) > :not(.q-context-sub-menu__container) {
   animation: liuli-fade-in var(--ll-dur) var(--ll-ease) backwards;
 }
 /* @ 面板、快捷表情面板：QQ 用 translateY(-100%) 把它们顶到输入框上方，

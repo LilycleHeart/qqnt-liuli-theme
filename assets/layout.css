@@ -1033,6 +1033,7 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll) {
   transform-origin: bottom left !important;
 }
 body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::before {
+  animation: liuli-fade-in 160ms ease backwards;
   content: "";
   position: absolute;
   inset: 0;
@@ -1237,7 +1238,9 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll)
   grid-auto-rows: 38px !important;
   gap: 4px !important;
   padding: 6px !important;
-  animation: liuli-fade-in 160ms ease backwards !important;  /* backwards：见 motion.css 开头，both 会让模糊失效 */
+  /* 面板本身不做淡入：材质画在 ::before 上，面板透明度 < 1 时模糊失效，动画结束才突然出现（见 motion.css 右键菜单那段）。
+   * 淡入放到 ::before 上，按钮有自己的 liuli-tool-in 入场。 */
+  animation: none !important;
   transform: none !important;
 }
 body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon {
