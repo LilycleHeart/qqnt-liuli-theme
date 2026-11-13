@@ -48,6 +48,7 @@
  * .forward-msg 实测 bg: rgba(0,0,0,0)、无边框、radius 8px，
  * 在壁纸上只有一条极淡的描边，完全看不出是卡片。
  * ════════════════════════════════════════════════════════════ */
+@scope (body:not([data-liuli-chat-style='classic'])) {
 .forward-msg {
   background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.14)) !important;
   backdrop-filter: blur(14px) saturate(1.4) !important;
@@ -76,6 +77,8 @@
   border-radius: var(--ll-radius-sm) !important;
 }
 
+} /* 原版卡片保留 QQ 自带外观 */
+
 /* ════════════════════════════════════════════════════════════
  * 3. 链接
  * ------------------------------------------------------------
@@ -98,6 +101,33 @@ a.text-link,
   color: var(--ll-brand-hover) !important;
 }
 
+/* 链接预览是 text-element 内的 link-info，不是 ark 卡片。
+ * QQ 的摘要另外声明了浅色文字，必须按实际文本节点覆盖；图标、缩略图和
+ * 个性装扮不进入此规则。角色变量随配色更新，TG / TIM / 原版共用。 */
+body .message-container .msg-content-container.container--self:not(.container--personalization) {
+  --ll-message-link: var(--ll-bubble-self-link, var(--ll-bubble-self-fg, var(--ll-on-primary-container)));
+  --ll-link-card-bg: var(--ll-bubble-self, rgba(var(--ll-acrylic), 0.86));
+  --ll-link-card-fg: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
+}
+body .message-container .msg-content-container.container--others:not(.container--personalization) {
+  --ll-message-link: var(--ll-bubble-other-link, var(--ll-link, var(--ll-brand)));
+  --ll-link-card-bg: var(--ll-bubble-other, rgba(var(--ll-acrylic), 0.86));
+  --ll-link-card-fg: var(--ll-bubble-other-fg, var(--ll-on-glass));
+}
+body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization) .text-element :is(.text-link, .text--link),
+body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization) .text-element :is(.text-link, .text--link) > span:not([class]) {
+  color: var(--ll-message-link) !important;
+  text-decoration-color: color-mix(in srgb, var(--ll-message-link) 55%, transparent) !important;
+}
+body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization) .text-element .link-info .link-info__content {
+  background: var(--ll-link-card-bg) !important;
+  color: var(--ll-link-card-fg) !important;
+}
+body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization) .text-element .link-info .link-info__content :is(.link-info__title, .link-info__title > span, .link-info__desc) {
+  color: var(--ll-link-card-fg) !important;
+}
+
+@scope (body:not([data-liuli-chat-style='classic'])) {
 /* 自己的气泡是浅底：链接用第三色，不能跟正文一个颜色（上面 .text-element * 的规则会把它染成正文色） */
 .message-container .msg-content-container.container--self .text-link,
 .message-container .msg-content-container.container--self .text--link,
@@ -142,6 +172,8 @@ a.text-link,
   ) !important;
 }
 
+} /* 主题气泡配色 */
+
 /* ════════════════════════════════════════════════════════════
  * 4. 未读气泡
  * ------------------------------------------------------------
@@ -169,6 +201,22 @@ a.text-link,
 .q-badge-sub.q-badge-dot,
 .q-badge-dot {
   background: var(--ll-brand) !important;
+}
+
+/* 实底按钮只绘制一层外轮廓：透明边框保留原生尺寸，避免同色边框与背景
+ * 在半像素坐标处分别抗锯齿，形成圆角边缘的深浅台阶。 */
+body .q-button.q-button--primary {
+  border-color: transparent !important;
+  background-clip: border-box !important;
+}
+
+/* 群文件容量条在 SVG 属性中写死蓝/灰色，没有经过 QQ 的颜色 token。
+ * 仅替换已确认的容量条配色，文件类型图标和错误/警告状态继续使用原色。 */
+.group-file-footer-container .progress > .line > svg > line[stroke='#e0e0e0' i] {
+  stroke: var(--ll-stroke-2) !important;
+}
+.group-file-footer-container .progress > .line > svg > line[stroke='#0099ff' i] {
+  stroke: var(--ll-brand) !important;
 }
 
 /* 图片查看器只给控制栏上材质，不改变图片容器的 transform、尺寸和事件。 */

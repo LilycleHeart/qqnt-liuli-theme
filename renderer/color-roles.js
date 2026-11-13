@@ -98,7 +98,9 @@
         self = containerPair(mcu, s, roles.self);
         break;
       case 'solid':
-        self = [hex(s.primary), hex(s.onPrimary), hex(s.onPrimary)];
+        // Primary is tone 80 in dark mode and 40 in light mode. Tertiary
+        // 30/90 keeps links readable on that fill and distinct from body text.
+        self = [hex(s.primary), hex(s.onPrimary), hex(theme.palettes.tertiary.tone(isDark ? 30 : 90))];
         break;
       case 'surface':
         self = ['rgba(var(--ll-acrylic), 0.86)', 'var(--ll-on-glass)', 'var(--ll-brand)'];
@@ -135,7 +137,7 @@
     host.appendChild(box);
     box.appendChild(el('div', 'liuli-panel__group', '配色'));
     box.appendChild(
-      el('div', 'liuli-field__hint', '颜色都从壁纸取色派生，这里决定每个位置用哪一种颜色。')
+      el('div', 'liuli-field__hint', '颜色从当前主题取色派生，这里决定每个位置用哪一种颜色。')
     );
     const pv = el('div', 'liuli-roles-preview');
     const other = el('div', 'liuli-roles-bubble liuli-roles-bubble--other', '对方的消息');
@@ -166,7 +168,8 @@
       segs[slot.key] = seg;
       row.appendChild(seg);
       box.appendChild(row);
-      box.appendChild(el('div', 'liuli-field__hint', slot.hint));
+      const hint = el('div', 'liuli-field__hint', slot.hint);
+      box.appendChild(hint);
     });
     const reset = el('div', 'liuli-field__hint liuli-lo-reset', '恢复默认配色');
     reset.addEventListener('click', () => {

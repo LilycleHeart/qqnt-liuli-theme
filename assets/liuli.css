@@ -282,6 +282,7 @@ body[data-liuli-dark='0'] .q-tag--orange .title {
  * 宽匹配会把整行染成一条长色带（"消息样式异常"就是这个）。
  * ════════════════════════════════════════════════════════════ */
 
+@scope (body:not([data-liuli-chat-style='classic'])) {
 .msg-content-container {
   border-radius: var(--ll-radius) !important;
   backdrop-filter: blur(12px) saturate(1.4) !important;
@@ -302,6 +303,8 @@ body[data-liuli-dark='0'] .q-tag--orange .title {
   border: 1px solid rgba(var(--ll-brand-rgb), 0.4) !important;
   color: var(--ll-on-glass) !important;
 }
+
+} /* 主题气泡；原版使用 QQ 自带规则 */
 
 /* 消息时间戳：QQ 用深色胶囊浮在壁纸上，很突兀。
  * 改成无底、弱化的次要色，并用等宽数字。 */
@@ -346,8 +349,8 @@ body[data-liuli-dark='0'] .message-container [class*='time'] {
   text-shadow: none !important;
 }
 
-.chat-msg-area .message,
-.chat-msg-area .text-element {
+body:not([data-liuli-chat-style='classic']) .chat-msg-area .message,
+body:not([data-liuli-chat-style='classic']) .chat-msg-area .text-element {
   color: var(--ll-on-glass) !important;
 }
 

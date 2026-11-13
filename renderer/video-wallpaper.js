@@ -10,6 +10,7 @@
   let activeId = '';
   let serial = 0;
   let current = null;
+  let pageSuspended = false;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
   function database() {
@@ -124,7 +125,7 @@
   async function apply(state) {
     current = state;
     const main = document.body.dataset.liuliScope === 'main';
-    if (!main || !state || state.kind !== 'video' || !state.videoId || reduced.matches) {
+    if (pageSuspended || !main || !state || state.kind !== 'video' || !state.videoId || reduced.matches) {
       dispose();
       return;
     }
@@ -172,6 +173,14 @@
   document.addEventListener('visibilitychange', playback);
   document.addEventListener('pointerdown', playback, { passive: true });
   reduced.addEventListener('change', () => apply(current).catch(console.warn));
-  window.addEventListener('pagehide', dispose);
+  window.addEventListener('pagehide', () => {
+    pageSuspended = true;
+    dispose();
+  });
+  // BFCache 会保留 JS 和当前配置，但 pagehide 已释放 Blob URL；恢复时要重建媒体层。
+  window.addEventListener('pageshow', () => {
+    pageSuspended = false;
+    apply(current).catch(console.warn);
+  });
   window.LiuliVideoWallpaper = { importFile, remove, clearAll, apply, clear: () => { current = null; dispose(); } };
 })();

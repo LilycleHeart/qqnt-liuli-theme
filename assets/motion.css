@@ -14,6 +14,13 @@ body {
   --ll-dur-fast: 140ms;
   --ll-dur: 220ms;
 }
+/* The cascade index belongs to the row itself. Inheriting it into every bubble
+ * descendant makes changing one row's delay restyle its entire message tree. */
+@property --ll-enter-i {
+  syntax: '<integer>';
+  inherits: false;
+  initial-value: 0;
+}
 
 /* 弹层入场动画一律用 fill-mode: backwards，不用 both（2026-11-02）：
  * 带 both 的透明度动画播完后仍然「在生效」，Chromium 会把元素当成透明度效果节点，
@@ -164,10 +171,15 @@ body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .op
 }
 
 /* ── 4. 输入卡聚焦：品牌色光晕缓缓亮起 ── */
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio .chat-input-area {
+body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area:not(#ll) {
+  box-shadow: none !important;
+  transition: none !important;
+}
+body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area::before {
+  box-shadow: var(--ll-card-shadow) !important;
   transition: box-shadow var(--ll-dur) var(--ll-ease) !important;
 }
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio .chat-input-area:focus-within {
+body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area:focus-within::before {
   box-shadow: 0 0 0 1px rgba(var(--ll-brand-rgb), 0.28),
     0 0 18px rgba(var(--ll-brand-rgb), calc(var(--ll-glow-strength, 0.15) * 0.9 + 0.08)),
     var(--ll-shadow) !important;
@@ -227,4 +239,26 @@ body:is([data-hash^="#/av"], [data-liuli-av]) #app > *:not(.app-border) {
     animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+/* The side-card copy does not override the message controller's exit or entry. */
+body [data-liuli-pane-retained] {
+  visibility: hidden !important;
+}
+/* Older, already-open renderers still add a whole-chat clip during group exits.
+ * A clip-path backdrop root prevents the input's glass from sampling wallpaper.
+ * Keep this ancestor clear while the pane module handles only the message crop. */
+body .aio[data-liuli-side-motion] {
+  clip-path: none !important;
+}
+/* Hide a first-visit group pane before native routing fills it. Its paused
+ * translation is installed before removing this flag at message reveal. */
+body .aio[data-liuli-side-motion="enter"][data-liuli-side-wait] .group-box__container {
+  visibility: hidden !important;
+}
+/* Native editor layout stays at its destination width. Only its existing glass
+ * pseudo-element follows the same boundary as the pane and send controls. This
+ * keeps the wallpaper blur, round edge and shadow on the moving surface without
+ * clipping/scaling the editor or reflowing text on every animation frame. */
+body .aio .chat-input-area[data-liuli-input-motion]:not(#ll)::before {
+  transform-origin: left center !important;
 }

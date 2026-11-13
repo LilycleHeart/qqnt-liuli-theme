@@ -274,4 +274,13 @@
   overflow-x: hidden;
   padding: 0 4px 32px 0;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-padding-block: 12px 32px;
+}
+/* 窄设置窗口优先保留卡片正文宽度；六个页签继续自动换行。 */
+@media (max-width: 900px) {
+  .setting-main .q-scroll-view > .liuli-embedded {
+    margin-inline: 12px !important;
+    padding-inline: 12px !important;
+  }
 }

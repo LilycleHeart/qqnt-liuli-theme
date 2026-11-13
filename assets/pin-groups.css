@@ -26,13 +26,16 @@ body .recent-contact .recent-contact-item[data-liuli-pin]:not(#ll):not(#ll):not(
   pointer-events: none;
 }
 .recent-contact > .list-toggler { position: relative; z-index: 1; }
+/* A constant prefix belongs to the list, never to one virtualized row. */
+body .recent-contact[data-liuli-pin-prefix='1'] .viewport-list {
+  padding-top: 28px !important;
+}
 body .recent-contact .recent-contact-item[data-liuli-pin]:not(#ll):not(#ll):not(#ll)::after {
   content: none !important;
   display: none !important;
 }
 body .recent-contact .recent-contact-item[data-liuli-pin='first']:not(#ll):not(#ll):not(#ll),
 body .recent-contact .recent-contact-item[data-liuli-pin='single']:not(#ll):not(#ll):not(#ll) {
-  padding-top: 28px !important;
   border-radius: 12px 12px 0 0 !important;
 }
 body .recent-contact .recent-contact-item[data-liuli-pin='last']:not(#ll):not(#ll):not(#ll),
@@ -44,9 +47,9 @@ body .recent-contact .recent-contact-item[data-liuli-pin='single']:not(#ll):not(
   border-radius: 12px !important;
 }
 /* 标题是单独元素，不再借用画选中态的 ::before；字号和颜色不继承选中会话的反色。 */
-body .recent-contact .recent-contact-item > .liuli-pin-heading:not(#ll):not(#ll) {
+body .recent-contact .liuli-pin-heading:not(#ll):not(#ll) {
   position: absolute;
-  top: 0;
+  top: -28px;
   left: 12px;
   right: 12px;
   height: 28px;
@@ -92,7 +95,7 @@ body .recent-contact .recent-contact-item[data-liuli-pin].recent-contact-item--s
 }
 body .recent-contact .recent-contact-item[data-liuli-pin='first'].recent-contact-item--selected:not(#ll):not(#ll):not(#ll)::before,
 body .recent-contact .recent-contact-item[data-liuli-pin='single'].recent-contact-item--selected:not(#ll):not(#ll):not(#ll)::before {
-  top: 30px !important;
+  top: 2px !important;
 }
 body .recent-contact .recent-contact-item[data-liuli-pin='last'].recent-contact-item--selected:not(#ll):not(#ll):not(#ll)::before,
 body .recent-contact .recent-contact-item[data-liuli-pin='single'].recent-contact-item--selected:not(#ll):not(#ll):not(#ll)::before {
@@ -118,21 +121,21 @@ body .recent-contact .recent-contact-item[data-liuli-pin] .secondary-info::after
   mask: var(--ll-pin-icon) center / contain no-repeat !important;
   pointer-events: none !important;
 }
-body .recent-contact[data-liuli-pin-collapsed='1'] .recent-contact-item[data-liuli-pin]:not([data-liuli-pin='first']):not([data-liuli-pin='single']) {
+body .recent-contact[data-liuli-pin-collapsed='1']:not([data-liuli-pin-motion]) .recent-contact-item[data-liuli-pin]:not([data-liuli-pin='first']):not([data-liuli-pin='single']) {
   display: none !important;
 }
-body .recent-contact[data-liuli-pin-collapsed='1'] .recent-contact-item:is([data-liuli-pin='first'], [data-liuli-pin='single']):not(#ll):not(#ll):not(#ll) {
-  height: 36px !important;
+body .recent-contact[data-liuli-pin-collapsed='1']:not([data-liuli-pin-motion]) .recent-contact-item:is([data-liuli-pin='first'], [data-liuli-pin='single']):not(#ll):not(#ll):not(#ll) {
+  height: 8px !important;
   min-height: 0 !important;
-  max-height: 36px !important;
+  max-height: 8px !important;
   padding: 0 0 8px !important;
   box-sizing: border-box !important;
   border-radius: 12px !important;
 }
-body .recent-contact[data-liuli-pin-collapsed='1'] .recent-contact-item:is([data-liuli-pin='first'], [data-liuli-pin='single']) > :not(.liuli-pin-heading) {
+body .recent-contact[data-liuli-pin-collapsed='1']:not([data-liuli-pin-motion]) .recent-contact-item:is([data-liuli-pin='first'], [data-liuli-pin='single']) > :not(.liuli-pin-heading) {
   display: none !important;
 }
-body .recent-contact[data-liuli-pin-collapsed='1'] .recent-contact-item[data-liuli-pin].recent-contact-item--selected:not(#ll):not(#ll):not(#ll)::before {
+body .recent-contact[data-liuli-pin-collapsed='1']:not([data-liuli-pin-motion]) .recent-contact-item[data-liuli-pin].recent-contact-item--selected:not(#ll):not(#ll):not(#ll)::before {
   display: none !important;
 }
 .recent-contact[data-liuli-pin-collapsed='1'] .liuli-pin-heading::after { transform: rotate(-90deg); }

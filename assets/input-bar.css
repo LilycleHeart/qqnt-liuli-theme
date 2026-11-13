@@ -1,5 +1,6 @@
-/* ============================================================
- * 琉璃 · 输入区（保留改造 + 不破坏编辑器）
+@scope (body:is([data-liuli-scope='main'], [data-hash^='#/chat']):not([data-liuli-input-layout='native'])) {
+
+/* 琉璃浮动输入布局
  * ------------------------------------------------------------
  * 已验证的唯一破坏因素是 line-height / letter-spacing
  * （在 typography.css 里已移除）。
@@ -13,7 +14,7 @@
 
 /* 1. 容器：必须压在消息区之上。
  * 实测消息区 .aio 占满 40~942，输入区也在 735~942，两者重叠；
- * z-index 不够时输入框会被消息列表盖住（看起来「输入框消失」）。 */  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area {
+ * z-index 不够时输入框会被消息列表盖住（看起来「输入框消失」）。 */  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area {
   position: relative !important;
   overflow: visible !important;
   z-index: 120 !important;
@@ -22,19 +23,21 @@
   /* QQ 用 --inputAreaHeight 把整块定死在 207px，导致输入框过高；
    * 改为随内容增高，上限沿用 QQ 原值 50vh。 */
   height: auto !important;
+  /* QQ 调整原版输入区高度时还会内联写入 flex-basis；切回 TG 一并退出固定高度。 */
+  flex-basis: auto !important;
   max-height: 50vh !important;
   padding: 8px 12px 10px !important;
   box-sizing: border-box !important;
   /* ⚠️ 不要加 backdrop-filter：它会创建独立合成层，
    * 嵌在 overflow:hidden 的祖先里时整个层可能不绘制，
    * 表现就是「DOM 在、坐标对、但画面里看不见」。 */
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area:has(.chat-func-bar.liuli-expanded) {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area:has(.chat-func-bar.liuli-expanded) {
   z-index: 40 !important;
 }
 
-/* 2. 工具栏收起 / 展开浮层 */  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .chat-func-bar {
+/* 2. 工具栏收起 / 展开浮层 */  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .chat-func-bar {
   display: none !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .chat-func-bar.liuli-expanded {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .chat-func-bar.liuli-expanded {
   display: flex !important;
   position: absolute !important;
   left: 12px !important;
@@ -57,7 +60,7 @@
   gap: 4px !important;
 }
 
-/* 3. 输入框：加背景与圆角，并提高与容器底的对比度 */  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .msg-input {
+/* 3. 输入框：加背景与圆角，并提高与容器底的对比度 */  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .msg-input {
   background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.32)) !important;
   border: 1px solid rgba(var(--ll-tint-rgb), 0.22) !important;
   border-radius: 18px !important;
@@ -75,11 +78,11 @@
   align-items: center !important;
 }
 
-/* QQ 内联写了 --qq-editor-height: 111px，这里让编辑器随内容增高 */  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area .qq-msg-editor {
+/* QQ 内联写了 --qq-editor-height: 111px，这里让编辑器随内容增高 */  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area .qq-msg-editor {
   --qq-editor-height: auto !important;
   height: auto !important;
   width: 100% !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area .qq-msg-editor .ExEditor-qq-msg-editor {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area .qq-msg-editor .ExEditor-qq-msg-editor {
   height: auto !important;
   min-height: 20px !important;
   max-height: 180px !important;
@@ -87,15 +90,15 @@
   box-sizing: content-box !important;
 }
 
-/* 4. 左侧两个按钮（独立覆盖层） */  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-input-overlay {
+/* 4. 左侧两个按钮（独立覆盖层） */  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-input-overlay {
   position: fixed !important;
   z-index: 9999 !important;
   display: none;
   align-items: center !important;
   gap: 4px !important;
   pointer-events: none !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn,
-  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn,
+  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle {
   position: static !important;
   width: 28px !important;
   height: 28px !important;
@@ -111,25 +114,25 @@
   color: var(--ll-on-glass-2) !important;
   transition: background-color 140ms ease, color 140ms ease, transform 170ms ease !important;
   pointer-events: auto !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn:hover,
-  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle:hover {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn:hover,
+  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle:hover {
   background: rgba(var(--ll-brand-rgb), 0.22) !important;
   color: var(--ll-brand) !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn[data-open="1"],
-  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle[data-open="1"] {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn[data-open="1"],
+  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle[data-open="1"] {
   background: rgba(var(--ll-brand-rgb), 0.26) !important;
   color: var(--ll-brand) !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle[data-open="1"] svg {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle[data-open="1"] svg {
   transform: rotate(45deg) !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn svg,
-  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle svg {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-emoji-btn svg,
+  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) #liuli-func-toggle svg {
   width: 16px !important;
   height: 16px !important;
   display: block !important;
   transition: transform 170ms ease !important;
 }
 
-/* 5. 发送键：纸飞机 */  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation {
+/* 5. 发送键：纸飞机 */  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation {
   position: absolute !important;
   /* 贴输入框底行（多行时不漂到中间）：area 底 padding 10 + 内缩 6 */
   right: 18px !important;
@@ -146,7 +149,7 @@
   background: transparent !important;
   margin: 0 !important;
   padding: 0 !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-btn-wrap {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-btn-wrap {
   width: 30px !important;
   height: 30px !important;
   display: flex !important;
@@ -155,10 +158,10 @@
   border-radius: 999px !important;
   background: rgba(var(--ll-brand-rgb), 0.92) !important;
   transition: background-color 140ms ease, transform 120ms ease !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-btn-wrap:hover {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-btn-wrap:hover {
   background: var(--ll-brand) !important;
   transform: scale(1.06) !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send {
   width: 30px !important;
   height: 30px !important;
   display: flex !important;
@@ -167,7 +170,7 @@
   background: transparent !important;
   padding: 0 !important;
   margin: 0 !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg {
   width: 30px !important;
   height: 30px !important;
   display: flex !important;
@@ -177,7 +180,7 @@
   line-height: 0 !important;
   color: var(--ll-on-brand) !important;
   background: transparent !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg::after {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg::after {
   content: "" !important;
   width: 16px !important;
   height: 16px !important;
@@ -191,13 +194,13 @@
   mask-repeat: no-repeat !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
-}  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .divider,
-  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-setting__wrapper {
+}  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .divider,
+  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-setting__wrapper {
   display: none !important;
 }
 
-/* 6. 底部拖动条隐藏 */  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .resize-handler,
-  body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .resize-handler.ns {
+/* 6. 底部拖动条隐藏 */  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .resize-handler,
+  :scope:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .resize-handler.ns {
   display: none !important;
 }
 
@@ -209,9 +212,14 @@
  * 布局（单行高、左右按钮留白、绝对定位发送键）沿用上面的主窗规则；
  * 卡片材质在 layout.css 的 chat 专用段里补齐（和主窗同一套 ::before 玻璃）。
  * 独立窗的 .operation 里多一个「关闭」按钮，会把发送键挤成 0 宽，这里隐藏它。 */
-body[data-hash^="#/chat"] .chat-input-area > .operation .close {
+:scope[data-hash^="#/chat"] .chat-input-area > .operation .close {
   display: none !important;
 }
-body[data-hash^="#/chat"] .chat-input-area > .operation .send-btn-wrap {
+:scope[data-hash^="#/chat"] .chat-input-area > .operation .send-btn-wrap {
   flex: 0 0 30px !important;
+}
+} /* 浮动输入布局 */
+
+body[data-liuli-input-layout='native'] #liuli-input-overlay {
+  display: none !important;
 }

@@ -12,6 +12,9 @@
  * QQ 默认：名字在气泡外面、时间单独一行、四角同圆。
  * ============================================================ */
 
+/* Classic keeps QQ's shape/layout; the shared material and sizing rules follow
+ * the TG/TIM layout scopes below. */
+@scope (body:not([data-liuli-chat-style='classic'])) {
 /* ── 1. 气泡本体：尾巴在底部外侧 ── */
 /* 自己（靠右）→ 右上尖（尖角朝上） */
 .msg-content-container.container--self {
@@ -586,9 +589,9 @@
   height: 17px !important;
   background: inherit !important;
   pointer-events: none !important;
-  -webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 17'%3E%3Cpath d='M10 0v17H0c4.5-.5 8-3.5 9-9V0z'/%3E%3C/svg%3E")
+  -webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='136' viewBox='0 0 10 17' shape-rendering='geometricPrecision'%3E%3Cpath d='M10 0V17H1Q0 17 .8 16.4C5.3 15.8 8.5 12.1 9 8V0Z'/%3E%3C/svg%3E")
     no-repeat 0 0 / 100% 100% !important;
-  mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 17'%3E%3Cpath d='M10 0v17H0c4.5-.5 8-3.5 9-9V0z'/%3E%3C/svg%3E")
+  mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='136' viewBox='0 0 10 17' shape-rendering='geometricPrecision'%3E%3Cpath d='M10 0V17H1Q0 17 .8 16.4C5.3 15.8 8.5 12.1 9 8V0Z'/%3E%3C/svg%3E")
     no-repeat 0 0 / 100% 100% !important;
 }
 
@@ -615,14 +618,23 @@
   transform: scaleX(-1) !important;
 }
 
-/* ── 组内间距：组内 4px，组间 10px ── */
-.ml-item .message:has(> .message-native > .message-container[data-liuli-g]) {
+/* ── 组内间距：组内 2px，组间 10px ──
+ * 原生语音的 container 直接位于 message 下，不经过 message-native。 */
+.ml-item .message:has(> .message-native > .message-container[data-liuli-g], > .message-container[data-liuli-g]) {
   padding-bottom: 0 !important;
 }
 .message-container[data-liuli-g] {
-  padding-top: 2px !important;
-  padding-bottom: 2px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
   min-height: 0 !important;
+}
+.message-container[data-liuli-g] > .message-content__wrapper {
+  min-height: 0 !important;
+}
+/* QQ 的空扩展插槽仍有 4px 下边距，会撑开已隐藏的 nickname 网格行。
+ * 插槽有内容时保留原生间距，不影响扩展信息和真实名称。 */
+.message-container[data-liuli-g] > .message-extra-top:empty {
+  margin-bottom: 0 !important;
 }
 .message-container[data-liuli-g='first'],
 .message-container[data-liuli-g='single'] {
@@ -731,16 +743,16 @@
  *   对方：头像与气泡之间只有 8px，尾巴 9px，尖端压进头像 1px。
  * TG 的做法是尾巴落在缝里、离头像还有几像素，这里缝统一 14px。
  * ════════════════════════════════════════════════════════════ */
-body .message-container:has(.msg-content-container.container--others):not(#ll) {
+:scope .message-container:has(.msg-content-container.container--others):not(#ll) {
   grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-body .message-container:has(.msg-content-container.container--self):not(#ll) {
+:scope .message-container:has(.msg-content-container.container--self):not(#ll) {
   grid-template-columns: 0px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 
 /* ── 气泡里的 QQ 文字 token（2026-11-01）──
  * 气泡里有些元素（图片加载失败的提示、文件大小、语音时长…）直接用 QQ 的 --text_tertiary 等 token，
- * 而这些 token 在 body 上就已经算成了玻璃上的灰色，到了自己的气泡（primaryContainer）上只剩 3.6:1。
+ * 而这些 token 在 :scope 上就已经算成了玻璃上的灰色，到了自己的气泡（primaryContainer）上只剩 3.6:1。
  * 按 M3：container 上的文字一律用对应的 onContainer。这里在气泡上重新声明，子元素就都跟着变。
  * 卡片消息（ark）有自己的底，不动。 */
 .message-container .msg-content-container.container--self:not(.ark-msg-content-container) {
@@ -755,7 +767,7 @@ body .message-container:has(.msg-content-container.container--self):not(#ll) {
   --icon_primary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
   --icon_secondary: var(--ll-bubble-self-fg, var(--ll-on-primary-container));
 }
-/* 对方的气泡默认是中性玻璃，body 上的 token 本来就对；只有选了彩色角色（--ll-bubble-other-fg 有值）才换 */
+/* 对方的气泡默认是中性玻璃，:scope 上的 token 本来就对；只有选了彩色角色（--ll-bubble-other-fg 有值）才换 */
 .message-container .msg-content-container.container--others:not(.ark-msg-content-container) {
   --text_primary: var(--ll-bubble-other-fg, var(--ll-on-glass));
   --text_secondary: var(--ll-bubble-other-fg, var(--ll-on-glass-2));
@@ -830,12 +842,12 @@ body .message-container:has(.msg-content-container.container--self):not(#ll) {
 }
 
 /* ── 气泡装扮：按气泡方向取皮肤文字色（2026-11-02，补 #19）──
- * 琉璃在 body 上把 --on_bubble_host_text / --bubble_guest_text 都定义成了主题前景色（qq-tokens.css），
+ * 琉璃在 :scope 上把 --on_bubble_host_text / --bubble_guest_text 都定义成了主题前景色（qq-tokens.css），
  * 子元素会继承下来，所以 var(--on_bubble_host_text, …) 永远命中第一项：
  * 对方的装扮气泡拿到的是主题色，不是皮肤色（深色皮肤 + 亮色主题会看不清）。
  *   自己的气泡：皮肤色在容器内联的 --on_bubble_host_text 上
  *   对方的气泡：先找 --on_bubble_guest_text，没有再用 --bubble_guest_text（内联有就是皮肤色，没有就是继承来的主题色）
- * 对方气泡也要写 --ll-bubble-other-fg / -link：「配色」里把对方气泡换成彩色时，body 上的这两个变量会盖过皮肤色。
+ * 对方气泡也要写 --ll-bubble-other-fg / -link：「配色」里把对方气泡换成彩色时，:scope 上的这两个变量会盖过皮肤色。
  * 不用 inherit 作兜底：var() 的兜底里写 CSS 关键字不生效。 */
 .message-container
   .message-content__wrapper
@@ -878,11 +890,11 @@ body .message-container:has(.msg-content-container.container--self):not(#ll) {
  * 未勾选的圈原本只有 20% 透明度的描边，压在壁纸上几乎看不见；
  * 选中的行加一层主色淡底，一眼看出选了哪些。
  * ════════════════════════════════════════════════════════════ */
-body .message-container:has(.msg-content-container.container--others):has(.msg-picker):not(#ll),
-body .message-container:not(.message-container--self):not(:has(.container--self)):has(.msg-picker):not(#ll) {
+:scope .message-container:has(.msg-content-container.container--others):has(.msg-picker):not(#ll),
+:scope .message-container:not(.message-container--self):not(:has(.container--self)):has(.msg-picker):not(#ll) {
   grid-template-columns: 28px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-body .message-container:has(.msg-content-container.container--self):has(.msg-picker):not(#ll) {
+:scope .message-container:has(.msg-content-container.container--self):has(.msg-picker):not(#ll) {
   grid-template-columns: 28px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 .message-container .msg-picker {
@@ -898,16 +910,19 @@ body .message-container:has(.msg-content-container.container--self):has(.msg-pic
 }
 
 /* #47：纯图片可以单独隐藏昵称/头衔，正文仍保留完整图片与头像。 */
-body[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] > .user-name {
+:scope[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] > .user-name {
   display: none !important;
 }
-body[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] {
+:scope[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] {
   padding: 3px !important;
 }
-body[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] > .message-content {
+:scope[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] > .message-content {
   margin-top: 0 !important;
 }
 
+} /* 非原版气泡外观 */
+
+/* 显式设置独立于气泡风格：原版仍可调字体、宽度和纯图片昵称。 */
 /* 消息正文、昵称、头衔分别调节；昵称不参与气泡的横向固有宽度计算。 */
 body .message-container .msg-content-container .message-content,
 body .message-container .msg-content-container .text-element,
@@ -938,57 +953,126 @@ body .message-container .msg-content-container > .user-name .q-tag * {
 body .message-container .msg-content-container > .user-name .q-tag {
   height: auto !important;
   min-height: 15px;
-  max-width: 45%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 经典式每条独立，TIM 连续分组；头像上下位置由独立选项决定。 */
-body[data-liuli-chat-style='classic'] .message-container .msg-content-container,
-body[data-liuli-chat-style='tim'] .message-container .msg-content-container {
-  border-radius: 12px !important;
+@scope (body:not([data-liuli-chat-style='classic'])) {
+/* TIM 连续消息共用靠发送者一侧的直边；单行是胶囊，多行保留相同圆角。
+ * 只改变普通文本的形状。媒体、语音、卡片和个性装扮保留各自布局。 */
+:scope[data-liuli-chat-style='tim'] .message-container .msg-content-container:not(.container--personalization):not(#ll) {
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  padding: 8px 10px !important;
 }
-body[data-liuli-chat-style='classic'] .message-container .msg-content-container::before,
-body[data-liuli-chat-style='tim'] .message-container .msg-content-container::before {
-  display: none !important;
+:scope[data-liuli-chat-style='tim'] .message-container {
+  /* Cap corners at a single line's half-height. A radius based on the whole
+   * multi-line bubble would curve through its first and last text lines. */
+  --ll-tim-round: max(18px, calc(var(--ll-message-font-size, 14px) * 0.75 + 8px * var(--ll-bubble-scale, 1)));
+  --ll-tim-inner-round: calc(4px * var(--ll-bubble-scale, 1));
+  --ll-tim-radius: var(--ll-tim-round);
 }
-body[data-liuli-chat-style='classic'] .message-container > .avatar-span {
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='first']:has(.container--self) {
+  --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-inner-round) var(--ll-tim-round);
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='mid']:has(.container--self) {
+  --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-inner-round) var(--ll-tim-inner-round) var(--ll-tim-round);
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='last']:has(.container--self) {
+  --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-inner-round) var(--ll-tim-round) var(--ll-tim-round);
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='first']:has(.container--others) {
+  --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-inner-round);
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='mid']:has(.container--others) {
+  --ll-tim-radius: var(--ll-tim-inner-round) var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-inner-round);
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='last']:has(.container--others) {
+  --ll-tim-radius: var(--ll-tim-inner-round) var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-round);
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-tim-text] > .message-content__wrapper > .msg-content-container:not(#ll) {
+  border-radius: var(--ll-tim-radius) !important;
+  text-align: left !important;
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-tim-text] {
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-tim-text] > .message-content__wrapper {
+  min-height: 0 !important;
+}
+/* Preserve the full native grid for every group position, so hiding the
+ * repeated name never moves the straight edge or avatar column. */
+:scope[data-liuli-chat-style='tim'] .message-container:has(.container--others):not(#ll) {
+  grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
+}
+:scope[data-liuli-chat-style='tim'] .message-container:has(.container--self):not(#ll) {
+  grid-template-columns: 0px minmax(46px, 1fr) 8px auto 14px 32px !important;
+}
+:scope[data-liuli-chat-style='tim'] .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face):not(.container--personalization):not(#ll) {
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+}
+:scope[data-liuli-chat-style='tim'] .message-container > .avatar-span {
   display: block !important;
   align-self: end !important;
-  transform: none !important;
 }
-body[data-liuli-avatar-position='top'] .message-container[data-liuli-g='first'] > .avatar-span {
+:scope[data-liuli-chat-style='tim'] .message-container .msg-content-container:not(#ll)::before {
+  content: none !important;
+  display: none !important;
+}
+:scope[data-liuli-avatar-position='top'] .message-container[data-liuli-g='first'] > .avatar-span {
   display: block !important;
   align-self: start !important;
   transform: none !important;
 }
-body[data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] > .avatar-span {
+:scope[data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] > .avatar-span {
   display: none !important;
 }
-body[data-liuli-avatar-position='top'] .message-container[data-liuli-g='single'] > .avatar-span {
+:scope[data-liuli-avatar-position='top'] .message-container[data-liuli-g='single'] > .avatar-span {
   align-self: start !important;
   transform: none !important;
 }
-/* 顶部头像模式的 TG 尾巴也移到消息开头，组内其它消息不留尾巴。 */
-body[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] .msg-content-container::before {
+/* 顶部头像：尾巴和直角一起移到顶部；组尾恢复圆角。
+ * 图片、卡片、个性装扮不参与普通气泡形状，避免重新画出主题尾巴。 */
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container .msg-content-container::before {
   display: none !important;
 }
-body[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single']) .msg-content-container:not([data-liuli-image-only])::before {
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single']) .msg-content-container.container--others:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+  border-radius: 0 16px 16px 16px !important;
+}
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single']) .msg-content-container.container--self:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+  border-radius: 16px 0 16px 16px !important;
+}
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] .msg-content-container.container--others:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+  border-radius: 6px 16px 16px 16px !important;
+}
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] .msg-content-container.container--self:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+  border-radius: 16px 6px 16px 16px !important;
+}
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single']) .msg-content-container:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg))::before {
   content: '' !important;
   display: block !important;
-  position: absolute;
+  position: absolute !important;
   top: 0 !important;
   bottom: auto !important;
   width: 9px !important;
   height: 17px !important;
   background: inherit !important;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 17'%3E%3Cpath d='M10 0v17H0c4.5-.5 8-3.5 9-9V0z'/%3E%3C/svg%3E") center / 100% 100% no-repeat !important;
-  transform: scaleY(-1) !important;
+  width: var(--ll-top-tail-width, 9px) !important;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='136' viewBox='0 0 10 17' shape-rendering='geometricPrecision'%3E%3Cpath d='M10 0V17H1Q0 17 .8 16.4C5.3 15.8 8.5 12.1 9 8V0Z'/%3E%3C/svg%3E") 0 0 / 10px 17px no-repeat !important;
+  transform: scale(var(--ll-top-tail-x, 1), -1) !important;
 }
-body[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container .msg-content-container.container--self::before {
-  transform: scale(-1) !important;
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .msg-content-container.container--self {
+  --ll-top-tail-x: -1;
+  --ll-top-tail-width: 10px;
+}
+:scope[data-liuli-other-solid][data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .msg-content-container.container--others {
+  --ll-top-tail-width: 10px;
 }
 /* 经典 / TIM 的昵称回到原生 nickname 网格，不给它背景，不让长名字撑宽整行。 */
-body[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container > .user-name {
+:scope[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container > .user-name {
   grid-area: nickname;
   min-width: 0 !important;
   max-width: 100% !important;
@@ -998,12 +1082,557 @@ body[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container
   overflow: hidden !important;
   white-space: nowrap !important;
 }
-body[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container > .user-name .q-tag,
-body[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container > .user-name .q-tag * {
+:scope[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container > .user-name .q-tag,
+:scope[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container > .user-name .q-tag * {
   font-size: var(--ll-title-font-size, 10px) !important;
   line-height: 1.4 !important;
 }
-body[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container--self > .user-name,
+:scope[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container--self > .user-name,
+:scope[data-liuli-hide-image-names] .message-container[data-liuli-image-only] > .user-name {
+  display: none !important;
+}
+
+} /* TG / TIM 专属样式 */
+
+/* TIM shares sender/avatar groups across attachment types, while its text
+ * corner groups remain separate. Keep the native avatar column in every row. */
+body[data-liuli-chat-style='tim'] .message-container:is([data-liuli-avatar-g='first'], [data-liuli-avatar-g='single']) {
+  margin-top: 8px !important;
+}
+body[data-liuli-chat-style='tim'] .message-container:is([data-liuli-avatar-g='mid'], [data-liuli-avatar-g='last']) {
+  margin-top: 0 !important;
+}
+body[data-liuli-chat-style='tim'] .message-container[data-liuli-avatar-g] > .avatar-span {
+  display: block !important;
+  position: relative !important;
+  align-self: end !important;
+  z-index: 3 !important;
+}
+body[data-liuli-chat-style='tim'][data-liuli-avatar-position='bottom'] .message-container[data-liuli-avatar-g]:is([data-liuli-avatar-g='first'], [data-liuli-avatar-g='mid']) > .avatar-span,
+body[data-liuli-chat-style='tim'][data-liuli-avatar-position='top'] .message-container[data-liuli-avatar-g]:is([data-liuli-avatar-g='mid'], [data-liuli-avatar-g='last']) > .avatar-span {
+  display: none !important;
+}
+body[data-liuli-chat-style='tim'][data-liuli-avatar-position='top'] .message-container[data-liuli-avatar-g] > .avatar-span {
+  align-self: start !important;
+  transform: none !important;
+}
+body[data-liuli-chat-style='tim'] .message-container:is([data-liuli-avatar-g='mid'], [data-liuli-avatar-g='last']) .user-name {
+  display: none !important;
+}
+/* Moving the native sender row inside must not retain its grid offset. The
+ * metadata remains one row above the body, and never gains its own backplate. */
+body[data-liuli-chat-style='tim'][data-liuli-tim-sender-position='inside'] .message-container .msg-content-container > .user-name {
+  top: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  align-items: center !important;
+  text-align: left !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Three layouts share TG's surface and semantic roles. Resolve neutral text
+ * before rebinding local tokens; corners and sender layout stay mode-specific. */
+body {
+  --ll-chat-surface-fg: var(--ll-on-glass);
+  --ll-chat-surface-fg-2: var(--ll-on-glass-2);
+  --ll-chat-surface-fg-3: var(--ll-on-glass-3);
+  --ll-chat-surface-link: var(--ll-link, var(--ll-brand));
+}
+body .message-container .msg-content-container.container--self:not(.container--personalization) {
+  --ll-chat-bg: var(--ll-bubble-self, color-mix(in srgb, rgb(var(--ll-brand-rgb)) 34%, rgb(var(--ll-acrylic))));
+  --ll-chat-fg: var(--ll-bubble-self-fg, var(--ll-chat-surface-fg));
+  --ll-chat-fg-2: var(--ll-chat-fg);
+  --ll-chat-fg-3: var(--ll-chat-fg);
+  --ll-chat-link: var(--ll-bubble-self-link, var(--ll-chat-surface-link));
+}
+body .message-container .msg-content-container.container--others:not(.container--personalization) {
+  --ll-chat-bg: var(--ll-bubble-other, rgba(var(--ll-acrylic), 0.86));
+  --ll-chat-fg: var(--ll-bubble-other-fg, var(--ll-chat-surface-fg));
+  --ll-chat-fg-2: var(--ll-bubble-other-fg, var(--ll-chat-surface-fg-2));
+  --ll-chat-fg-3: var(--ll-bubble-other-fg, var(--ll-chat-surface-fg-3));
+  --ll-chat-link: var(--ll-bubble-other-link, var(--ll-chat-surface-link));
+}
+body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization) {
+  --text_primary: var(--ll-chat-fg);
+  --text_secondary: var(--ll-chat-fg-2);
+  --text_tertiary: var(--ll-chat-fg-3);
+  --text-primary: var(--ll-chat-fg);
+  --text-secondary-01: var(--ll-chat-fg-2);
+  --icon_primary: var(--ll-chat-fg);
+  --icon_secondary: var(--ll-chat-fg-2);
+}
+body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not([data-liuli-image-only]):not([data-liuli-video-only]):not(.ark-msg-content-container):not(:has(.ark-view-message, .forward-msg, .market-face-element, [class*='lottie'])):not(#ll) {
+  background: var(--ll-chat-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.16) !important;
+  border: none !important;
+  color: var(--ll-chat-fg) !important;
+  text-shadow: none !important;
+}
+/* QQ's pure pictures and native stickers already paint their media. They must
+ * not receive a text surface or its padding, in any bubble style. */
+body .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face, [data-liuli-image-only]):not(.container--personalization):not(#ll) {
+  background: transparent !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face, [data-liuli-image-only]):not(.container--personalization):not(#ll)::before {
+  content: none !important;
+  display: none !important;
+}
+body .message-container .msg-content-container:not(.container--personalization) :is(.text-element, .text-normal) {
+  color: var(--ll-chat-fg, inherit) !important;
+}
+body .message-container .msg-content-container:not(.container--personalization) :is(.text-link, .text--link, .text-element--at[data-ll-at='other']) {
+  color: var(--ll-chat-link, inherit) !important;
+}
+/* Card surfaces match TG without borrowing its corner/padding layout. */
+body .message-container .msg-content-container:is(.container--self, .container--others):is(.ark-msg-content-container, :has(.ark-view-message, .forward-msg)):not(.container--personalization):not(#ll) {
+  background: var(--ll-chat-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.16) !important;
+  border: none !important;
+  color: var(--ll-chat-fg) !important;
+  text-shadow: none !important;
+}
+/* Unsupported native Ark previews still draw their own host/guest bubble.
+ * Keep one sender-role surface, including when that surface is translucent. */
+body .message-container .msg-content-container:is(.container--self, .container--others):is(.ark-msg-content-container, :has(.ark-view-message)):not(.container--personalization) .ark-view-message_not-support {
+  background: transparent !important;
+  color: var(--ll-chat-fg) !important;
+}
+/* Forwarded-history cards can be direct native cards or live inside a normal
+ * bubble. Both use the sender's role, with a single material surface. */
+body .chat-msg-area .message-container .forward-msg {
+  --ll-forward-bg: var(--ll-bubble-other, rgba(var(--ll-acrylic), 0.86));
+  --ll-forward-fg: var(--ll-bubble-other-fg, var(--ll-chat-surface-fg));
+  --ll-forward-fg-2: var(--ll-bubble-other-fg, var(--ll-chat-surface-fg-2));
+  --text_primary: var(--ll-forward-fg) !important;
+  --text_secondary: var(--ll-forward-fg-2) !important;
+  --text_tertiary: var(--ll-forward-fg-2) !important;
+  --text-primary: var(--ll-forward-fg) !important;
+  --text-secondary-01: var(--ll-forward-fg-2) !important;
+  color: var(--ll-forward-fg) !important;
+  text-shadow: none !important;
+}
+body .chat-msg-area .message-container:is(.message-container--self, .message-container--align-right, :has(.msg-content-container.container--self)) .forward-msg {
+  --ll-forward-bg: var(--ll-bubble-self, color-mix(in srgb, rgb(var(--ll-brand-rgb)) 34%, rgb(var(--ll-acrylic))));
+  --ll-forward-fg: var(--ll-bubble-self-fg, var(--ll-chat-surface-fg));
+  --ll-forward-fg-2: var(--ll-forward-fg);
+}
+body .chat-msg-area .message-container .message-content__wrapper > .forward-msg {
+  background: var(--ll-forward-bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.16) !important;
+  border: none !important;
+}
+body .chat-msg-area .message-container .msg-content-container:has(.forward-msg):not(.container--personalization):not(#ll) {
+  background: var(--ll-chat-bg) !important;
+}
+body .chat-msg-area .message-container .msg-content-container .forward-msg {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body .chat-msg-area .message-container .forward-msg :is(.fwd-title, .fwd-content, [class*='summary']) {
+  color: var(--ll-forward-fg) !important;
+}
+body .chat-msg-area .message-container .forward-msg :is(.count, [class*='footer']) {
+  color: var(--ll-forward-fg-2) !important;
+}
+/* Hide only the outer message's sender metadata. Names quoted inside the
+ * native history preview are part of the card content and remain visible. */
+body .chat-msg-area .message-container:has(> .message-content__wrapper .forward-msg) > .user-name,
+body .chat-msg-area .message-container > .message-content__wrapper > .msg-content-container:has(.forward-msg) > .user-name {
+  display: none !important;
+}
+
+/* Ordinary QQ files use .normal-file instead of .msg-content-container. Apply
+ * the same surface roles there; .file-element also names video previews, so it
+ * must not be used as a generic file-card surface selector. */
+body .chat-msg-area .message-container .normal-file {
+  --ll-file-bg: var(--ll-bubble-other, rgba(var(--ll-acrylic), 0.86));
+  --ll-file-fg: var(--ll-bubble-other-fg, var(--ll-chat-surface-fg));
+  --ll-file-fg-2: var(--ll-bubble-other-fg, var(--ll-chat-surface-fg-2));
+  --bubble_guest_text: var(--ll-file-fg) !important;
+  --text-secondary-01: var(--ll-file-fg-2) !important;
+  --text_secondary: var(--ll-file-fg-2) !important;
+  --text_primary: var(--ll-file-fg) !important;
+  background: var(--ll-file-bg) !important;
+  color: var(--ll-file-fg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.16) !important;
+  text-shadow: none !important;
+}
+body .chat-msg-area .message-container:is(.message-container--self, .message-container--align-right) .normal-file {
+  --ll-file-bg: var(--ll-bubble-self, color-mix(in srgb, rgb(var(--ll-brand-rgb)) 34%, rgb(var(--ll-acrylic))));
+  --ll-file-fg: var(--ll-bubble-self-fg, var(--ll-chat-surface-fg));
+  --ll-file-fg-2: var(--ll-file-fg);
+}
+
+/* 原版保留 QQ 昵称网格，独立字号/隐藏选项仍生效。 */
+body[data-liuli-chat-style='classic'] .message-container > .user-name {
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--ll-name-font-size, 12px) !important;
+}
+body[data-liuli-chat-style='classic'] .message-container > .user-name .q-tag {
+  font-size: var(--ll-title-font-size, 10px) !important;
+}
 body[data-liuli-hide-image-names] .message-container[data-liuli-image-only] > .user-name {
   display: none !important;
+}
+
+/* Size changes spacing and voice dimensions without zooming fonts or media. */
+body {
+  --ll-bubble-padding-x: 13px;
+  --ll-bubble-padding-y: 8px;
+}
+body[data-liuli-chat-style='tim'] { --ll-bubble-padding-x: 10px; }
+body[data-liuli-chat-style='classic'] { --ll-bubble-padding-x: 12px; }
+/* QQ's native content-box and the wrapper's minimum height must not switch
+ * sizing models when the user enables a maximum width. */
+body .chat-msg-area .message-content__wrapper > .msg-content-container,
+body .chat-msg-area .message-content__wrapper > .forward-msg {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+}
+body[data-liuli-scaled-bubbles] .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not([data-liuli-image-only]):not([data-liuli-video-only]):not(.ark-msg-content-container):not(:has(.ark-view-message, .forward-msg, .market-face-element, [class*='lottie'])):not(#ll) {
+  padding: calc(var(--ll-bubble-padding-y) * var(--ll-bubble-scale, 1)) calc(var(--ll-bubble-padding-x) * var(--ll-bubble-scale, 1)) !important;
+}
+
+/* 宽度以整个消息区测量，不以已经收缩的 grid 单元格再乘一次百分比。
+ * 只在用户调窄时启用，100% 完全保留原生卡片和媒体尺寸。 */
+body[data-liuli-limit-bubbles] .chat-msg-area .message-content__wrapper {
+  max-width: min(100%, var(--ll-message-max-width)) !important;
+  min-width: 0 !important;
+}
+body[data-liuli-limit-bubbles] .chat-msg-area .message-content__wrapper > .msg-content-container,
+body[data-liuli-limit-bubbles] .chat-msg-area .message-content__wrapper > .forward-msg {
+  max-width: 100% !important;
+}
+body[data-liuli-limit-bubbles] .chat-msg-area .msg-content-container .text-element {
+  overflow-wrap: anywhere !important;
+  min-width: 0 !important;
+}
+body[data-liuli-limit-bubbles] .chat-msg-area .pic-element,
+body[data-liuli-limit-bubbles] .chat-msg-area .market-face-element {
+  max-width: 100% !important;
+  height: auto !important;
+  aspect-ratio: var(--ll-picture-ratio, auto);
+}
+body[data-liuli-limit-bubbles] .chat-msg-area .pic-element > img,
+body[data-liuli-limit-bubbles] .chat-msg-area .market-face-element img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+/* 语音按原生波形条数和宽度设置计算首选宽度，播放按钮与时长固定。
+ * 自己消息的原生 auto 列会按内容收缩，因此给语音单独使用可伸缩内容列。 */
+body .chat-msg-area .message-container.ptt-message:not(#ll) {
+  grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
+}
+body .chat-msg-area .message-container.ptt-message.message-container--self:not(#ll) {
+  grid-template-columns: 0px 46px 8px minmax(0, 1fr) 14px 32px !important;
+}
+body .chat-msg-area .message-container.ptt-message:has(.msg-picker):not(#ll) {
+  grid-template-columns: 28px 32px 14px minmax(0, 1fr) 46px 0px !important;
+}
+body .chat-msg-area .message-container.ptt-message.message-container--self:has(.msg-picker):not(#ll) {
+  grid-template-columns: 28px 46px 8px minmax(0, 1fr) 14px 32px !important;
+}
+body .chat-msg-area .message-container.ptt-message > .message-content__wrapper {
+  width: max-content !important;
+  max-width: min(100%, var(--ll-message-max-width, 100%)) !important;
+  min-width: 0 !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  column-gap: 8px !important;
+}
+body .chat-msg-area .message-container.ptt-message > .message-content__wrapper > .ptt-message__container {
+  flex: 0 1 auto !important;
+  width: calc((80px + var(--ll-voice-wave-width, 64px)) * var(--ll-bubble-scale, 1)) !important;
+  min-width: 0 !important;
+  max-width: min(100%, var(--ll-message-max-width, 100%)) !important;
+  margin-inline: 0 !important;
+  box-sizing: border-box !important;
+}
+body .chat-msg-area .message-container.ptt-message > .message-content__wrapper > .ptt-message__container:not(#ll) {
+  /* The surface lives on this container in every mode. QQ normally pads the
+   * inner .ptt-element, which the shared controls deliberately reset to zero. */
+  padding: calc(var(--ll-bubble-padding-y) * var(--ll-bubble-scale, 1)) min(calc(var(--ll-bubble-padding-x) * var(--ll-bubble-scale, 1)), 10%) !important;
+}
+body .chat-msg-area .ptt-message__inner {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+/* 保留 QQ 原生播放、拖动进度与转文字；附属按钮始终与气泡居中对齐。 */
+body .chat-msg-area .ptt-element {
+  --ll-voice-control-size: calc(var(--ll-message-font-size, 14px) * 1.5 * var(--ll-bubble-scale, 1));
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: var(--text_primary, var(--ll-on-glass)) !important;
+}
+body .chat-msg-area .ptt-element__bottom-area,
+body .chat-msg-area .ptt-element__bottom-area-text {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-wrap: anywhere;
+}
+body .chat-msg-area .ptt-element__top-area {
+  display: flex !important;
+  align-items: center !important;
+  gap: min(calc(8px * var(--ll-bubble-scale, 1)), 8%) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  min-height: var(--ll-voice-control-size) !important;
+}
+body .chat-msg-area .ptt-element__button {
+  flex: 0 0 var(--ll-voice-control-size) !important;
+  width: var(--ll-voice-control-size) !important;
+  height: var(--ll-voice-control-size) !important;
+  margin: 0 !important;
+  position: relative !important;
+  border: none !important;
+  border-radius: 50% !important;
+  background: color-mix(in srgb, var(--text_primary, var(--ll-on-glass)) 13%, transparent) !important;
+  color: var(--text_primary, var(--ll-on-glass)) !important;
+}
+body .chat-msg-area .ptt-element__button::before {
+  content: none !important;
+}
+body .chat-msg-area .ptt-element__button .q-icon {
+  width: calc(var(--ll-voice-control-size) * 0.57) !important;
+  height: calc(var(--ll-voice-control-size) * 0.57) !important;
+  left: calc(var(--ll-voice-control-size) * 0.215) !important;
+  top: calc(var(--ll-voice-control-size) * 0.215) !important;
+  color: inherit !important;
+}
+body .chat-msg-area .ptt-element__progress {
+  flex: 0 1 auto !important;
+  width: max-content !important;
+  min-width: 0 !important;
+}
+/* 沿用原生 16px 波形高度与底边对齐：每条实色 2px、间距 2px、圆角 1px。
+ * 间距包含在可收缩单元内，缩窄气泡时整段波形仍可显示。 */
+body .chat-msg-area .ptt-element__progress-item {
+  flex: 0 1 calc(4px * var(--ll-bubble-scale, 1)) !important;
+  width: calc(4px * var(--ll-bubble-scale, 1)) !important;
+  max-width: calc(4px * var(--ll-bubble-scale, 1));
+  min-width: 0;
+  margin-right: 0 !important;
+  background: none !important;
+}
+body .chat-msg-area .ptt-element__progress-item:last-child {
+  flex-basis: calc(2px * var(--ll-bubble-scale, 1)) !important;
+  width: calc(2px * var(--ll-bubble-scale, 1)) !important;
+}
+body .chat-msg-area .ptt-element__progress-item::before {
+  content: '';
+  display: block;
+  width: 50%;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--text_primary, var(--ll-on-glass));
+}
+body .chat-msg-area .ptt-element__progress-item:last-child::before {
+  width: 100%;
+}
+/* .notplayed 的原生透明度与进度游标保留，播放状态仍由 QQ 管理。 */
+body .chat-msg-area .ptt-element__duration {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  margin-left: auto !important;
+  color: var(--text_primary, var(--ll-on-glass)) !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important;
+}
+body .chat-msg-area .ptt-element__duration span {
+  font-size: 13px !important;
+  line-height: var(--ll-voice-control-size) !important;
+  font-weight: 500 !important;
+}
+body .chat-msg-area .ptt-element__bottom-area:not(:empty) {
+  margin-top: 8px !important;
+  padding-top: 8px !important;
+  border-top: 1px solid color-mix(in srgb, var(--text_primary, var(--ll-on-glass)) 16%, transparent) !important;
+}
+body .chat-msg-area .ptt-element__bottom-area::before {
+  display: none !important;
+}
+body .chat-msg-area .ptt-element__bottom-area-text {
+  padding: 0 !important;
+  background: transparent !important;
+  color: var(--text_primary, var(--ll-on-glass)) !important;
+  font-size: var(--ll-message-font-size, 14px) !important;
+  line-height: 1.5 !important;
+  white-space: pre-wrap !important;
+}
+body .chat-msg-area .ptt-translate-btn {
+  position: static !important;
+  top: auto !important;
+  transform: none !important;
+  align-self: center !important;
+  margin: 0 !important;
+  background: var(--ll-primary-container, rgba(var(--ll-acrylic), 0.86)) !important;
+  color: var(--ll-on-primary-container, var(--ll-on-glass)) !important;
+}
+body .chat-msg-area .message-container.ptt-message > .message-content__wrapper > .ptt-message__badge {
+  position: static !important;
+  top: auto !important;
+  transform: none !important;
+  align-self: center !important;
+  margin: 0 !important;
+}
+
+/* 纯视频没有发送人信息条；混合视频文字依然按普通消息显示。 */
+body .message-container[data-liuli-video-only] > .user-name,
+body .msg-content-container[data-liuli-video-only] > .user-name {
+  display: none !important;
+}
+body .msg-content-container[data-liuli-video-only] > .message-content {
+  margin-top: 0 !important;
+}
+
+/* 完整名称可撑开短气泡，达到消息宽度上限后自然换行。 */
+body[data-liuli-full-message-names] .message-container .msg-content-container > .user-name,
+body[data-liuli-full-message-names] .message-container > .user-name {
+  contain: none !important;
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex-wrap: wrap !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+body[data-liuli-full-message-names] .message-container .user-name > .text-ellipsis {
+  /* Keep the nickname's intrinsic width as the wrapping unit. A zero basis
+   * squeezes it into the few pixels left beside a label, one glyph per line. */
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+/* QQ also uses a group-member label with separate level and title spans.
+ * A header allowed to wrap must not make those spans wrap inside a 15px tag.
+ * Size metadata from its own font/line box; only the nickname may wrap. */
+body .message-container .user-name {
+  column-gap: 5px !important;
+  row-gap: 3px !important;
+}
+body .message-container .user-name > :is(.q-tag, .user-label):not(#ll) {
+  box-sizing: border-box !important;
+  flex: 0 1 auto !important;
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 5px !important;
+  font-size: var(--ll-title-font-size, 10px) !important;
+  line-height: 1.4 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+body .message-container .user-name > :is(.q-tag, .user-label):not(#ll) > * {
+  min-width: 0 !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+body .message-container .user-name > .group-member-label > .level {
+  flex: 0 0 auto !important;
+}
+/* The native nickname grid offsets the outside row by -2px. Once TG moves
+ * that row inside the bubble, the offset clips its first line at the top. */
+body[data-liuli-chat-style='tg'] .message-container .msg-content-container > .user-name {
+  top: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  align-items: center !important;
+}
+
+/* Classic's metadata stays directly on the wallpaper, without another surface.
+ * A fine glyph shadow preserves the light lettering across busy backgrounds. */
+body[data-liuli-chat-style='classic'] .message-container > .user-name {
+  box-sizing: border-box !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  top: 0 !important;
+  margin: 0 0 4px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgb(var(--ll-veil-white-rgb, 250, 248, 244)) !important;
+  font-weight: 500 !important;
+  line-height: 1.4 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.78), 0 0 1px rgba(0, 0, 0, 0.9) !important;
+}
+body[data-liuli-chat-style='classic'] .message-container > .user-name > .text-ellipsis {
+  color: inherit !important;
+}
+/* Native metadata variants share opaque surfaces in every layout, whether the
+ * sender row sits inside or outside its message bubble. */
+body .chat-msg-area .message-container .user-name :is(.q-tag, .user-label, .group-member-label):not(#ll) {
+  border: none !important;
+  background: var(--ll-surface-high, rgb(var(--ll-acrylic))) !important;
+  color: var(--ll-on-glass) !important;
+  box-shadow: none !important;
+  font-weight: 500 !important;
+  text-shadow: none !important;
+}
+body[data-liuli-chat-style='classic'] .message-container > .user-name :is(.q-tag, .user-label):not(#ll) {
+  border-radius: 4px !important;
+}
+body .chat-msg-area .message-container .user-name .q-tag--orange:not(#ll) {
+  background: var(--ll-tertiary-container) !important;
+  color: var(--ll-on-tertiary-container) !important;
+}
+body .chat-msg-area .message-container .user-name .q-tag--blue:not(#ll) {
+  background: var(--ll-secondary-container) !important;
+  color: var(--ll-on-secondary-container) !important;
+}
+body .chat-msg-area .message-container .user-name .q-tag--grey:not(#ll) {
+  background: var(--ll-surface-high, rgb(var(--ll-acrylic))) !important;
+  color: var(--ll-on-glass) !important;
+}
+body .chat-msg-area .message-container .user-name .q-tag--purple:not(#ll) {
+  background: var(--ll-primary-container) !important;
+  color: var(--ll-on-primary-container) !important;
+}
+body .chat-msg-area .message-container .user-name .user-label:not(#ll) {
+  background: var(--ll-primary-container) !important;
+  color: var(--ll-on-primary-container) !important;
+}
+body .chat-msg-area .message-container .user-name :is(.q-tag, .user-label, .group-member-label):not(#ll) > * {
+  background: transparent !important;
+  color: inherit !important;
 }

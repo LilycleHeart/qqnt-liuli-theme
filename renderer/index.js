@@ -41,6 +41,7 @@
     'layout.css',
     'lists.css',
     'motion.css',
+    'scroll-time.css',
     'markdown.css',
     'layout-custom.css',
     'integration.css',
@@ -53,6 +54,11 @@
   const WALLPAPER = window.LiuliHost.wallpaper;
   const OPTIONAL_FILES = new Set(['wallpaper.css']);
   const DEFAULT_SOURCE = '#1d9bf0';
+  function llNormalizeColorSeed(value) {
+    if (typeof value !== 'string') return null;
+    const seed = value.trim();
+    return /^#[0-9a-f]{6}$/i.test(seed) ? seed.toLowerCase() : null;
+  }
   let refreshPaletteInfo = () => {};
   let refreshDiagnosticErrors = () => {};
   let refreshInputGeometry = () => {};
@@ -300,9 +306,12 @@
     if (window.__liuliPaletteApplied) return;
     window.__liuliPaletteApplied = true;
     const generation = ++paletteGeneration;
+    const paletteSettings = llNormalizeSettings(llModeCfg);
     let source = DEFAULT_SOURCE;
     try {
-      source = await extractSource();
+      source = paletteSettings.colorSource === 'custom'
+        ? paletteSettings.customColor
+        : await extractSource();
     } catch (e) {
       source = DEFAULT_SOURCE;
     }
@@ -316,16 +325,21 @@
       Object.assign(vars, roleVars(mcu, theme, isDark, roles));
     } catch (e) {}
     const body = document.body;
+    // 选中行会重定义 --ll-on-glass，先保留表面文字色，供低浓度选中态使用。
+    vars['--ll-selection-glass-fg'] = vars['--ll-on-glass'];
+    vars['--ll-selection-glass-fg-rgb'] = vars['--ll-on-glass-rgb'];
     for (const k in vars) {
       if (vars[k] === null) body.style.removeProperty(k);
       else body.style.setProperty(k, vars[k]);
     }
     body.dataset.liuliSource = source;
+    body.dataset.liuliColorSource = paletteSettings.colorSource;
     body.toggleAttribute('data-liuli-other-solid', vars['--ll-bubble-other'] != null);
+    syncSelectionContrast();
     llApplyModeSettings();
     refreshPaletteInfo();
     console.log(
-      '[theme] wallpaper source = ' + source + ' (accent ' + vars['--ll-brand'] + ')'
+      '[theme] ' + paletteSettings.colorSource + ' source = ' + source + ' (accent ' + vars['--ll-brand'] + ')'
     );
   }
   const GLASS = [
@@ -392,22 +406,7 @@
     });
   }
   function normalizeColors(root = document.body) {
-    try {
-      const nodes = elementsWithin(root, '*');
-      for (let i = 0; i < nodes.length; i++) {
-        const el = nodes[i];
-        if (el.dataset.liuliColor) continue;
-        if (el.children.length > 0) continue;
-        const text = (el.textContent || '').trim();
-        if (!text) continue;
-        const color = getComputedStyle(el).color.replace(/\s+/g, ' ').trim();
-        const mapped = QQ_COLOR_MAP[color];
-        if (mapped) {
-          el.dataset.liuliColor = '1';
-          el.style.setProperty('color', mapped, 'important');
-        }
-      }
-    } catch (e) {}
+    messageColorRepair().repair([root]);
   }
   const DIM_COLORS = new Set(['rgb(128, 128, 128)', 'rgb(102, 102, 102)', 'rgb(153, 153, 153)']);
   const TEXT_SELECTORS = [
@@ -421,17 +420,150 @@
     '.summary-main'
   ];
   function fixContrast(root = document.body) {
-    try {
-      for (const sel of TEXT_SELECTORS) {
-        elementsWithin(root, sel).forEach(el => {
-          if (el.dataset.liuliFg) return;
-          const color = getComputedStyle(el).color.replace(/\s+/g, ' ').trim();
-          if (!DIM_COLORS.has(color)) return;
-          el.dataset.liuliFg = '1';
-          el.style.setProperty('color', 'var(--ll-on-glass-2)', 'important');
-        });
+    messageColorRepair().repair([root]);
+  }
+  let llColorRepair = null;
+  function messageColorRepair() {
+    return llColorRepair || (llColorRepair = createMessageColorRepair());
+  }
+  function createMessageColorRepair(options = {}) {
+    const pending = new Set(), owned = new Map();
+    let cache = new WeakMap(), timer = 0, frame = 0, quietUntil = 0, holding = 0, disposed = false;
+    const selector = TEXT_SELECTORS.join(',');
+    const scope = '.chat-msg-area,.recent-contact';
+    const deferred = 'liuli-color-deferred';
+    const stats = { reads: 0, writes: 0, flushes: 0 };
+    function candidates(roots) {
+      const result = new Set();
+      for (const root of roots) if (root?.isConnected) {
+        for (const element of elementsWithin(root, '*')) {
+          if (element.matches('style,script') || element.closest('#liuli-scroll-time')) continue;
+          if ((!element.children.length && element.textContent.trim()) || element.matches(selector)) result.add(element);
+        }
       }
-    } catch (e) {}
+      return result;
+    }
+    function stateOf(element) {
+      let state = owned.get(element);
+      if (!state) {
+        state = { color: element.style.getPropertyValue('color'), priority: element.style.getPropertyPriority('color'),
+          applied: null, attributes: new Map() };
+        owned.set(element, state);
+      }
+      return state;
+    }
+    function mark(element, name, value) {
+      const state = stateOf(element);
+      if (!state.attributes.has(name)) state.attributes.set(name, { before: element.getAttribute(name), applied: value });
+      else state.attributes.get(name).applied = value;
+      if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+    }
+    function releaseColor(element, state) {
+      if (!state.applied) return;
+      const current = element.style.getPropertyValue('color'), priority = element.style.getPropertyPriority('color');
+      if (current === state.applied && priority === 'important') {
+        if (state.color) element.style.setProperty('color', state.color, state.priority);
+        else element.style.removeProperty('color');
+      } else { state.color = current; state.priority = priority; }
+      state.applied = null;
+    }
+    function restoreOwned(element, state) {
+      releaseColor(element, state);
+      for (const [name, value] of state.attributes) if (element.getAttribute(name) === value.applied) {
+        if (value.before === null) element.removeAttribute(name);
+        else element.setAttribute(name, value.before);
+      }
+    }
+    function signature(element) {
+      const nativeClass = (element.getAttribute('class') || '').split(/\s+/).filter(name => !/^(?:ll-|liuli-)/.test(name)).join(' ');
+      return element.style.cssText + '\0' + nativeClass + '\0' + element.textContent + '\0' + (element.closest('.ml-item')?.id || '');
+    }
+    function clearScheduled() {
+      clearTimeout(timer); timer = 0;
+      cancelAnimationFrame(frame); frame = 0;
+    }
+    function schedule() {
+      if (disposed || holding || !pending.size || document.hidden) return;
+      clearScheduled();
+      const wait = quietUntil - performance.now();
+      if (wait > 0) timer = setTimeout(() => { timer = 0; flush(); }, wait);
+      else frame = requestAnimationFrame(() => { frame = 0; flush(); });
+    }
+    function flush(force = false) {
+      if (disposed || holding || document.hidden) return;
+      clearScheduled();
+      const writes = [], later = performance.now() < quietUntil;
+      for (const [element, state] of owned) if (!element.isConnected) { restoreOwned(element, state); owned.delete(element); }
+      // All computed colors are read before the first inline color write.
+      for (const element of pending) {
+        if (!element.isConnected) { pending.delete(element); owned.delete(element); continue; }
+        if (!force && later && element.closest(scope)) continue;
+        pending.delete(element);
+        const key = signature(element);
+        if (cache.get(element) === key) continue;
+        if (/var\(\s*--ll-/.test(element.style.getPropertyValue('color'))) { cache.set(element, key); continue; }
+        const color = getComputedStyle(element).color.replace(/\s+/g, ' ').trim();
+        stats.reads++;
+        const normalize = !element.children.length && !!element.textContent.trim();
+        const contrast = element.matches(selector) && DIM_COLORS.has(color);
+        const mapped = contrast ? 'var(--ll-on-glass-2)' : normalize ? QQ_COLOR_MAP[color] : null;
+        if (mapped) writes.push({ element, mapped, normalize, contrast });
+        else cache.set(element, key);
+      }
+      for (const { element, mapped, normalize, contrast } of writes) {
+        const state = stateOf(element);
+        element.style.setProperty('color', mapped, 'important'); state.applied = mapped;
+        if (normalize) mark(element, 'data-liuli-color', '1');
+        if (contrast) mark(element, 'data-liuli-fg', '1');
+        cache.set(element, signature(element)); stats.writes++;
+      }
+      stats.flushes++;
+      options.afterWrite?.();
+      if (pending.size) schedule();
+    }
+    function enqueue(roots, asynchronous) {
+      if (disposed) return;
+      for (const element of candidates(roots)) {
+        pending.add(element);
+        if (options.legacyGate) {
+          if (!element.getAttribute('data-liuli-color')) mark(element, 'data-liuli-color', deferred);
+          if (!element.getAttribute('data-liuli-fg')) mark(element, 'data-liuli-fg', deferred);
+        }
+      }
+      options.afterWrite?.();
+      if (!holding) { if (asynchronous) schedule(); else flush(); }
+    }
+    function invalidate(root, subtree = true) {
+      if (!root?.querySelectorAll) return;
+      for (const element of subtree ? elementsWithin(root, '*') : [root]) {
+        const state = owned.get(element);
+        if (cache.has(element) || state || ((!element.children.length && element.textContent.trim()) || element.matches(selector))) pending.add(element);
+        cache.delete(element);
+        if (state) releaseColor(element, state);
+      }
+    }
+    function activity(event) {
+      if (!event.target?.closest?.(scope)) return;
+      quietUntil = performance.now() + 180;
+      if (pending.size) schedule();
+    }
+    function visibility() { if (document.hidden) clearScheduled(); else schedule(); }
+    for (const name of ['wheel', 'touchmove', 'scroll']) document.addEventListener(name, activity, { capture: true, passive: true });
+    document.addEventListener('visibilitychange', visibility);
+    const api = {
+      repair(roots) { enqueue(roots, false); }, enqueue(roots) { enqueue(roots, true); }, invalidate, flush,
+      batch(callback, force = false) { holding++; try { callback(); } finally { holding--; if (!holding) flush(force); } },
+      get stats() { return { ...stats, pending: pending.size }; },
+      dispose() {
+        if (disposed) return;
+        disposed = true; clearScheduled(); pending.clear(); cache = new WeakMap();
+        for (const name of ['wheel', 'touchmove', 'scroll']) document.removeEventListener(name, activity, true);
+        document.removeEventListener('visibilitychange', visibility);
+        for (const [element, state] of owned) restoreOwned(element, state);
+        owned.clear(); options.afterWrite?.();
+      }
+    };
+    return api;
   }
   function applyOverrides(root = document.body) {
     try {
@@ -487,9 +619,18 @@
     hideEmptyLogo: true,
     chatStyle: 'tg',
     avatarPosition: 'bottom',
+    timSenderPosition: 'outside',
     messageFontSize: 14,
     nameFontSize: 12,
-    titleFontSize: 10
+    titleFontSize: 10,
+    bubbleScale: 100,
+    bubbleMaxWidth: 100,
+    selectedStrength: 100,
+    colorSource: 'wallpaper',
+    customColor: DEFAULT_SOURCE,
+    showMessageTitles: true,
+    showMessageIdentity: true,
+    truncateMessageNames: true
   };
   const DIM_MAX = 0.8;
   const DIM_FALLBACK = 0.18;
@@ -497,7 +638,13 @@
     const cfg = Object.assign({}, DEFAULT_SETTINGS, raw || {});
     cfg.chatStyle = ['tg', 'classic', 'tim'].includes(cfg.chatStyle) ? cfg.chatStyle : 'tg';
     cfg.avatarPosition = cfg.avatarPosition === 'top' ? 'top' : 'bottom';
-    for (const [key, min, max] of [['messageFontSize', 12, 24], ['nameFontSize', 10, 18], ['titleFontSize', 9, 14]]) {
+    cfg.timSenderPosition = cfg.timSenderPosition === 'inside' ? 'inside' : 'outside';
+    cfg.colorSource = cfg.colorSource === 'custom' ? 'custom' : 'wallpaper';
+    cfg.customColor = llNormalizeColorSeed(cfg.customColor) || DEFAULT_SOURCE;
+    for (const key of ['showMessageTitles', 'showMessageIdentity', 'truncateMessageNames']) {
+      cfg[key] = cfg[key] !== false;
+    }
+    for (const [key, min, max] of [['messageFontSize', 12, 24], ['nameFontSize', 10, 18], ['titleFontSize', 9, 14], ['bubbleScale', 80, 140], ['bubbleMaxWidth', 40, 100], ['selectedStrength', 15, 100]]) {
       const n = Number(cfg[key]);
       cfg[key] = Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : DEFAULT_SETTINGS[key];
     }
@@ -596,11 +743,100 @@
       '0 8px 28px rgba(var(--ll-shadow-rgb), ' + (s * 0.47 * k).toFixed(2) + ')'
     );
   }
+  function syncSelectionContrast() {
+    const body = document.body;
+    const style = getComputedStyle(body);
+    const parse = text => {
+      const value = String(text || '').trim();
+      if (/^#[0-9a-f]{6}$/i.test(value)) {
+        const n = parseInt(value.slice(1), 16);
+        return [(n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+      }
+      const parts = value.match(/[\d.]+/g);
+      return parts && parts.length >= 3 ? parts.slice(0, 3).map(Number) : null;
+    };
+    const selected = parse(style.getPropertyValue('--ll-selected-rgb') || style.getPropertyValue('--ll-brand-rgb'));
+    const surface = parse(style.getPropertyValue('--ll-acrylic'));
+    const solidInk = parse(style.getPropertyValue('--ll-on-selected') || style.getPropertyValue('--ll-on-brand'));
+    const glassInk = parse(style.getPropertyValue('--ll-selection-glass-fg') || style.getPropertyValue('--ll-on-glass'));
+    if (!selected || !surface || !solidInk || !glassInk) return;
+    const alpha = llModeCfg.selectedStrength / 100;
+    const background = selected.map((v, i) => v * alpha + surface[i] * (1 - alpha));
+    const luminance = rgb => rgb.map(v => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const bg = luminance(background);
+    const contrast = rgb => {
+      const fg = luminance(rgb);
+      return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+    };
+    // 以侧栏材质色估计合成底色；中间浓度下两个主题色都可能对比不足，
+    // 这时采用黑/白兜底，不把文字跟着背景一起减淡。
+    let ink = contrast(glassInk) > contrast(solidInk) ? glassInk : solidInk;
+    if (contrast(ink) < 4.5) {
+      const black = [0, 0, 0], white = [255, 255, 255];
+      ink = contrast(black) > contrast(white) ? black : white;
+    }
+    body.style.setProperty('--ll-selection-readable-fg', 'rgb(' + ink.join(',') + ')');
+    body.style.setProperty('--ll-selection-readable-fg-rgb', ink.join(','));
+    // 辅助文字逐步混入选中色以区分层级，但不能因此跌破小字对比阈值。
+    const supportingInk = preferred => {
+      for (let weight = preferred; weight <= 1.001; weight += 0.02) {
+        const candidate = ink.map((v, i) => Math.round(v * Math.min(weight, 1) + selected[i] * (1 - Math.min(weight, 1))));
+        if (contrast(candidate) >= 4.5) return 'rgb(' + candidate.join(',') + ')';
+      }
+      return 'rgb(' + ink.join(',') + ')';
+    };
+    body.style.setProperty('--ll-selection-summary-fg', supportingInk(0.84));
+    body.style.setProperty('--ll-selection-meta-fg', supportingInk(0.76));
+    // 徽标是独立的实色小胶囊，不能跟着低浓度行的文字反色一起改变配对。
+    body.style.setProperty('--ll-selection-badge-bg', 'rgb(' + selected.join(',') + ')');
+    body.style.setProperty('--ll-selection-badge-fg', 'rgb(' + solidInk.join(',') + ')');
+    body.toggleAttribute('data-liuli-soft-selection', ink.some((v, i) => v !== solidInk[i]));
+  }
+
+  function syncBubbleWidth() {
+    const ratio = llModeCfg.bubbleMaxWidth / 100;
+    document.body.toggleAttribute('data-liuli-limit-bubbles', ratio < 1);
+    // QQ 会保留隐藏的旧聊天区，不能拿第一个区域的宽度写成全窗口共用值。
+    for (const area of document.querySelectorAll('.chat-msg-area')) {
+      if (ratio >= 1) {
+        area.style.removeProperty('--ll-message-max-width');
+        continue;
+      }
+      if (area.clientWidth < 1) continue;
+      const value = Math.max(1, Math.floor(area.clientWidth * ratio)) + 'px';
+      if (area.style.getPropertyValue('--ll-message-max-width') !== value) {
+        area.style.setProperty('--ll-message-max-width', value);
+      }
+      // 原生图片节点用内联固定宽高，缩窄时媒体盒也必须等比缩放。
+      syncPictureRatios(area);
+    }
+  }
+
+  function syncPictureRatios(root) {
+    if (llModeCfg.bubbleMaxWidth >= 100) return;
+    const pictures = [...root.querySelectorAll('.pic-element, .market-face-element')];
+    if (root.matches?.('.pic-element, .market-face-element')) pictures.unshift(root);
+    for (const picture of pictures) {
+      const width = parseFloat(picture.style.width);
+      const height = parseFloat(picture.style.height);
+      if (width > 0 && height > 0) {
+        const ratio = String(width / height);
+        if (picture.style.getPropertyValue('--ll-picture-ratio') !== ratio)
+          picture.style.setProperty('--ll-picture-ratio', ratio);
+      }
+    }
+  }
+
   function applySettings(cfg, broadcast) {
     const b = document.body;
     const previous = llModeCfg;
     llModeCfg = llNormalizeSettings(cfg);
-    const reflowMessages = !llSettingsApplied || ['chatStyle', 'avatarPosition', 'hideImageNames']
+    const paletteChanged = previous.colorSource !== llModeCfg.colorSource ||
+      previous.customColor !== llModeCfg.customColor;
+    const reflowMessages = !llSettingsApplied || ['chatStyle', 'avatarPosition', 'timSenderPosition', 'hideImageNames']
       .some(key => previous[key] !== llModeCfg[key]);
     llSettingsApplied = true;
     window.__liuliSettingsCache = llModeCfg;
@@ -610,12 +846,22 @@
     b.style.setProperty('--ll-glow-strength', String(llModeCfg.glow));
     b.toggleAttribute('data-liuli-hide-image-names', llModeCfg.hideImageNames === true);
     b.toggleAttribute('data-liuli-hide-empty-logo', llModeCfg.hideEmptyLogo !== false);
+    b.toggleAttribute('data-liuli-hide-message-titles', !llModeCfg.showMessageTitles);
+    b.toggleAttribute('data-liuli-hide-message-identity', !llModeCfg.showMessageIdentity);
+    b.toggleAttribute('data-liuli-full-message-names', !llModeCfg.truncateMessageNames);
     b.dataset.liuliChatStyle = llModeCfg.chatStyle;
     b.dataset.liuliAvatarPosition = llModeCfg.avatarPosition;
+    b.dataset.liuliTimSenderPosition = llModeCfg.timSenderPosition;
     b.style.setProperty('--ll-message-font-size', llModeCfg.messageFontSize + 'px');
     b.style.setProperty('--ll-name-font-size', llModeCfg.nameFontSize + 'px');
     b.style.setProperty('--ll-title-font-size', llModeCfg.titleFontSize + 'px');
+    b.style.setProperty('--ll-bubble-scale', String(llModeCfg.bubbleScale / 100));
+    b.toggleAttribute('data-liuli-scaled-bubbles', llModeCfg.bubbleScale !== 100);
+    b.style.setProperty('--ll-selected-strength', String(llModeCfg.selectedStrength / 100));
+    syncSelectionContrast();
     llApplyModeSettings();
+    syncBubbleWidth();
+    window.__liuliVoiceLayout?.refresh();
     if (reflowMessages) {
       moveSenderIntoBubble(document);
       groupMessages();
@@ -635,12 +881,56 @@
         const ratio = (Number(value) - Number(control.min)) / (Number(control.max) - Number(control.min));
         control.style.setProperty('--liuli-pct', Math.max(0, Math.min(100, ratio * 100)) + '%');
         const output = control.parentElement.querySelector('.liuli-field__value');
-        if (output) output.textContent = value + 'px';
+        if (output) output.textContent = value + (control.dataset.unit || 'px');
       } else {
         for (const button of control.querySelectorAll('button[data-setting-value]')) {
           button.classList.toggle('is-active', button.dataset.settingValue === String(value));
         }
       }
+    }
+    llSyncSettingDependencies();
+    llSyncColorSourceControls();
+    if (paletteChanged) {
+      // A new generation also invalidates an older, still decoding wallpaper.
+      window.__liuliPaletteApplied = false;
+      applyDynamicPalette().catch(error => console.warn('[theme] palette failed:', error));
+    }
+  }
+  function llSyncSettingDependencies() {
+    for (const [key, enabled, reason] of [
+      ['avatarPosition', ['tg', 'tim'].includes(llModeCfg.chatStyle), '仅 TG 和 TIM 气泡使用此设置，已保存的头像位置会保留。'],
+      ['timSenderPosition', llModeCfg.chatStyle === 'tim', '仅 TIM 气泡使用此设置，已保存的名称与标签位置会保留。'],
+      ['pinColor', llModeCfg.pinGroup !== false, '先开启「置顶会话单独成组」，已保存的颜色选项会保留。']
+    ]) {
+      for (const row of document.querySelectorAll('[data-liuli-setting="' + key + '"]')) {
+        row.classList.toggle('is-dependent-disabled', !enabled);
+        row.hidden = false;
+        row.setAttribute('aria-disabled', String(!enabled));
+        row.title = enabled ? '' : reason;
+        for (const button of row.querySelectorAll('button')) button.disabled = !enabled;
+      }
+    }
+  }
+  function llSyncColorSourceControls() {
+    for (const row of document.querySelectorAll('[data-liuli-setting="colorSource"]')) {
+      for (const button of row.querySelectorAll('button[data-setting-value]')) {
+        button.setAttribute('aria-pressed', String(button.dataset.settingValue === llModeCfg.colorSource));
+      }
+    }
+    for (const custom of document.querySelectorAll('[data-liuli-color-custom]')) {
+      custom.hidden = llModeCfg.colorSource !== 'custom';
+      custom.style.setProperty('--liuli-color-seed', llModeCfg.customColor);
+      custom.__liuliColorWheel?.setSeed(llModeCfg.customColor);
+      const picker = custom.querySelector('input[type="color"]');
+      const hex = custom.querySelector('input[type="text"]');
+      if (picker) picker.value = llModeCfg.customColor;
+      if (hex) {
+        hex.value = llModeCfg.customColor;
+        hex.setCustomValidity('');
+        hex.setAttribute('aria-invalid', 'false');
+      }
+      const error = custom.querySelector('[data-liuli-color-error]');
+      if (error) error.textContent = '';
     }
   }
   try {
@@ -650,7 +940,7 @@
         const incoming = llNormalizeSettings(JSON.parse(e.newValue));
         llSuppressBroadcast = true;
         applySettings(incoming, false);
-        const sliders = document.querySelectorAll('.liuli-slider:not(.liuli-type-slider)');
+        const sliders = document.querySelectorAll('.liuli-slider:not([data-liuli-setting])');
         if (sliders.length === FIELDS.length) {
           FIELDS.forEach(function (f, i) {
             const el = sliders[i];
@@ -802,6 +1092,7 @@
     document.body.appendChild(overlay);
     var hoverTimer = 0;
     function setExpanded(open) {
+      if (document.body.dataset.liuliInputLayout === 'native') open = false;
       var bar = document.querySelector('.chat-func-bar');
       if (!bar) return;
       more.dataset.open = open ? '1' : '0';
@@ -878,7 +1169,7 @@
        * 迷你窗等其它非主窗口保留 QQ 原生输入区，不挂代理按钮。 */
       const mainLike =
         document.body.dataset.liuliScope === 'main' || (location.hash || '').indexOf('#/chat') === 0;
-      if (!mainLike) {
+      if (!mainLike || document.body.dataset.liuliInputLayout === 'native') {
         const nativeOverlay = document.getElementById('liuli-input-overlay');
         if (nativeOverlay) nativeOverlay.style.display = 'none';
         return;
@@ -956,31 +1247,89 @@
     });
     document.body.style.setProperty('--liuli-bar-pad', 12 + (labels.length + 1) * 32 + 'px');
   }
+  function isImageOnlyContent(content) {
+    let images = 0;
+    function visit(node) {
+      if (node.nodeType === Node.COMMENT_NODE) return true;
+      if (node.nodeType === Node.TEXT_NODE) return !node.textContent.trim();
+      if (node.nodeType !== Node.ELEMENT_NODE) return false;
+      if (node.classList.contains('pic-element')) {
+        images++;
+        return true;
+      }
+      // 只放行无语义的包装层，不靠附件黑名单猜测未知消息类型。
+      if (!['DIV', 'SPAN'].includes(node.tagName) ||
+          [...node.classList].some(name => !['message-content', 'mix-message__inner'].includes(name)) ||
+          !node.childNodes.length) return false;
+      return [...node.childNodes].every(visit);
+    }
+    return !!content && [...content.childNodes].every(visit) && images > 0;
+  }
+  function isVideoOnlyContent(content) {
+    let videos = 0;
+    function visit(node) {
+      if (node.nodeType === Node.COMMENT_NODE) return true;
+      if (node.nodeType === Node.TEXT_NODE) return !node.textContent.trim();
+      if (node.nodeType !== Node.ELEMENT_NODE) return false;
+      if (node.classList.contains('video-element') ||
+          ['msg-preview', 'msg-preview--video', 'file-element'].every(name => node.classList.contains(name))) {
+        videos++;
+        return true;
+      }
+      if (!['DIV', 'SPAN'].includes(node.tagName) ||
+          [...node.classList].some(name => !['message-content', 'mix-message__inner', 'message-content__wrapper', 'file-message--content'].includes(name)) ||
+          !node.childNodes.length) return false;
+      return [...node.childNodes].every(visit);
+    }
+    return !!content && [...content.childNodes].every(visit) && videos > 0;
+  }
   function moveSenderIntoBubble(root) {
     try {
+      var homes = moveSenderIntoBubble.homes || (moveSenderIntoBubble.homes = new WeakMap());
+      var inside = llModeCfg.chatStyle === 'tg' ||
+        (llModeCfg.chatStyle === 'tim' && llModeCfg.timSenderPosition === 'inside');
       var containers = elementsWithin(root, '.message-container');
       for (var i = 0; i < containers.length; i++) {
         var mc = containers[i];
         var bubble = mc.querySelector('.msg-content-container');
-        if (!bubble) continue;
+        // QQ also renders video files without a normal bubble/content pair.
+        // Inspect the whole content wrapper so captions/replies stay mixed.
+        var fileBubble = mc.querySelector('.file-message--content');
+        var videoContent = bubble ? bubble.querySelector('.message-content') :
+          mc.querySelector(':scope > .message-content__wrapper') || fileBubble;
+        var videoOnly = isVideoOnlyContent(videoContent);
+        mc.toggleAttribute('data-liuli-video-only', videoOnly);
+        if (fileBubble) fileBubble.toggleAttribute('data-liuli-video-only', videoOnly);
+        if (!bubble) {
+          continue;
+        }
         // #47：按正文结构识别纯图片，不能只认 QQ 偶尔才添加的 --pic 类。
         // 混合文字、引用或卡片消息仍保留昵称，避免隐藏发送者上下文。
         var content = bubble.querySelector('.message-content');
-        var imageOnly = !!(content && content.querySelector('.pic-element') &&
-          !content.querySelector('.text-element, .reply-element, .ark-view-message, .forward-msg, .video-element'));
+        var imageOnly = isImageOnlyContent(content);
         if (imageOnly !== bubble.hasAttribute('data-liuli-image-only')) {
           bubble.toggleAttribute('data-liuli-image-only', imageOnly);
         }
         mc.toggleAttribute('data-liuli-image-only', imageOnly);
+        bubble.toggleAttribute('data-liuli-video-only', videoOnly);
         var name = mc.querySelector('.user-name');
         if (!name) continue;
-        if (llModeCfg.chatStyle !== 'tg') {
-          // 经典 / TIM 使用 QQ 原生 nickname 网格区，保留原节点与事件。
-          if (name.parentElement !== mc) mc.appendChild(name);
-          delete bubble.dataset.liuliNamed;
-        } else if (!bubble.contains(name)) {
-          bubble.insertBefore(name, bubble.firstChild);
-          bubble.dataset.liuliNamed = '1';
+        if (!inside) {
+          // Return the same native node to its original grid position, including
+          // its sibling order. A recycled row may no longer contain that home.
+          var home = homes.get(name);
+          if (home && mc.contains(home.parent)) {
+            var next = home.next && home.next.parentNode === home.parent ? home.next : null;
+            if (name.parentNode !== home.parent || name.nextSibling !== next) home.parent.insertBefore(name, next);
+          } else if (name.parentElement !== mc) mc.appendChild(name);
+          homes.delete(name);
+          if (bubble.hasAttribute('data-liuli-named')) delete bubble.dataset.liuliNamed;
+        } else {
+          if (!bubble.contains(name)) {
+            homes.set(name, { parent: name.parentNode, next: name.nextSibling });
+            bubble.insertBefore(name, bubble.firstChild);
+          }
+          if (bubble.dataset.liuliNamed !== '1') bubble.dataset.liuliNamed = '1';
         }
       }
     } catch (e) {}
@@ -990,6 +1339,8 @@
       var list = document.querySelectorAll('.chat-msg-area .message-container');
       if (list.length === 0) return;
       var records = new WeakMap();
+      var sequences = new Map();
+      var visibleRecords = new Map();
       function recordOf(mc) {
         if (records.has(mc)) return records.get(mc);
         var record = null;
@@ -1013,57 +1364,174 @@
         if (img && img.src) return img.src;
         return '';
       }
+      function hiddenTimestampRow(row) {
+        // Only a pure native time row may disappear from visual adjacency.
+        // Never skip hidden system/revoke rows or virtual-list placeholders.
+        if (!row.matches('.ml-item')) return false;
+        var stamps = row.querySelectorAll('.message__timestamp');
+        // scroll-time.css hides native timestamps. An explicit visible inline
+        // override remains a boundary; normal grouping never forces a layout
+        // just to reread our own stylesheet's display:none.
+        if (stamps.length !== 1 || (stamps[0].style?.display && stamps[0].style.display !== 'none')) return false;
+        function onlyTimestamp(node) {
+          if (node === stamps[0] || node.nodeType === 8) return true;
+          if (node.nodeType === 3) return !node.textContent.trim();
+          return node.nodeType === 1 && (node === row || node.matches('.message')) &&
+            node.childNodes.length > 0 && [...node.childNodes].every(onlyTimestamp);
+        }
+        return onlyTimestamp(row);
+      }
       function adjacent(a, b) {
         if (!a || !b || a.closest('.chat-msg-area') !== b.closest('.chat-msg-area')) return false;
         var ra = recordOf(a), rb = recordOf(b);
-        if (rb && rb.showTimestamp) return false;
         var ta = Number(ra && ra.msgTime), tb = Number(rb && rb.msgTime);
-        if (ta > 0 && tb > 0 && (tb < ta || tb - ta > 300)) return false;
+        // Time is presented by the top pill. A hidden native timestamp or
+        // elapsed interval must not split otherwise consecutive sender rows.
+        if (ta > 0 && tb > 0 && tb < ta) return false;
         var rowA = a.closest('.ml-item'), rowB = b.closest('.ml-item');
-        // 原生列表中的系统提示、撤回行和时间分隔不能被同一发送者的分组合并跨过。
-        if (rowA && rowB && rowA !== rowB && rowA.nextElementSibling !== rowB) return false;
+        if (rowA && rowB && rowA !== rowB) {
+          var next = rowA.nextElementSibling;
+          while (next && next !== rowB && hiddenTimestampRow(next)) next = next.nextElementSibling;
+          if (next !== rowB) return false;
+        }
         return true;
       }
       var keys = [];
-      for (var i = 0; i < list.length; i++) keys.push(keyOf(list[i]));
+      var groupable = [];
+      var timTextRows = [];
+      for (var i = 0; i < list.length; i++) {
+        keys.push(keyOf(list[i]));
+        // TIM connects text corners only. Native media/voice/card shapes stay
+        // independent; avatar/sender groups are resolved separately below.
+        var timText = false;
+        if (llModeCfg.chatStyle === 'tim') {
+          var bubble = list[i].querySelector('.msg-content-container');
+          var content = bubble && bubble.querySelector(':scope > .message-content');
+          // Native inline QQ faces can be direct children of message-content,
+          // with no text-element or textContent. They share text-bubble shape;
+          // a known face payload is required so empty/unknown content stays out.
+          var hasText = content && [...content.querySelectorAll('.text-element')].some(text => text.textContent.trim());
+          var hasInlineFace = content && content.querySelector('.face-element img.face-element__icon, .face-element img[data-role="qqFace"]');
+          timText = content && (hasText || hasInlineFace) &&
+            !bubble.matches('.container--personalization, .ptt-message__container, .mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face, .ark-msg-content-container, [data-liuli-image-only], [data-liuli-video-only]') &&
+            !content.querySelector('.ark-view-message, .forward-msg, .file-element, .pic-element, .market-face-element, .video-element, [class*="lottie"]');
+        }
+        // CSS consumes the same eligibility result instead of independently
+        // guessing from .message-content, which QQ also uses for stickers.
+        timTextRows.push(!!timText);
+        groupable.push(llModeCfg.chatStyle === 'tg' || (llModeCfg.chatStyle === 'tim' && !!timText));
+        var area = list[i].closest('.chat-msg-area');
+        var record = recordOf(list[i]);
+        if (!visibleRecords.has(area)) visibleRecords.set(area, new Map());
+        if (record?.msgId != null) visibleRecords.get(area).set(String(record.msgId), i);
+        if (!sequences.has(area) && ['tg', 'tim'].includes(llModeCfg.chatStyle)) {
+          var sequence = null;
+          try { sequence = window.LiuliQQ?.loadedMessageSequence?.(area) || null; } catch (e) {}
+          sequences.set(area, sequence);
+        }
+      }
+      function nativeBoundary(index, direction, shape) {
+        var mc = list[index], area = mc.closest('.chat-msg-area');
+        var sequence = sequences.get(area), current = recordOf(mc);
+        if (!sequence || !current) return false;
+        var row = mc.closest('.ml-item');
+        if (!row) return false;
+        var sibling = direction === 'previous' ? row.previousElementSibling : row.nextElementSibling;
+        while (sibling && hiddenTimestampRow(sibling))
+          sibling = direction === 'previous' ? sibling.previousElementSibling : sibling.nextElementSibling;
+        // Native data only fills a virtual-window edge. Every mounted system,
+        // revoke, unknown row or visible time divider remains authoritative.
+        if (sibling) return false;
+        var neighbors = sequence.neighbors(current);
+        var other = neighbors && neighbors[direction];
+        var peer = current.peerUid || current.peerUin, sender = current.senderUid || current.senderUin;
+        if (!other || !peer || !sender || String(other.chatType) !== String(current.chatType) ||
+          String(other.peerUid || other.peerUin) !== String(peer) ||
+          String(other.senderUid || other.senderUin) !== String(sender)) return false;
+        var before = direction === 'previous' ? other : current;
+        var after = direction === 'previous' ? current : other;
+        if (Number(before.msgTime) > 0 && Number(after.msgTime) > 0 && Number(after.msgTime) < Number(before.msgTime)) return false;
+        var visible = visibleRecords.get(area)?.get(String(other.msgId));
+        if (visible !== undefined) return !shape || groupable[visible];
+        // Offscreen records have no DOM classification. Only positively known
+        // ordinary text/inline faces extend an edge; system and unknown media
+        // payloads must never be inferred from their sender or msgType alone.
+        return Number(other.msgType) === 2 && Array.isArray(other.elements) && other.elements.length > 0 &&
+          !(Number(other.recallTime) > 0) && other.elements.every(element =>
+            (Number(element.elementType) === 1 && typeof element.textElement?.content === 'string' && element.textElement.content.trim()) ||
+            (Number(element.elementType) === 6 && element.faceElement && typeof element.faceElement === 'object'));
+      }
+      var states = [];
       for (var j = 0; j < list.length; j++) {
         var mc = list[j];
         var key = keys[j];
+        var avatarGroup = null;
+        if (llModeCfg.chatStyle === 'tim') {
+          // Avatar groups span native media as TG does; TIM text shapes remain
+          // independent so images/files/voice never acquire connected corners.
+          var prevAvatar = key && ((j > 0 && keys[j - 1] === key && adjacent(list[j - 1], mc)) || nativeBoundary(j, 'previous', false));
+          var nextAvatar = key && ((j < list.length - 1 && keys[j + 1] === key && adjacent(mc, list[j + 1])) || nativeBoundary(j, 'next', false));
+          avatarGroup = !key ? '' : prevAvatar ? (nextAvatar ? 'mid' : 'last') : (nextAvatar ? 'first' : 'single');
+        }
         if (!key) {
-          mc.dataset.liuliG = '';
+          states.push({ row: mc, group: '', avatar: avatarGroup, timText: timTextRows[j] });
           continue;
         }
-        var grouped = llModeCfg.chatStyle !== 'classic';
-        var prevSame = grouped && j > 0 && keys[j - 1] === key && adjacent(list[j - 1], mc);
-        var nextSame = grouped && j < list.length - 1 && keys[j + 1] === key && adjacent(mc, list[j + 1]);
+        var grouped = groupable[j];
+        var prevSame = grouped && ((j > 0 && groupable[j - 1] && keys[j - 1] === key && adjacent(list[j - 1], mc)) || nativeBoundary(j, 'previous', true));
+        var nextSame = grouped && ((j < list.length - 1 && groupable[j + 1] && keys[j + 1] === key && adjacent(mc, list[j + 1])) || nativeBoundary(j, 'next', true));
         var g;
         if (!prevSame && !nextSame) g = 'single';
         else if (!prevSame && nextSame) g = 'first';
         else if (prevSame && nextSame) g = 'mid';
         else g = 'last';
-        if (mc.dataset.liuliG !== g) mc.dataset.liuliG = g;
+        states.push({ row: mc, group: g, avatar: avatarGroup, timText: timTextRows[j] });
+      }
+      // Resolve the complete native neighborhood before publishing any state.
+      // Repeated passes over unchanged rows must not emit attribute mutations.
+      for (var state of states) {
+        var mc = state.row;
+        if (mc.hasAttribute('data-liuli-tim-text') !== state.timText) mc.toggleAttribute('data-liuli-tim-text', state.timText);
+        if (state.avatar === null) {
+          if (mc.hasAttribute('data-liuli-avatar-g')) mc.removeAttribute('data-liuli-avatar-g');
+        } else if (mc.dataset.liuliAvatarG !== state.avatar) mc.dataset.liuliAvatarG = state.avatar;
+        if (mc.dataset.liuliG !== state.group) mc.dataset.liuliG = state.group;
       }
     } catch (e) {}
   }
   function stickAvatars() {
     try {
-      var vp =
-        document.querySelector('.chat-msg-area__vlist') || document.querySelector('.chat-msg-area');
+      // Top avatars and native layout never need viewport geometry. Clear only
+      // offsets left by a previous bottom layout, before any layout read.
+      if (llModeCfg.avatarPosition === 'top' || !['tg', 'tim'].includes(llModeCfg.chatStyle)) {
+        for (const avatar of document.querySelectorAll('.chat-msg-area .avatar-span[data-liuli-ty]')) {
+          delete avatar.dataset.liuliTy;
+          if (avatar.style.transform) avatar.style.transform = '';
+        }
+        return;
+      }
+      var vp = [...document.querySelectorAll('.chat-msg-area__vlist, .chat-msg-area')].find(area => {
+        const rect = area.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
       if (!vp) return;
       var vr = vp.getBoundingClientRect();
       var list = vp.querySelectorAll('.message-container');
-      if (llModeCfg.avatarPosition === 'top' || llModeCfg.chatStyle === 'classic') {
-        for (const avatar of vp.querySelectorAll('.avatar-span[data-liuli-ty]')) {
-          delete avatar.dataset.liuliTy;
-          avatar.style.transform = '';
-        }
-        return;
+      var groupKey = llModeCfg.chatStyle === 'tim' ? 'liuliAvatarG' : 'liuliG';
+      const resetAvatar = avatar => {
+        delete avatar.dataset.liuliTy;
+        avatar.style.transform = '';
+      };
+      // 虚拟列表会复用行：以前是组尾的头像可能变成组首/中间行，旧偏移必须撤掉。
+      for (const avatar of vp.querySelectorAll('.avatar-span[data-liuli-ty]')) {
+        const owner = avatar.closest('.message-container');
+        if (!owner || !['last', 'single'].includes(owner.dataset[groupKey])) resetAvatar(avatar);
       }
       var groupTop = null;
       var writes = [];
       for (var i = 0; i < list.length; i++) {
         var mc = list[i];
-        var g = mc.dataset.liuliG;
+        var g = mc.dataset[groupKey];
         if (groupTop !== null && g !== 'first' && g !== 'last' && g !== 'single') continue;
         var bubble =
           mc.querySelector(':scope > .message-content__wrapper') ||
@@ -1099,6 +1567,10 @@
   var liuliStickRaf = 0;
   function scheduleStick() {
     if (liuliStickRaf || document.hidden) return;
+    if (llModeCfg.avatarPosition === 'top' || !['tg', 'tim'].includes(llModeCfg.chatStyle)) {
+      if (document.querySelector('.chat-msg-area .avatar-span[data-liuli-ty]')) stickAvatars();
+      return;
+    }
     liuliStickRaf = requestAnimationFrame(function () {
       liuliStickRaf = 0;
       stickAvatars();
@@ -1154,6 +1626,7 @@
   }
   function llRiseIn(els, step) {
     if (motion.reduced || !els.length || typeof els[0].animate !== 'function') return;
+    if (window.__liuliRowEntryMotion?.isScrolling(els[0])) return;
     var t = performance.now();
     els.slice(0, 18).forEach(function (el, i) {
       // 同一行 700ms 内只上浮一次：成员行会被「插入时同步上浮」和 llGroupMembersPass
@@ -1177,7 +1650,8 @@
             duration: 460,
             delay: i * (step || 26),
             easing: LL_EASE,
-            fill: 'backwards'
+            fill: 'backwards',
+            rowEntry: true
           }
         );
       } catch (e) {}
@@ -1202,6 +1676,10 @@
         var t = recs[i].target;
         if (!t.classList || !t.classList.contains('recent-contact-item')) continue;
         if (t.closest('.viewport-list__measure')) continue;
+        if (recs[i].attributeName === 'data-contact-id') {
+          motion.cancelEntries?.(t);
+          continue;
+        }
         var was = (recs[i].oldValue || '').indexOf('recent-contact-item--selected') >= 0;
         var now = t.classList.contains('recent-contact-item--selected');
         if (now && !was) gained = t;
@@ -1257,7 +1735,7 @@
     });
     llSel.obs.observe(root, {
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['class', 'data-contact-id'],
       attributeOldValue: true,
       subtree: true
     });
@@ -1311,15 +1789,41 @@
     return name ? 'n:' + name : '';
   }
   var llGM = { key: null, staff: {} }; // staff: key -> { n: 人数, exact: 是否确定完整 }
+  // Message updates only touch members whose recent-speaker state changed. Rebuild
+  // this index when the member list itself changes, including virtual row reuse.
+  function llGroupRecentPass(force = false) {
+    var active = llGM.active;
+    if (!active || !active.host.isConnected) return;
+    var recent = llRecentSpeakers();
+    var next = new Map();
+    for (var name of Object.keys(recent)) next.set(name, recent[name] < 3 ? 'hot' : '1');
+    var names = force ? active.rows.keys() : new Set([...active.values.keys(), ...next.keys()]);
+    for (var name of names) {
+      var value = next.get(name) || '';
+      if (!force && active.values.get(name) === value) continue;
+      var rows = active.rows.get(name);
+      if (!rows) continue;
+      for (var row of rows) {
+        if (!row.isConnected || (row.dataset.liuliActive || '') === value) continue;
+        if (value) row.dataset.liuliActive = value;
+        else delete row.dataset.liuliActive;
+      }
+    }
+    active.values = next;
+  }
   function llGroupMembersPass() {
     try {
       var gm = document.querySelector('.group-member');
       if (!gm) {
         llGM.key = null;
+        llGM.active = null;
         return;
       }
       var rows = gm.querySelectorAll('.group-user');
-      if (!rows.length) return;
+      if (!rows.length) {
+        llGM.active = null;
+        return;
+      }
       // #32.1b：换群判据换成稳定 key（会话 id / 群名）。以前用整段标题文本，
       // 标题里带着成员数「(260)」——人数一变化就被误判成"换群"。
       var key = llGroupKey();
@@ -1468,34 +1972,61 @@
           else delete span.dataset.liuliStaff;
         }
       }
-      var recent = llRecentSpeakers();
+      var activeRows = new Map();
       rows.forEach(function (r) {
         var nm = r.querySelector('.group-user__name');
         var name = llNorm(nm && nm.textContent);
-        var rank = Object.prototype.hasOwnProperty.call(recent, name) ? recent[name] : -1;
-        var v = rank < 0 ? '' : rank < 3 ? 'hot' : '1';
-        if ((r.dataset.liuliActive || '') !== v) {
-          if (v) r.dataset.liuliActive = v;
-          else delete r.dataset.liuliActive;
-        }
+        if (!activeRows.has(name)) activeRows.set(name, new Set());
+        activeRows.get(name).add(r);
       });
+      llGM.active = { host: gm, rows: activeRows, values: new Map() };
+      llGroupRecentPass(true);
     } catch (e) {}
   }
-  function liuliMessagePass(roots) {
+  function prepareMessageLayout(roots) {
     for (const root of roots) {
+      syncPictureRatios(root);
       moveSenderIntoBubble(root);
+    }
+    groupMessages();
+  }
+  function liuliMessagePass(roots, layoutPrepared = false) {
+    if (!layoutPrepared) prepareMessageLayout(roots);
+    window.__liuliVoiceLayout?.refresh();
+    for (const root of roots) {
       markQuoteRoots(root);
       llMarkdownPass(root);
       llAtPass(root);
     }
-    groupMessages();
     scheduleStick();
   }
   var llMsgSeen = {
     chat: null,
     max: null
   };
+  function llMessagePeerKey(area = document.querySelector('.chat-msg-area')) {
+    const messages = area?.querySelectorAll('.message');
+    if (!messages?.length) return '';
+    let first = '';
+    for (const message of messages) {
+      if (message.closest('.viewport-list__measure')) continue;
+      const record = window.LiuliQQ?.messageRecord(message);
+      const peer = record && (record.peerUid || record.peerUin);
+      if (!peer || record.chatType == null) continue;
+      const key = String(record.chatType) + ':' + String(peer);
+      if (first && key !== first) return '';
+      if (!first) first = key;
+    }
+    // Native routing may briefly retain rows from both conversations. Wait for
+    // one peer throughout the mounted range before revealing the new messages.
+    return first;
+  }
   function llChatKey() {
+    const peer = llMessagePeerKey();
+    if (peer) return 'p:' + peer;
+    const selected = Array.from(document.querySelectorAll('.recent-contact-item--selected[data-contact-id]'))
+      .find(item => !item.closest('.viewport-list__measure'));
+    if (selected) return 'c:' + selected.getAttribute('data-contact-id');
     var t = document.querySelector('.aio .chat-header .panel-header__title');
     return t ? (t.textContent || '').replace(/\s+/g, ' ').trim() : '';
   }
@@ -1509,9 +2040,9 @@
   function llMotionPass(added) {
     try {
       const key = llChatKey();
-      const items = document.querySelectorAll('.chat-msg-area .ml-item[id]');
-      if (!items.length) return;
       if (key !== llMsgSeen.chat) {
+        const items = document.querySelectorAll('.chat-msg-area .ml-item[id]');
+        if (!items.length) return;
         const first = llMsgSeen.chat !== null;
         llMsgSeen.chat = key;
         let max = null;
@@ -1536,37 +2067,9 @@
         }
         return;
       }
-      if (motion.reduced || !added || !added.length) return;
-      added.forEach(item => {
-        const id = llMsgId(item);
-        if (id === null || llMsgSeen.max === null || id <= llMsgSeen.max) return;
-        llMsgSeen.max = id;
-        const mc = item.querySelector('.message-container');
-        const w = item.querySelector('.message-content__wrapper');
-        if (!mc || !w || typeof w.animate !== 'function') return;
-        const self =
-          mc.classList.contains('message-container--self') || !!mc.querySelector('.container--self');
-        w.style.transformOrigin = self ? '100% 100%' : '0% 100%';
-        motion.play(
-          w,
-          [
-            { opacity: 0, transform: 'translateY(12px) scale(0.92)' },
-            { opacity: 1, transform: 'translateY(-2px) scale(1.01)', offset: 0.7 },
-            { opacity: 1, transform: 'none' }
-          ],
-          { duration: 360, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
-        );
-        const av = mc.querySelector(':scope > .avatar-span');
-        if (av && getComputedStyle(av).display !== 'none')
-          motion.play(
-            av,
-            [
-              { opacity: 0, transform: 'scale(0.6)' },
-              { opacity: 1, transform: 'none' }
-            ],
-            { duration: 300, delay: 60, easing: 'cubic-bezier(0.3, 1.35, 0.45, 1)', fill: 'backwards' }
-          );
-      });
+      // New rows animate synchronously in llHandleAdded, before their first
+      // paint. A second wrapper animation in this rAF pass made visible rows
+      // jump back to opacity zero, and mistook virtual history for live IDs.
     } catch (e) {}
   }
 
@@ -1588,10 +2091,14 @@
     if (!items.length || motion.reduced) return;
     // 越靠下（越新）越先出来
     items.sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top);
-    items.slice(0, LL_ENTER_MAX).forEach((el, i) => {
+    const visible = items.slice(0, LL_ENTER_MAX);
+    visible.forEach((el, i) => {
       el.style.setProperty('--ll-enter-i', String(i));
       el.classList.remove('ll-enter');
-      void el.offsetWidth;
+    });
+    // Restart the cascade with one layout flush, not one per message.
+    if (visible.length) void visible[0].offsetWidth;
+    visible.forEach((el, i) => {
       el.classList.add('ll-enter');
       clearTimeout(el.__llEnterT);
       el.__llEnterT = setTimeout(() => el.classList.remove('ll-enter'), 400 + i * 28);
@@ -1630,30 +2137,165 @@
   }
 
   function llHandleAdded(records) {
-    // 点击切换会话期间由 installSwitchMotion 的控制器在滚动稳定后统一级联一次，
-    // 这里直接跳过，免得同一批消息播两遍
-    const switchingArea = document.querySelector('.chat-msg-area');
-    if (switchingArea && switchingArea.hasAttribute('data-ll-switching')) return;
-    const added = [];
-    for (const r of records) {
-      for (const n of r.addedNodes) {
-        if (n.nodeType === 1 && n.classList.contains('ml-item')) added.push(n);
+    window.__liuliRowEntryMotion?.added(records);
+  }
+
+  function installRowEntryMotion() {
+    window.__liuliRowEntryMotion?.dispose();
+    let peer = '', highTime = 0, highSeq = null, disposed = false, activeArea = null;
+    const seen = new Set(), scrolling = new WeakMap(), legacyEntries = new Map();
+    const scopeOf = node => node?.closest?.('.chat-msg-area,.recent-contact');
+    const recordOf = row => {
+      try { return window.LiuliQQ?.messageRecord(row.querySelector('.message') || row) || null; } catch (_) { return null; }
+    };
+    const keyOf = record => record ? [record.chatType, record.peerUid || record.peerUin || ''].join(':') : '';
+    const idOf = (row, record) => String(record?.msgId || row.id || '');
+    function seqOf(record) {
+      try { return record?.msgSeq != null ? BigInt(record.msgSeq) : null; } catch (_) { return null; }
+    }
+    function remember(row, record) {
+      const id = idOf(row, record);
+      if (id) seen.add(id);
+      if (seen.size > 2048) seen.delete(seen.values().next().value);
+      const time = Number(record?.msgTime);
+      if (time > highTime) highTime = time;
+      const seq = seqOf(record);
+      if (seq !== null && (highSeq === null || seq > highSeq)) highSeq = seq;
+    }
+    function seed(area = document.querySelector('.chat-msg-area')) {
+      activeArea = area;
+      const rows = [...(area?.querySelectorAll('.ml-item[id]') || [])]
+        .filter(row => !row.closest('.viewport-list__measure'));
+      const nextPeer = rows.map(recordOf).map(keyOf).find(Boolean) || '';
+      if (nextPeer !== peer) { peer = nextPeer; seen.clear(); highTime = 0; highSeq = null; }
+      for (const row of rows) {
+        const record = recordOf(row);
+        if (keyOf(record) === peer) remember(row, record);
       }
     }
-    if (!added.length) return;
-    const now = Date.now();
-    const peer = llCurrentPeer();
-    if (peer && peer !== llEnterPeer) {
-      llEnterPeer = peer;
-      llEnterUntil = now + 600;
+    function cancelRow(row) {
+      if (!row) return;
+      clearTimeout(row.__llEnterT);
+      delete row.__llEnterT;
+      if (row.classList.contains('ll-enter')) row.classList.remove('ll-enter');
+      motion.cancelEntries?.(row);
+      for (const animation of legacyEntries.get(row) || []) animation.cancel();
+      legacyEntries.delete(row);
     }
-    if (now < llEnterUntil) {
-      llAnimateEnter(added);
-      return;
+    // Only the disposable live adapter registers pre-upgrade llRiseIn entries.
+    // Production entries already belong to motion.cancelEntries; never query
+    // every contact's animations on each wheel/scroll event.
+    function trackLegacyEntry(row, animation) {
+      if (disposed || !row || !animation) return;
+      if (!legacyEntries.has(row)) legacyEntries.set(row, new Set());
+      const entries = legacyEntries.get(row);
+      entries.add(animation);
+      const release = () => {
+        entries.delete(animation);
+        if (!entries.size && legacyEntries.get(row) === entries) legacyEntries.delete(row);
+      };
+      animation.finished.then(release, release);
     }
-    // 新消息：节点是列表里最后一条
-    const fresh = added.filter(n => !n.nextElementSibling);
-    if (fresh.length) llAnimateEnter(fresh);
+    function cancelScope(scope) {
+      for (const row of scope?.querySelectorAll('.ml-item.ll-enter') || []) cancelRow(row);
+      for (const row of legacyEntries.keys()) if (row === scope || scope?.contains(row)) cancelRow(row);
+      motion.cancelEntries?.(scope);
+    }
+    function atTail(area) {
+      const scroller = area.querySelector('.ml-root, #ml-root, .chat-msg-area__vlist') || area;
+      const extent = scroller.scrollHeight - scroller.clientHeight;
+      if (extent <= 4) return true;
+      // QQ's message scroller is column-reverse: its live tail is scrollTop=0.
+      const reversed = scroller.scrollTop < 0 || getComputedStyle(scroller).flexDirection === 'column-reverse';
+      return reversed ? Math.abs(scroller.scrollTop) <= 4 : extent - scroller.scrollTop <= 4;
+    }
+    function added(records) {
+      if (disposed) return;
+      const rows = new Set();
+      for (const record of records) for (const node of record.addedNodes || []) {
+        if (node.nodeType !== 1 || !node.isConnected || !node.closest('.chat-msg-area')) continue;
+        if (node.matches('.ml-item[id]')) rows.add(node);
+        for (const row of node.querySelectorAll('.ml-item[id]')) rows.add(row);
+      }
+      if (!rows.size) return;
+      for (const row of rows) {
+        const area = row.closest('.chat-msg-area');
+        if (row.closest('.viewport-list__measure') || (area !== activeArea &&
+            ((activeArea?.isConnected && activeArea.getClientRects().length) || !area.getClientRects().length))) rows.delete(row);
+      }
+      if (!rows.size) return;
+      const nextPeer = [...rows].map(recordOf).map(keyOf).find(Boolean);
+      const area = [...rows][0].closest('.chat-msg-area');
+      if (!nextPeer || nextPeer !== peer || area.hasAttribute('data-ll-switching')) { seed(area); return; }
+      const fresh = [], now = Date.now() / 1000;
+      for (const row of rows) {
+        if (row.closest('.viewport-list__measure')) continue;
+        const record = recordOf(row), id = idOf(row, record), time = Number(record?.msgTime), seq = seqOf(record);
+        const unseen = id && !seen.has(id);
+        // DOM tail position and a larger random message ID are not evidence of
+        // live delivery. Require a recent native timestamp and a forward seq.
+        if (unseen && keyOf(record) === peer && time >= now - 90 && time <= now + 15 &&
+            time >= highTime && (seq === null || highSeq === null || seq > highSeq)) fresh.push(row);
+        if (keyOf(record) === peer) remember(row, record);
+      }
+      // History mounts never need tail geometry. Decide from the native record
+      // first, then read scroll bounds only for plausible live deliveries.
+      if (fresh.length && !document.hidden && !motion.reduced &&
+          (scrolling.get(area) || 0) < performance.now() && atTail(area)) llAnimateEnter(fresh);
+    }
+    function userScroll(event) {
+      const scope = scopeOf(event.target);
+      if (!scope) return;
+      if (event.type === 'keydown' && (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key) ||
+          event.target.closest('input,textarea,[contenteditable="true"]'))) return;
+      if (event.type === 'pointerdown' && !event.target.closest('.v-scrollbar,.v-scrollbar-thumb,.v-scrollbar-track')) return;
+      scrolling.set(scope, performance.now() + 240);
+      cancelScope(scope);
+    }
+    function onScroll(event) {
+      const scope = scopeOf(event.target);
+      if (scope && (scrolling.get(scope) || 0) > performance.now()) userScroll(event);
+    }
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === 'attributes') {
+          const row = record.target;
+          if (row.matches('.ml-item,.recent-contact-item')) {
+            cancelRow(row);
+            if (row.matches('.ml-item') && row.closest('.chat-msg-area') === activeArea &&
+                !row.closest('.viewport-list__measure')) {
+              const record = recordOf(row);
+              if (keyOf(record) === peer) remember(row, record);
+            }
+          }
+        } else for (const node of record.removedNodes) if (node.nodeType === 1) {
+          if (node.matches('.ml-item,.recent-contact-item')) cancelRow(node);
+          cancelScope(node);
+        }
+      }
+      added(records);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true,
+      attributeFilter: ['id', 'data-contact-id'] });
+    for (const name of ['wheel', 'touchmove', 'keydown', 'pointerdown']) document.addEventListener(name, userScroll, { capture: true, passive: true });
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    const api = {
+      added, refresh: seed, cancel: cancelScope, trackLegacyEntry,
+      isScrolling(node) { return (scrolling.get(scopeOf(node)) || 0) > performance.now(); },
+      dispose() {
+        if (disposed) return;
+        disposed = true; observer.disconnect();
+        for (const name of ['wheel', 'touchmove', 'keydown', 'pointerdown']) document.removeEventListener(name, userScroll, true);
+        document.removeEventListener('scroll', onScroll, true);
+        for (const scope of document.querySelectorAll('.chat-msg-area,.recent-contact')) cancelScope(scope);
+        for (const row of legacyEntries.keys()) cancelRow(row);
+        seen.clear();
+        if (window.__liuliRowEntryMotion === api) delete window.__liuliRowEntryMotion;
+      }
+    };
+    window.__liuliRowEntryMotion = api;
+    seed();
+    return api;
   }
 
   /* ---------- 切换会话：过渡动画 ----------
@@ -1676,6 +2318,7 @@
   let llSwitchInstalled = false;
   function installSwitchMotion() {
     if (llSwitchInstalled || motion.reduced) return;
+    window.__liuliSwitchMotion?.dispose();
     llSwitchInstalled = true;
 
     const SW_TITLE = '.aio .chat-header .panel-header__title';
@@ -1700,6 +2343,7 @@
     let noticeEl = null;
     let noticeH = -1;
     let noticeRo = null;
+    let noticeMo = null;
 
     function swText(el) {
       return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : '';
@@ -1740,14 +2384,14 @@
     function swExit(exits, el) {
       if (!el || !el.isConnected || typeof el.animate !== 'function') return;
       try {
-        exits.set(
-          el,
-          el.animate(SW_OUT_FRAMES, {
+        const animation = el.animate(SW_OUT_FRAMES, {
             duration: 120,
             easing: 'cubic-bezier(0.4, 0, 1, 1)',
             fill: 'forwards'
-          })
-        );
+          });
+        // Resolve the start now; a cold route can block the first render frame.
+        animation.startTime = document.timeline.currentTime;
+        exits.set(el, animation);
       } catch (e) {}
     }
     function swDropExit(exits, el) {
@@ -1808,6 +2452,7 @@
       const st = {
         at: performance.now(),
         oldTitle: swText(titleEl),
+        oldPeer: llMessagePeerKey(area),
         oldMemberSig: swMemberSig(),
         exits: new Map(),
         titleEl: titleEl,
@@ -1839,7 +2484,8 @@
       if (st.titleDone) return;
       const el = document.querySelector(SW_TITLE);
       if (!el) return;
-      if (el === st.titleEl && swText(el) === st.oldTitle) return;
+      const peer = llMessagePeerKey();
+      if (el === st.titleEl && swText(el) === st.oldTitle && (!peer || peer === st.oldPeer)) return;
       st.titleDone = true;
       st.titleChanged = true;
       swDropExit(st.exits, st.titleEl);
@@ -1895,10 +2541,28 @@
       if (st.messagesDone || !st.titleChanged) return;
       const area = document.querySelector(SW_AREA);
       if (!area) return;
+      // Selection/title can update before QQ replaces the message list. In
+      // particular, two distinct private chats can share the exact same title.
+      if (st.oldPeer) {
+        const peer = llMessagePeerKey(area);
+        if (!peer || peer === st.oldPeer) return;
+      }
       const prevArea = st.areaEl;
       st.areaEl = area;
-      const items = swVisibleItems(area);
-      const last = items.length ? items[items.length - 1] : null;
+      // The final visible row is sufficient to detect settling. Measuring every
+      // message on each cold-route frame adds layout work before its first paint.
+      const bounds = area.getBoundingClientRect();
+      const candidates = area.querySelectorAll('.ml-item');
+      let last = null;
+      for (let i = candidates.length - 1; i >= 0; i--) {
+        const item = candidates[i];
+        if (item.closest('.viewport-list__measure')) continue;
+        const rect = item.getBoundingClientRect();
+        if (rect.width > 2 && rect.height > 2 && rect.bottom >= bounds.top && rect.top <= bounds.bottom) {
+          last = item;
+          break;
+        }
+      }
       if (!last) {
         st.stable = 0;
         return;
@@ -1915,6 +2579,7 @@
       // 连续 2 帧不变才算稳定：QQ 先把消息行摆在错误的滚动位置，约 300ms 才滚到底
       if (st.stable < 2) return;
       st.messagesDone = true;
+      window.__liuliSidePaneMotion?.messageReady();
       swDropExit(st.exits, prevArea);
       swDropExit(st.exits, area);
       swEnter(area);
@@ -1944,6 +2609,7 @@
           swDropExit(st.exits, document.querySelector(SW_MEMBER));
         }
         if (!st.messagesDone) {
+          window.__liuliSidePaneMotion?.messageReady();
           const el = document.querySelector(SW_AREA);
           swDropExit(st.exits, st.areaEl);
           swDropExit(st.exits, el);
@@ -1963,6 +2629,7 @@
           return;
         }
         swCheckTitle(st);
+        // 右栏卡片向右离场由 side-pane-motion.js 负责，与 QQ 原生切换并行。
         swCheckNotice(st);
         swCheckMembers(st);
         swCheckMessages(st);
@@ -2089,9 +2756,7 @@
       } catch (e) {}
     }
 
-    document.addEventListener(
-      'pointerdown',
-      e => {
+    function swPointerDown(e) {
         try {
           if (e.button !== 0 || document.hidden || motion.reduced) return;
           const t = e.target;
@@ -2099,8 +2764,9 @@
           const item = t.closest('.recent-contact-item');
           if (!item) return;
           // 分组标题只折叠列表，不应触发当前聊天的退出动画。
-          const pinHeading = item.querySelector(':scope > .liuli-pin-heading');
-          if (pinHeading && e.clientY - item.getBoundingClientRect().top <= 28) return;
+          const pinHeading = t.closest('.liuli-pin-heading');
+          const pinY = e.clientY - item.getBoundingClientRect().top;
+          if (pinHeading || (item.querySelector(':scope > .liuli-pin-heading') && pinY >= -28 && pinY < 0)) return;
           if (item.closest('.viewport-list__measure')) return;
           if (item.classList.contains('recent-contact-item--selected')) return;
           swStart();
@@ -2109,41 +2775,97 @@
             swAbort();
           } catch (e2) {}
         }
-      },
-      true
-    );
+    }
+    document.addEventListener('pointerdown', swPointerDown, true);
 
     try {
       // 群公告元素可能被整块替换：靠 MutationObserver 重新绑定 ResizeObserver
-      const mo = new MutationObserver(() => {
+      noticeMo = new MutationObserver(() => {
         try {
           if (document.hidden) return;
           swBindNotice();
+          if (round && !round.messagesDone) {
+            const area = document.querySelector(SW_AREA);
+            if (area && area !== round.areaEl) {
+              area.setAttribute('data-ll-switching', '');
+              controller.holdArea(area);
+            }
+          }
         } catch (e) {}
       });
-      mo.observe(document.body, { childList: true, subtree: true });
+      noticeMo.observe(document.body, { childList: true, subtree: true });
     } catch (e) {}
     swBindNotice();
+    const controller = { peerKey: llMessagePeerKey, holdArea(area) {
+      if (!round || round.messagesDone || !area?.isConnected) return;
+      if (!round.exits.has(area)) swExit(round.exits, area);
+      // A replacement message area has no outgoing effect to hold it hidden.
+      // Give it an owned hold before its first paint, then release it normally.
+      try { round.exits.get(area)?.finish(); } catch (_) {}
+    }, dispose() {
+      swAbort();
+      swStopLoop();
+      clearTimeout(clipTimer);
+      if (clipEl) clipEl.style.overflow = clipPrev;
+      noticeRo?.disconnect();
+      noticeMo?.disconnect();
+      document.removeEventListener('pointerdown', swPointerDown, true);
+      llSwitchInstalled = false;
+      if (window.__liuliSwitchMotion === controller) delete window.__liuliSwitchMotion;
+    } };
+    window.__liuliSwitchMotion = controller;
   }
 
   function installPageObserver() {
+    window.__liuliPageObserver?.dispose();
+    const colors = createMessageColorRepair({ afterWrite: () => observer.takeRecords() });
+    llColorRepair?.dispose();
+    llColorRepair = colors;
     const roots = new Set();
     const work = new Set();
     const addedMessages = new Set();
     const themeUi =
-      '#liuli-settings-dialog, #liuli-settings-entry, #liuli-input-overlay, #liuli-toast, .liuli-top-hint, #liuli-nav-handle, #liuli-ctl-shield, .liuli-pin-heading, .liuli-pin-surface, #liuli-video-layer';
+      '#liuli-settings-dialog, #liuli-settings-entry, #liuli-input-overlay, #liuli-toast, #liuli-scroll-time, .liuli-top-hint, #liuli-nav-handle, #liuli-ctl-shield, .liuli-pin-heading, .liuli-pin-surface, #liuli-video-layer, .liuli-pane-transition, .liuli-pane-prepared';
     const structure =
       '#app, .global-container, .window-title-bar, .window-control-area, .chat-input-area, .msg-input, .chat-msg-area, .recent-contact, .container-sidebar';
     let frame = 0;
     let flushing = false;
     let needsRefresh = false;
     let measured = [];
+    let disposed = false;
+    let messageLayoutDirty = false;
+    let messageLayoutPrepared = false;
+    const virtualScopes = '.chat-msg-area, .recent-contact, .group-member';
+    const contentRows = '.ml-item, .message, .message-container, .group-user, .recent-contact-item';
+    const layoutProperties = /^(?:transform|translate|rotate|scale|transform-origin|position|inset(?:-(?:block|inline)(?:-(?:start|end))?)?|top|right|bottom|left|(?:min-|max-)?(?:width|height|inline-size|block-size)|(?:margin|padding)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|flex(?:-(?:basis|grow|shrink|direction|wrap))?|(?:row-|column-)?gap|align-(?:items|self|content)|justify-(?:items|self|content)|order|will-change|contain|content-visibility|overflow(?:-[xy])?)$/;
+    const oldStyle = document.createElement('i').style;
 
     function elementOf(node) {
       return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     }
     function isThemeUi(element) {
       return !element || element.closest(themeUi) || element.matches('style, script');
+    }
+    function isVirtualContainer(element) {
+      if (!element.closest(virtualScopes) || element.closest(contentRows)) return false;
+      return !!element.querySelector(contentRows) || !element.textContent.trim();
+    }
+    function changedStyleProperties(record, target) {
+      oldStyle.cssText = record.oldValue || '';
+      const names = new Set([...oldStyle, ...target.style]);
+      return [...names].filter(name =>
+        oldStyle.getPropertyValue(name) !== target.style.getPropertyValue(name) ||
+        oldStyle.getPropertyPriority(name) !== target.style.getPropertyPriority(name)
+      );
+    }
+    function nativeClasses(value) {
+      return (value || '').split(/\s+/)
+        .filter(name => name && !/^(liuli-|ll-)/.test(name)).sort().join(' ');
+    }
+    function containerRoles(value) {
+      return (value || '').split(/\s+/)
+        .filter(name => /^(?:chat-msg-area|recent-contact|group-member|ml-item|message|message-container|group-user|recent-contact-item)(?:$|[-_])/.test(name))
+        .sort().join(' ');
     }
     function deferHidden() {
       needsRefresh = true;
@@ -2154,19 +2876,24 @@
       roots.clear();
       work.clear();
       addedMessages.clear();
+      messageLayoutDirty = messageLayoutPrepared = false;
     }
     function schedule() {
+      if (disposed) return;
       if (document.hidden) {
         deferHidden();
         return;
       }
       if (!frame) frame = requestAnimationFrame(flush);
     }
-    function classify(element, descendants = false) {
+    function classify(element, descendants = false, contentChanged = true) {
       const touches = selector =>
         element.closest(selector) || (descendants && element.querySelector(selector));
-      if (touches('.chat-msg-area, .topbar-profile')) work.add('messages');
-      if (touches('.group-member, .recent-contact, .two-col-layout__aside')) work.add('side');
+      if (contentChanged && touches('.chat-msg-area, .topbar-profile')) {
+        work.add('messages');
+        messageLayoutDirty = true;
+      }
+      if (contentChanged && touches('.group-member')) work.add('members');
       if (
         touches(
           '.chat-func-bar, .sidebar__nav, .sidebar__menu, .aio-right-click-menu, .window-control-area'
@@ -2178,19 +2905,16 @@
         work.add('structure');
     }
     const observer = new MutationObserver(records => {
+      if (disposed) return;
       if (document.hidden) {
         deferHidden();
         return;
       }
-      try {
-        llHandleAdded(records);
-      } catch (e) {}
-      try {
-        llMembersArrived(records);
-      } catch (e) {}
+      const childRecords = records.filter(record => record.type === 'childList');
       for (const record of records) {
         const target = elementOf(record.target);
         if (isThemeUi(target)) continue;
+        let contentChanged = true;
         if (record.type === 'attributes') {
           if (
             target === document.body ||
@@ -2198,19 +2922,28 @@
           )
             continue;
           if (record.attributeName === 'class') {
-            const nativeClasses = value =>
-              (value || '')
-                .split(/\s+/)
-                .filter(name => name && !/^(liuli-|ll-)/.test(name))
-                .sort()
-                .join(' ');
             if (nativeClasses(record.oldValue) === nativeClasses(target.getAttribute('class')))
               continue;
+            // Virtual wrappers toggle presentation classes while scrolling. Keep
+            // actual row/scope identity changes observable, including recycled rows.
+            if (!target.matches(virtualScopes) && isVirtualContainer(target) &&
+                containerRoles(record.oldValue) === containerRoles(target.getAttribute('class')))
+              continue;
+          } else if (record.attributeName === 'style') {
+            const properties = changedStyleProperties(record, target);
+            if (!properties.length) continue;
+            if (isVirtualContainer(target) && properties.every(name => layoutProperties.test(name)))
+              continue;
+            // Color/material overrides still inspect this changed subtree. An
+            // inline style update alone does not change message grouping/content.
+            contentChanged = false;
           }
         }
         if (record.type === 'childList') {
           const nodes = [...record.addedNodes, ...record.removedNodes];
           if (!nodes.some(node => !isThemeUi(elementOf(node)))) continue;
+          colors.invalidate(target, false);
+          if (!record.addedNodes.length && ((!target.children.length && target.textContent.trim()) || target.matches(TEXT_SELECTORS.join(',')))) roots.add(target);
           for (const node of nodes) {
             if (node.nodeType !== Node.ELEMENT_NODE || isThemeUi(node)) continue;
             classify(node, true);
@@ -2218,17 +2951,31 @@
           for (const node of record.addedNodes) {
             const element = elementOf(node);
             if (isThemeUi(element) || !element.isConnected) continue;
+            colors.invalidate(element);
             roots.add(element);
             for (const message of elementsWithin(element, '.ml-item')) addedMessages.add(message);
           }
         } else {
+          if (record.type === 'characterData' || ['style', 'class', 'id'].includes(record.attributeName)) colors.invalidate(target);
           roots.add(target);
         }
-        classify(target);
+        classify(target, false, contentChanged);
+      }
+      if (messageLayoutDirty) {
+        messageLayoutDirty = false;
+        // Set row geometry before native ResizeObservers measure a newly
+        // mounted virtual window. Color and decoration work stays in rAF.
+        prepareMessageLayout(topLevelRoots([...roots].map(root => root.closest('.ml-item') || root)));
+        messageLayoutPrepared = true;
+        observer.takeRecords();
+      }
+      if (childRecords.length) {
+        try { llHandleAdded(childRecords); } catch (e) {}
+        try { llMembersArrived(childRecords); } catch (e) {}
       }
       if (roots.size || work.size) schedule();
     });
-    const resize = new ResizeObserver(() => refreshInputGeometry());
+    const resize = new ResizeObserver(() => onGeometry());
     function bindGeometry() {
       const next = ['.chat-input-area', '.msg-input', '.chat-msg-area']
         .map(selector => document.querySelector(selector))
@@ -2241,6 +2988,7 @@
     }
     function flush() {
       frame = 0;
+      if (disposed) return;
       if (document.hidden) {
         deferHidden();
         return;
@@ -2252,13 +3000,17 @@
       roots.clear();
       const added = [...addedMessages];
       addedMessages.clear();
+      const prepared = messageLayoutPrepared;
+      messageLayoutPrepared = false;
       try {
         // Touch only changed subtrees; discard our own synchronous DOM writes below.
-        for (const root of changed) {
-          applyOverrides(root);
-          fixContrast(root);
-          normalizeColors(root);
-        }
+        colors.batch(() => {
+          for (const root of changed) {
+            applyOverrides(root);
+            fixContrast(root);
+            normalizeColors(root);
+          }
+        }, pending.has('structure'));
         if (pending.has('structure')) {
           bindGeometry();
           ensureHoverEntries();
@@ -2276,11 +3028,13 @@
         }
         if (pending.has('messages')) {
           // A text or attribute mutation still needs its containing message processed.
-          liuliMessagePass(topLevelRoots(changed.map(root => root.closest('.ml-item') || root)));
+          liuliMessagePass(topLevelRoots(changed.map(root => root.closest('.ml-item') || root)), prepared);
           llMotionPass(added);
         }
-        if (pending.has('side') || pending.has('messages')) llGroupMembersPass();
+        if (pending.has('members')) llGroupMembersPass();
+        else if (pending.has('messages')) llGroupRecentPass();
         if (pending.has('geometry') || pending.has('layout')) {
+          syncBubbleWidth();
           mountInputBar();
           scheduleStick();
         }
@@ -2290,49 +3044,77 @@
       }
     }
     function refreshPage() {
+      if (disposed) return;
+      colors.invalidate(document.body);
       roots.add(document.body);
-      for (const kind of ['structure', 'messages', 'side']) work.add(kind);
+      for (const kind of ['structure', 'messages', 'members']) work.add(kind);
       schedule();
     }
-    refreshInputGeometry = () => {
-      if (flushing) return;
+    function onGeometry() {
+      if (flushing || disposed) return;
       work.add('geometry');
       schedule();
-    };
+    }
+    refreshInputGeometry = onGeometry;
     observer.observe(document.body, {
       childList: true,
       subtree: true,
       characterData: true,
       attributes: true,
       attributeOldValue: true,
-      attributeFilter: ['class', 'style', 'aria-label', 'data-element-id']
+      attributeFilter: ['class', 'style', 'aria-label', 'data-element-id', 'id', 'data-index']
     });
-    document.addEventListener('visibilitychange', () => {
+    function onVisibility() {
       if (document.hidden) deferHidden();
       else if (needsRefresh) {
         needsRefresh = false;
         refreshPage();
       }
-    });
-    window.addEventListener('liuli-scope', refreshPage);
-    window.addEventListener('resize', refreshInputGeometry);
-    window.addEventListener('storage', event => {
+    }
+    function onStorage(event) {
+      if (disposed) return;
       if (event.key === LL_MD_KEY) {
         roots.add(document.body);
         work.add('messages');
         schedule();
       }
-    });
-    document.addEventListener(
-      'load',
-      event => {
-        if (event.target instanceof Element && event.target.closest('.chat-msg-area'))
-          scheduleStick();
-      },
-      true
-    );
+    }
+    function onLoad(event) {
+      if (!disposed && event.target instanceof Element && event.target.closest('.chat-msg-area'))
+        scheduleStick();
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('liuli-scope', refreshPage);
+    window.addEventListener('resize', onGeometry);
+    window.addEventListener('storage', onStorage);
+    document.addEventListener('load', onLoad, true);
+    const api = {
+      refresh: refreshPage,
+      dispose() {
+        if (disposed) return;
+        disposed = true;
+        observer.disconnect();
+        resize.disconnect();
+        colors.dispose();
+        if (llColorRepair === colors) llColorRepair = null;
+        cancelAnimationFrame(frame);
+        frame = 0;
+        roots.clear();
+        work.clear();
+        addedMessages.clear();
+        measured = [];
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('liuli-scope', refreshPage);
+        window.removeEventListener('resize', onGeometry);
+        window.removeEventListener('storage', onStorage);
+        document.removeEventListener('load', onLoad, true);
+        if (refreshInputGeometry === onGeometry) refreshInputGeometry = () => {};
+        if (window.__liuliPageObserver === api) delete window.__liuliPageObserver;
+      }
+    };
+    window.__liuliPageObserver = api;
     roots.add(document.body);
-    for (const kind of ['structure', 'messages', 'side']) work.add(kind);
+    for (const kind of ['structure', 'messages', 'members']) work.add(kind);
     flush();
   }
   function installRevealTracker() {
@@ -2441,7 +3223,25 @@
     function nativeBar() {
       return document.body.dataset.liuliTb === 'native';
     }
+    function efficiencyMode() {
+      return !!document.querySelector('.global-container.container--wide');
+    }
+    function clearClassicReveal() {
+      if (efficiencyMode()) return;
+      for (const key of ['nav', 'l', 'r']) {
+        clearTimeout(timers[key]);
+        timers[key] = 0;
+        state[key] = false;
+        delete document.body.dataset[KEYS[key]];
+      }
+      topEdgeCache = 0;
+    }
+    const modeObserver = new MutationObserver(clearClassicReveal);
+    const modeRoot = document.querySelector('.global-container');
+    if (modeRoot) modeObserver.observe(modeRoot, { attributes: true, attributeFilter: ['class'] });
+    clearClassicReveal();
     function onMove(e) {
+      if (!efficiencyMode()) { clearClassicReveal(); return; }
       var x = e.clientX,
         y = e.clientY;
       last.x = x;
@@ -2485,6 +3285,11 @@
     try {
       var shield = document.getElementById('liuli-ctl-shield');
       if (!shield) return;
+      if (document.body.dataset.liuliScope !== 'main' || document.body.dataset.liuliTb === 'native' ||
+          !document.querySelector('.global-container.container--wide')) {
+        shield.style.display = 'none';
+        return;
+      }
       var area = document.querySelector('.window-title-bar .window-control-area:not(.window-title-bar__controls-left)');
       var r = area ? area.getBoundingClientRect() : null;
       if (!r || r.width < 1 || r.height < 1) {
@@ -3913,6 +4718,89 @@
       return LL_TABS[0].key;
     }
   }
+  const LL_SECTION_INFO = {
+    '主题': ['明暗模式与跟随系统', true],
+    '材质': ['透明度、模糊、泛光与阴影', true],
+    '壁纸设置': ['图片、视频与显示方式', true],
+    '颜色角色': ['强调色、气泡与文字配色', true],
+    '颜色来源': ['从壁纸取色或选择自定义颜色', true],
+    '聊天消息': ['气泡样式、头像与图片昵称', true],
+    '会话列表': ['置顶分组、选中底色与空会话', true],
+    '输入框': ['TG 或原版输入布局', true],
+    '输入框按钮': ['TG 布局专用 · 按钮数量与排序', false],
+    '窗口按钮': ['标题栏与边缘提示 · 部分仅效率模式生效', false],
+    '右键菜单': ['显示方式与菜单排序', false],
+    '左侧边栏': ['快捷入口、导航与按钮显隐', false],
+    '文字': ['字体与 Markdown 渲染', true],
+    '消息文字层级': ['正文、昵称与头衔字号', true],
+    '诊断': ['错误记录与诊断包导出', true]
+  };
+  // 只搬动现有节点；details 的开合不重建控件，也不写入主题设置。
+  function llGroupSections(parent, state) {
+    const headings = [...parent.children].filter(node => node.classList.contains('liuli-panel__group'));
+    headings.forEach((heading, index) => {
+      const title = heading.textContent.trim();
+      const info = LL_SECTION_INFO[title] || ['展开查看此组设置', index === 0];
+      const card = document.createElement('details');
+      card.className = 'liuli-section';
+      card.dataset.section = title;
+      card.open = state.has(title) ? state.get(title) : info[1];
+      const summary = document.createElement('summary');
+      summary.className = 'liuli-section__summary';
+      const description = document.createElement('span');
+      description.className = 'liuli-section__description';
+      description.textContent = info[0];
+      const body = document.createElement('div');
+      body.className = 'liuli-section__body';
+      parent.insertBefore(card, heading);
+      let node = heading.nextSibling;
+      const boundary = headings[index + 1];
+      while (node && node !== boundary) {
+        const next = node.nextSibling;
+        body.appendChild(node);
+        node = next;
+      }
+      summary.append(heading, description);
+      card.append(summary, body);
+      card.addEventListener('toggle', () => state.set(title, card.open));
+    });
+  }
+  function llOrganizePage(page, key) {
+    const state = new Map();
+    llGroupSections(page, state);
+    for (const block of page.querySelectorAll(':scope > .liuli-wp-block')) {
+      const title = block.querySelector(':scope > .liuli-wp-title');
+      if (title) {
+        title.classList.add('liuli-panel__group');
+        llGroupSections(block, state);
+        block.classList.add('liuli-section-shell');
+      }
+    }
+    const layout = page.querySelector('.liuli-lo');
+    if (layout) {
+      const organizeLayout = () => {
+        llGroupSections(layout, state);
+        // 常用输入布局先出现；长排序列表留在各自的折叠卡片中。
+        const input = layout.querySelector(':scope > [data-section="输入框"]');
+        if (input && layout.firstElementChild !== input) layout.prepend(input);
+      };
+      organizeLayout();
+      new MutationObserver(() => {
+        if ([...layout.children].some(node => node.classList.contains('liuli-panel__group'))) organizeLayout();
+      }).observe(layout, { childList: true });
+      const chat = page.querySelector(':scope > [data-section="聊天消息"]');
+      if (chat) page.prepend(chat);
+      if (chat) chat.after(layout);
+    }
+    const intro = document.createElement('p');
+    intro.className = 'liuli-page-guide';
+    intro.textContent = key === 'layout'
+      ? '先选气泡和输入框布局；按钮排序、窗口与导航设置可展开对应分组。'
+      : '所有选项均在对应分组中，按需展开调整。';
+    page.prepend(intro);
+    llSyncSettingDependencies();
+  }
+  let llTabInstance = 0;
   function llBuildTabs(container, builders) {
     const list = LL_TABS;
     const bar = document.createElement('div');
@@ -3923,10 +4811,12 @@
     const btns = {};
     const pages = {};
     const built = new Set();
+    const tabId = 'liuli-tabs-' + ++llTabInstance;
     function show(key) {
       if (!pages[key]) key = list[0].key;
       if (!built.has(key)) {
         builders[key](pages[key]);
+        llOrganizePage(pages[key], key);
         built.add(key);
       }
       Object.keys(pages).forEach(function (k) {
@@ -3950,7 +4840,19 @@
       b.className = 'liuli-seg__item';
       b.textContent = t.label;
       b.dataset.tab = t.key;
+      b.id = tabId + '-' + t.key;
+      b.setAttribute('aria-controls', b.id + '-page');
       b.setAttribute('role', 'tab');
+      b.addEventListener('keydown', event => {
+        const index = list.findIndex(tab => tab.key === t.key);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1
+          : event.key === 'ArrowRight' ? (index + 1) % list.length
+            : event.key === 'ArrowLeft' ? (index + list.length - 1) % list.length : -1;
+        if (next < 0) return;
+        event.preventDefault();
+        show(list[next].key);
+        btns[list[next].key].focus();
+      });
       b.addEventListener('click', function () {
         show(t.key);
       });
@@ -3961,6 +4863,8 @@
       const p = document.createElement('div');
       p.className = 'liuli-tabpage';
       p.dataset.tab = t.key;
+      p.id = tabId + '-' + t.key + '-page';
+      p.setAttribute('aria-labelledby', tabId + '-' + t.key);
       p.setAttribute('role', 'tabpanel');
       p.hidden = true;
       container.appendChild(p);
@@ -3997,6 +4901,7 @@
     for (const f of FIELDS) {
       const wrap = document.createElement('div');
       wrap.className = 'liuli-field';
+      wrap.dataset.liuliMaterial = f.key;
       const row = document.createElement('div');
       row.className = 'liuli-field__row';
       const label = document.createElement('div');
@@ -4078,27 +4983,291 @@
     });
     pageLook.appendChild(resetAll);
   }
-  function buildColorControls(pageColor) {
+  let llColorControlInstance = 0;
+  function buildColorControls(pageColor, settings) {
+    const sourceHeading = document.createElement('div');
+    sourceHeading.className = 'liuli-panel__group';
+    sourceHeading.textContent = '颜色来源';
+    pageColor.appendChild(sourceHeading);
+    const sourceRow = document.createElement('div');
+    sourceRow.className = 'liuli-wp-fit liuli-mode-row';
+    sourceRow.dataset.liuliSetting = 'colorSource';
+    const sourceLabel = document.createElement('span');
+    sourceLabel.textContent = '主题取色';
+    const sourceButtons = document.createElement('div');
+    sourceButtons.className = 'liuli-seg';
+    sourceButtons.setAttribute('role', 'group');
+    sourceButtons.setAttribute('aria-label', '主题颜色来源');
+    for (const [value, label] of [['wallpaper', '壁纸取色'], ['custom', '自定义颜色']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'liuli-seg__item';
+      button.textContent = label;
+      button.dataset.settingValue = value;
+      button.classList.toggle('is-active', settings.colorSource === value);
+      button.addEventListener('click', () => {
+        settings.colorSource = value;
+        applySettings(settings, true);
+      });
+      sourceButtons.appendChild(button);
+    }
+    sourceRow.append(sourceLabel, sourceButtons);
+    pageColor.appendChild(sourceRow);
+    const card = document.createElement('div');
+    card.className = 'liuli-palette-card';
+    pageColor.appendChild(card);
+    const custom = document.createElement('div');
+    custom.className = 'liuli-color-custom';
+    custom.dataset.liuliColorCustom = '1';
+    const wheel = document.createElement('div');
+    wheel.className = 'liuli-color-wheel';
+    wheel.setAttribute('role', 'group');
+    wheel.setAttribute('aria-label', '基础颜色色轮');
+    const hueRing = document.createElement('div');
+    hueRing.className = 'liuli-color-wheel__hue';
+    hueRing.tabIndex = 0;
+    hueRing.setAttribute('role', 'slider');
+    hueRing.setAttribute('aria-label', '色相');
+    hueRing.setAttribute('aria-valuemin', '0');
+    hueRing.setAttribute('aria-valuemax', '359');
+    const hueHandle = document.createElement('i');
+    hueHandle.className = 'liuli-color-wheel__hue-handle';
+    const sv = document.createElement('div');
+    sv.className = 'liuli-color-wheel__sv';
+    sv.tabIndex = 0;
+    sv.setAttribute('role', 'slider');
+    sv.setAttribute('aria-label', '饱和度与亮度');
+    sv.setAttribute('aria-valuemin', '0');
+    sv.setAttribute('aria-valuemax', '100');
+    const svHandle = document.createElement('i');
+    svHandle.className = 'liuli-color-wheel__sv-handle';
+    sv.appendChild(svHandle);
+    hueRing.appendChild(hueHandle);
+    wheel.append(hueRing, sv);
+    const customFields = document.createElement('div');
+    customFields.className = 'liuli-color-fields';
+    const customLabel = document.createElement('label');
+    customLabel.className = 'liuli-color-fields__label';
+    customLabel.textContent = '基础颜色';
+    const hex = document.createElement('input');
+    hex.type = 'text';
+    hex.id = 'liuli-color-hex-' + ++llColorControlInstance;
+    customLabel.htmlFor = hex.id;
+    hex.className = 'liuli-color-hex';
+    hex.maxLength = 7;
+    hex.pattern = '#[0-9a-fA-F]{6}';
+    hex.placeholder = '#1d9bf0';
+    hex.spellcheck = false;
+    hex.autocomplete = 'off';
+    hex.autocapitalize = 'off';
+    hex.setAttribute('aria-label', '基础颜色十六进制值');
+    const customHint = document.createElement('span');
+    customHint.className = 'liuli-color-fields__hint';
+    customHint.textContent = '色环选择色相，内圈调整明暗';
+    const selectedColor = document.createElement('span');
+    selectedColor.className = 'liuli-color-selected';
+    selectedColor.setAttribute('aria-hidden', 'true');
+    const keyboardHint = document.createElement('span');
+    keyboardHint.className = 'liuli-color-fields__hint';
+    keyboardHint.textContent = '也可聚焦色轮后用方向键微调';
+    const error = document.createElement('span');
+    error.id = 'liuli-color-error-' + llColorControlInstance;
+    error.className = 'liuli-color-error';
+    error.dataset.liuliColorError = '1';
+    error.setAttribute('aria-live', 'polite');
+    hex.setAttribute('aria-describedby', error.id);
+    const commit = value => {
+      const seed = llNormalizeColorSeed(value);
+      const message = seed ? '' : '请输入 # 加六位十六进制颜色，例如 #1d9bf0。';
+      hex.setCustomValidity(message);
+      hex.setAttribute('aria-invalid', String(!seed));
+      error.textContent = message;
+      if (!seed) return;
+      settings.customColor = seed;
+      applySettings(settings, true);
+    };
+    let h = 0, s = 1, v = 1, lastSeed = '', colorFrame = 0;
+    const clamp = number => Math.max(0, Math.min(1, number));
+    const seedFromWheel = () => {
+      const chroma = v * s, x = chroma * (1 - Math.abs((h / 60) % 2 - 1)), m = v - chroma;
+      const channels = h < 60 ? [chroma, x, 0] : h < 120 ? [x, chroma, 0] : h < 180 ? [0, chroma, x]
+        : h < 240 ? [0, x, chroma] : h < 300 ? [x, 0, chroma] : [chroma, 0, x];
+      return '#' + channels.map(channel => Math.round((channel + m) * 255).toString(16).padStart(2, '0')).join('');
+    };
+    const drawWheel = () => {
+      wheel.style.setProperty('--liuli-wheel-hue', h + 'deg');
+      const angle = (h - 90) * Math.PI / 180;
+      hueHandle.style.left = (50 + Math.cos(angle) * 45.4) + '%';
+      hueHandle.style.top = (50 + Math.sin(angle) * 45.4) + '%';
+      svHandle.style.left = s * 100 + '%';
+      svHandle.style.top = (1 - v) * 100 + '%';
+      svHandle.style.background = seedFromWheel();
+      hueRing.setAttribute('aria-valuenow', String(Math.round(h)));
+      hueRing.setAttribute('aria-valuetext', Math.round(h) + '度');
+      sv.setAttribute('aria-valuenow', String(Math.round(s * 100)));
+      sv.setAttribute('aria-valuetext', '饱和度 ' + Math.round(s * 100) + '%，亮度 ' + Math.round(v * 100) + '%');
+    };
+    custom.__liuliColorWheel = { setSeed(seed) {
+      if (seed === lastSeed || !llNormalizeColorSeed(seed)) return;
+      lastSeed = seed;
+      const channels = [1, 3, 5].map(start => parseInt(seed.slice(start, start + 2), 16) / 255);
+      const max = Math.max(...channels), min = Math.min(...channels), delta = max - min;
+      if (delta) {
+        const [r, g, b] = channels;
+        h = ((max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) * 60 + 360) % 360;
+      }
+      s = max ? delta / max : 0;
+      v = max;
+      drawWheel();
+    } };
+    const commitWheel = () => {
+      colorFrame = 0;
+      if (!custom.isConnected) return;
+      lastSeed = seedFromWheel();
+      commit(lastSeed);
+    };
+    const queueWheel = () => {
+      drawWheel();
+      if (!colorFrame) colorFrame = requestAnimationFrame(commitWheel);
+    };
+    const bindDrag = (control, update) => {
+      let pointer = null;
+      control.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        control.focus();
+        pointer = event.pointerId;
+        control.setPointerCapture(pointer);
+        update(event); queueWheel();
+      });
+      control.addEventListener('pointermove', event => {
+        if (event.pointerId !== pointer) return;
+        update(event); queueWheel();
+      });
+      const finish = event => {
+        if (event.pointerId !== pointer) return;
+        pointer = null;
+        if (colorFrame) { cancelAnimationFrame(colorFrame); commitWheel(); }
+        if (control.hasPointerCapture(event.pointerId)) control.releasePointerCapture(event.pointerId);
+      };
+      control.addEventListener('pointerup', finish);
+      control.addEventListener('pointercancel', finish);
+      control.addEventListener('lostpointercapture', () => { pointer = null; });
+    };
+    bindDrag(hueRing, event => {
+      const rect = hueRing.getBoundingClientRect();
+      h = (Math.atan2(event.clientY - rect.top - rect.height / 2, event.clientX - rect.left - rect.width / 2) * 180 / Math.PI + 450) % 360;
+    });
+    bindDrag(sv, event => {
+      const rect = sv.getBoundingClientRect();
+      s = clamp((event.clientX - rect.left) / rect.width);
+      v = clamp(1 - (event.clientY - rect.top) / rect.height);
+    });
+    hueRing.addEventListener('keydown', event => {
+      const step = event.shiftKey ? 10 : 1;
+      const offset = ['ArrowRight', 'ArrowUp'].includes(event.key) ? step : ['ArrowLeft', 'ArrowDown'].includes(event.key) ? -step : 0;
+      if (!offset && !['Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      h = event.key === 'Home' ? 0 : event.key === 'End' ? 359 : (h + offset + 360) % 360;
+      queueWheel();
+    });
+    sv.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 0.1 : 0.01;
+      if (event.key === 'ArrowLeft') s = clamp(s - step);
+      if (event.key === 'ArrowRight') s = clamp(s + step);
+      if (event.key === 'ArrowUp') v = clamp(v + step);
+      if (event.key === 'ArrowDown') v = clamp(v - step);
+      queueWheel();
+    });
+    hex.addEventListener('input', () => commit(hex.value));
+    customFields.append(selectedColor, customLabel, hex, customHint, keyboardHint);
+    custom.append(wheel, customFields, error);
+    card.appendChild(custom);
     const info = document.createElement('div');
-    info.className = 'liuli-info';
-    const swatch = document.createElement('div');
-    swatch.className = 'liuli-swatch';
+    info.className = 'liuli-palette-heading';
+    const previewTitle = document.createElement('span');
+    previewTitle.className = 'liuli-palette-heading__title';
+    previewTitle.textContent = '派生配色';
     const infoText = document.createElement('span');
-    info.appendChild(swatch);
-    info.appendChild(infoText);
-    pageColor.appendChild(info);
+    infoText.className = 'liuli-palette-heading__source';
+    info.append(previewTitle, infoText);
+    card.appendChild(info);
+    const previews = document.createElement('div');
+    previews.className = 'liuli-palette-preview';
+    previews.setAttribute('aria-label', '当前主题颜色角色预览');
+    for (const [label, background, foreground] of [
+      ['强调色', '--ll-brand', '--ll-on-brand'],
+      ['选中底色', '--ll-primary-container', '--ll-on-primary-container'],
+      ['次色底色', '--ll-secondary-container', '--ll-on-secondary-container'],
+      ['第三色底色', '--ll-tertiary-container', '--ll-on-tertiary-container'],
+      ['页面背景', '--ll-app-bg', '--ll-on-glass'],
+      ['中性表面', '--ll-surface-2', '--ll-on-glass'],
+      ['自己的气泡', '--ll-bubble-self', '--ll-bubble-self-fg'],
+      ['对方的气泡', '--ll-bubble-other', '--ll-bubble-other-fg']
+    ]) {
+      const item = document.createElement('div');
+      item.className = 'liuli-palette-role';
+      const sample = document.createElement('div');
+      sample.className = 'liuli-palette-role__sample';
+      sample.style.background = 'var(' + background + ', rgba(var(--ll-acrylic), 0.86))';
+      sample.style.color = 'var(' + foreground + ', var(--ll-on-glass))';
+      sample.setAttribute('aria-hidden', 'true');
+      const letters = document.createElement('span');
+      letters.textContent = 'Aa';
+      const dot = document.createElement('i');
+      sample.append(letters, dot);
+      const name = document.createElement('div');
+      name.className = 'liuli-palette-role__name';
+      name.textContent = label;
+      const values = document.createElement('div');
+      values.className = 'liuli-palette-role__values';
+      const backgroundValue = document.createElement('code');
+      const foregroundValue = document.createElement('code');
+      values.append(backgroundValue, foregroundValue);
+      item.append(sample, name, values);
+      previews.appendChild(item);
+    }
+    card.appendChild(previews);
+    const colorText = value => {
+      const parts = value.match(/[\d.]+/g);
+      if (!parts || parts.length < 3) return value;
+      const hexValue = '#' + parts.slice(0, 3).map(part => Math.round(Number(part)).toString(16).padStart(2, '0')).join('');
+      const alpha = parts.length > 3 ? Number(parts[3]) : 1;
+      return hexValue.toUpperCase() + (alpha < 1 ? ' · ' + Math.round(alpha * 100) + '%' : '');
+    };
     const refreshInfo = () => {
       const src = document.body.dataset.liuliSource || DEFAULT_SOURCE;
-      const brand = getComputedStyle(document.body).getPropertyValue('--ll-brand').trim();
-      swatch.style.background = brand || src;
-      infoText.textContent = '壁纸取色 ' + src + ' → 主题色 ' + brand;
+      const label = llModeCfg.colorSource === 'custom' ? '基础色' : '壁纸取色';
+      // The settings dialog and embedded settings page may coexist. Refresh the
+      // connected cards together, including their text values, on palette apply.
+      for (const paletteCard of new Set([card, ...document.querySelectorAll('.liuli-palette-card')])) {
+        paletteCard.querySelector('.liuli-palette-heading__source').textContent = label + ' ' + src.toUpperCase();
+        for (const item of paletteCard.querySelectorAll('.liuli-palette-role')) {
+          const appearance = getComputedStyle(item.querySelector('.liuli-palette-role__sample'));
+          const background = colorText(appearance.backgroundColor);
+          const foreground = colorText(appearance.color);
+          const [backgroundValue, foregroundValue] = item.querySelectorAll('code');
+          backgroundValue.textContent = background;
+          foregroundValue.textContent = foreground;
+          backgroundValue.title = '背景 ' + background;
+          foregroundValue.title = '文字 ' + foreground;
+          item.setAttribute('aria-label', item.querySelector('.liuli-palette-role__name').textContent + '，背景 ' + background + '，文字 ' + foreground);
+        }
+      }
     };
     refreshInfo();
     refreshPaletteInfo = refreshInfo;
+    const group = document.createElement('div');
+    group.className = 'liuli-panel__group';
+    group.textContent = '颜色角色';
+    pageColor.appendChild(group);
     buildRoleControls(pageColor, function () {
       window.__liuliPaletteApplied = false;
       applyDynamicPalette();
     });
+    llSyncColorSourceControls();
   }
   function buildPanelContent(host, settings) {
     host.innerHTML = '';
@@ -4106,12 +5275,12 @@
     llVeilSegRefreshers = [];
     const sub = document.createElement('div');
     sub.className = 'liuli-panel__sub';
-    sub.textContent = '材质与外观 · 实时生效';
+    sub.textContent = '外观、聊天与布局 · 调整即时生效';
     host.appendChild(sub);
     llBuildTabs(host, {
       look: page => buildLookControls(page, settings),
       wallpaper: buildWallpaperControls,
-      color: buildColorControls,
+      color: page => buildColorControls(page, settings),
       layout: page => {
         // 布局页由 layout-custom.js 构建；会话列表这一组属于主题自己的设置，
         // 追加在它后面（layout-custom.js 不碰主题设置存储）。
@@ -4176,6 +5345,7 @@
         console.warn('[theme] ark external failed:', e && e.message);
       }
       installAvatarStick();
+      installRowEntryMotion();
       installPageObserver();
       try {
         installSwitchMotion();
@@ -4327,7 +5497,7 @@
     return row;
   }
   function buildMarkdownControls(host) {
-    llBuildSwitchRow(host, 'Markdown 渲染', llMdEnabled(), function (on) {
+    const row = llBuildSwitchRow(host, 'Markdown 渲染', llMdEnabled(), function (on) {
       try {
         localStorage.setItem(LL_MD_KEY, on ? '1' : '0');
       } catch (err) {}
@@ -4361,10 +5531,34 @@
     hint.className = 'liuli-field__hint';
     hint.textContent = '列表顶部显示「置顶 · N」小标题，点小标题可以折叠';
     host.appendChild(hint);
+    const strengthField = document.createElement('div');
+    strengthField.className = 'liuli-field';
+    const strengthRow = document.createElement('div');
+    strengthRow.className = 'liuli-field__row';
+    const strengthLabel = document.createElement('div');
+    strengthLabel.className = 'liuli-field__label';
+    strengthLabel.textContent = '选中会话底色浓度';
+    const strengthValue = document.createElement('div');
+    strengthValue.className = 'liuli-field__value';
+    strengthValue.textContent = settings.selectedStrength + '%';
+    const strengthInput = document.createElement('input');
+    strengthInput.type = 'range';
+    strengthInput.className = 'liuli-slider';
+    strengthInput.dataset.liuliSetting = 'selectedStrength';
+    strengthInput.dataset.unit = '%';
+    strengthInput.min = 15;
+    strengthInput.max = 100;
+    strengthInput.step = 5;
+    strengthInput.value = settings.selectedStrength;
+    strengthInput.style.setProperty('--liuli-pct', (settings.selectedStrength - 15) / 85 * 100 + '%');
+    strengthInput.addEventListener('input', () => persist('selectedStrength', Number(strengthInput.value)));
+    strengthRow.append(strengthLabel, strengthValue);
+    strengthField.append(strengthRow, strengthInput);
+    host.appendChild(strengthField);
     settingSwitch('置顶分组使用强调色', 'pinColor', settings.pinColor === true);
     const colorHint = document.createElement('div');
     colorHint.className = 'liuli-field__hint';
-    colorHint.textContent = '用主题强调色的容器底色和容器文字色，和默认的淡品牌色区分。';
+    colorHint.textContent = '开启「置顶会话单独成组」后生效；关闭分组仍保留颜色选项。使用主题强调色的容器底色和文字色。';
     host.appendChild(colorHint);
     settingSwitch('隐藏空会话的 QQ 图标', 'hideEmptyLogo', settings.hideEmptyLogo !== false);
     const messageGroup = document.createElement('div');
@@ -4396,13 +5590,85 @@
       row.append(caption, seg);
       host.appendChild(row);
     }
-    choice('聊天布局', 'chatStyle', [['tg', 'TG'], ['classic', '经典'], ['tim', 'TIM']]);
-    choice('头像位置', 'avatarPosition', [['top', '消息开头'], ['bottom', '消息末尾']]);
+    choice('聊天气泡', 'chatStyle', [['tg', 'TG'], ['classic', '原版'], ['tim', 'TIM']]);
+    const bubbleHint = document.createElement('div');
+    bubbleHint.className = 'liuli-field__hint';
+    bubbleHint.textContent = '原版和 TIM 保留各自气泡形状，颜色角色与材质跟随主题。TG 和 TIM 可合并连续消息的头像。';
+    host.appendChild(bubbleHint);
+    choice('头像位置（TG / TIM）', 'avatarPosition', [['top', '消息开头'], ['bottom', '消息末尾']]);
+    choice('名称与标签位置（TIM）', 'timSenderPosition', [['inside', '气泡内（TG）'], ['outside', '气泡外（原版）']]);
+    const scaleField = document.createElement('div');
+    scaleField.className = 'liuli-field';
+    const scaleRow = document.createElement('div');
+    scaleRow.className = 'liuli-field__row';
+    const scaleLabel = document.createElement('div');
+    scaleLabel.className = 'liuli-field__label';
+    scaleLabel.textContent = '气泡大小';
+    const scaleValue = document.createElement('div');
+    scaleValue.className = 'liuli-field__value';
+    scaleValue.textContent = settings.bubbleScale + '%';
+    const scaleInput = document.createElement('input');
+    scaleInput.type = 'range';
+    scaleInput.className = 'liuli-slider';
+    scaleInput.dataset.liuliSetting = 'bubbleScale';
+    scaleInput.dataset.unit = '%';
+    scaleInput.min = 80;
+    scaleInput.max = 140;
+    scaleInput.step = 5;
+    scaleInput.value = settings.bubbleScale;
+    scaleInput.style.setProperty('--liuli-pct', (settings.bubbleScale - 80) / 60 * 100 + '%');
+    scaleInput.addEventListener('input', () => persist('bubbleScale', Number(scaleInput.value)));
+    scaleRow.append(scaleLabel, scaleValue);
+    scaleField.append(scaleRow, scaleInput);
+    host.appendChild(scaleField);
+    const scaleHint = document.createElement('div');
+    scaleHint.className = 'liuli-field__hint';
+    scaleHint.textContent = '调整气泡留白和语音自然尺寸；文字字号、图片大小与最大宽度分别设置。';
+    host.appendChild(scaleHint);
+    const widthField = document.createElement('div');
+    widthField.className = 'liuli-field';
+    const widthRow = document.createElement('div');
+    widthRow.className = 'liuli-field__row';
+    const widthLabel = document.createElement('div');
+    widthLabel.className = 'liuli-field__label';
+    widthLabel.textContent = '气泡最大宽度';
+    const widthValue = document.createElement('div');
+    widthValue.className = 'liuli-field__value';
+    widthValue.textContent = settings.bubbleMaxWidth + '%';
+    const widthInput = document.createElement('input');
+    widthInput.type = 'range';
+    widthInput.className = 'liuli-slider';
+    widthInput.dataset.liuliSetting = 'bubbleMaxWidth';
+    widthInput.dataset.unit = '%';
+    widthInput.min = 40;
+    widthInput.max = 100;
+    widthInput.step = 5;
+    widthInput.value = settings.bubbleMaxWidth;
+    widthInput.style.setProperty('--liuli-pct', (settings.bubbleMaxWidth - 40) / 60 * 100 + '%');
+    widthInput.addEventListener('input', () => persist('bubbleMaxWidth', Number(widthInput.value)));
+    widthRow.append(widthLabel, widthValue);
+    widthField.append(widthRow, widthInput);
+    host.appendChild(widthField);
+    const widthHint = document.createElement('div');
+    widthHint.className = 'liuli-field__hint';
+    widthHint.textContent = '只限制消息最大宽度，不缩放气泡、文字或语音。短消息保持自然大小；100% 使用 QQ 原生宽度上限。';
+    host.appendChild(widthHint);
     settingSwitch('隐藏纯图片消息的昵称', 'hideImageNames', settings.hideImageNames === true);
     const imageHint = document.createElement('div');
     imageHint.className = 'liuli-field__hint';
     imageHint.textContent = '同时隐藏图片上方的头衔；带文字或引用的混合消息保留昵称。';
     host.appendChild(imageHint);
+    for (const [label, key, description] of [
+      ['显示群头衔', 'showMessageTitles', '只控制昵称旁的个性群头衔，保留昵称和群主、管理员身份。'],
+      ['显示群主 / 管理员身份', 'showMessageIdentity', '只控制群主、管理员身份标签，保留昵称和个性群头衔。'],
+      ['名称按气泡宽度省略', 'truncateMessageNames', '开启后长昵称按气泡宽度省略；关闭后可显示完整名称，短消息的名称行可能更宽。']
+    ]) {
+      settingSwitch(label, key, settings[key] !== false);
+      const detail = document.createElement('div');
+      detail.className = 'liuli-field__hint';
+      detail.textContent = description;
+      host.appendChild(detail);
+    }
   }
   function buildMessageTypeControls(host, settings) {
     const group = document.createElement('div');
@@ -4602,14 +5868,14 @@
     const label = document.createElement('span');
     label.textContent = '字体';
     const box = document.createElement('div');
-    box.style.cssText = 'display:flex;gap:6px;align-items:center;flex:1;justify-content:flex-end;';
+    box.style.cssText = 'display:flex;gap:6px;align-items:center;flex:1;min-width:0;justify-content:flex-end;';
     const input = document.createElement('input');
     input.type = 'text';
     input.placeholder = '默认（MiSans）';
     input.value = llFontName();
     input.setAttribute('list', 'liuli-font-list');
     input.style.cssText =
-      'width:180px;height:28px;padding:0 10px;border-radius:8px;border:none;outline:none;' +
+      'width:180px;max-width:100%;min-width:0;flex:1;height:28px;padding:0 10px;border-radius:8px;border:none;outline:none;' +
       'background:rgba(var(--ll-on-glass-rgb),0.08);color:var(--ll-on-glass);font:inherit;font-size:13px;';
     const list = document.createElement('datalist');
     list.id = 'liuli-font-list';
@@ -4657,7 +5923,12 @@
       );
     if (!controls) return;
     const mini = controls.querySelector('.mini-fishing-entry');
-    if (mini) mini.style.setProperty('display', 'none', 'important');
+    // Settings now live in QQ's settings window. Restore the native mini entry
+    // if an older theme version left its replacement-era inline override.
+    if (mini && mini.style.getPropertyValue('display') === 'none' &&
+        mini.style.getPropertyPriority('display') === 'important') {
+      mini.style.removeProperty('display');
+    }
     // 设置页已经挂到 QQ 设置窗口，标题栏不再放主题齿轮。
   }
   const themeEntry = document.createElement('button');
@@ -4761,17 +6032,23 @@
       view.className = 'q-scroll-view scroll-view--show-scrollbar';
       view.style.display = 'none';
       main.append(view);
+      let navigationSequence = 0;
+      let renderPending = null;
       let titleNode = null;
       let titleSaved = null;
       nav.addEventListener('click', async () => {
-        if (!view.dataset.ready) {
-          view.dataset.ready = '1';
+        const ticket = navigationSequence;
+        // 共用初始化 Promise；切走后旧请求只能准备内容，不能夺回页面。
+        if (!renderPending) renderPending = (async () => {
           try {
             await window.__liuliRenderSettings(view);
+            view.dataset.ready = '1';
           } catch (e) {
             view.textContent = '主题设置加载失败：' + (e && e.message ? e.message : e);
           }
-        }
+        })();
+        await renderPending;
+        if (ticket !== navigationSequence || !nav.isConnected) return;
         original.style.display = 'none';
         view.style.display = 'block';
         // 标题结构是 <div.setting-title><div.icon-area/> 通用<!--v-if--></div>，要改 icon-area 后面的文本节点；
@@ -4787,6 +6064,7 @@
       });
       tab.addEventListener('click', e => {
         const item = e.target.closest && e.target.closest('.nav-item');
+        if (item) navigationSequence++;
         if (item && item !== nav) {
           view.style.display = 'none';
           original.style.display = 'block';
@@ -4794,7 +6072,9 @@
           nav.classList.remove('nav-item-active');
           // 点回进入插件页之前的同一项时路由没变，Vue 不会重绘选中态，这里补上；
           // 之后 Vue 重绘这一项会整体改写 className，不会冲突
+          const restoreTicket = navigationSequence;
           requestAnimationFrame(() => {
+            if (restoreTicket !== navigationSequence) return;
             if (!tab.querySelector('.nav-item.nav-item-active')) item.classList.add('nav-item-active');
           });
           if (titleNode && titleSaved !== null && titleNode.isConnected) titleNode.nodeValue = titleSaved;

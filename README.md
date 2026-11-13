@@ -46,7 +46,7 @@
 |---|---|
 | **动态色板** | 从壁纸取色，用 Material Color Utilities 派生整套 M3 配色，亮/暗跟随 QQ；「配色」里可以指定强调色、选中项、自己和对方的气泡各用哪种角色 |
 | **磨砂玻璃** | 会话列表、详情栏、弹层、右键菜单都是壁纸上的半透明材质 |
-| **聊天布局** | TG / 经典 / TIM 三种布局；可选头像位于消息开头或末尾；纯图片消息可以隐藏昵称和头衔 |
+| **聊天气泡** | TG / 原版 / TIM；原版与 TIM 保留各自气泡形状，颜色角色、不透明度、模糊和阴影跟随主题；TG / TIM 连续消息合并头像，可选头像居上或居下；TIM 可选名称与标签置于气泡内或外；气泡最大宽度 40%–100%，大小独立设置，纯图片消息可隐藏昵称和头衔 |
 | **消息文字** | 正文、昵称、头衔字号分别设置；昵称不超过正文大小，长昵称在消息范围内省略 |
 | **置顶分组** | 置顶会话合为可折叠的一组，显示数量，支持可选强调色；选中态保留完整圆角 |
 | **视频壁纸** | 本地 H.264 MP4 / WebM，静音循环，首帧取色；窗口隐藏时暂停，减少动态效果时显示首帧 |
@@ -55,7 +55,7 @@
 | **名字颜色** | 统一用 MCU 派生的第三色（tertiary），和主题同源又一眼可分 |
 | **消息入场** | 打开会话时级联浮入，新消息单条浮入（遵守系统「减少动画」） |
 | **自定义字体** | 设置页「文字」里填本机已安装的字体名，留空回默认 |
-| **布局自定义** | 右键菜单可切「只显示图标」并自定义顺序；输入框里放几个按钮、放哪些、顺序，「更多」宫格里的顺序都能调；左侧边栏可隐藏分区 |
+| **布局自定义** | 悬浮标题栏与导航栏仅效率模式生效，经典模式保留 QQ 原生布局；右键菜单可切「只显示图标」并自定义顺序；输入框可选悬浮／原版布局，原版保留 QQ 工具栏、编辑区、发送按钮和高度拖动；悬浮布局可调整按钮数量和顺序；左侧边栏可隐藏分区 |
 | **卡片用浏览器打开** | 点 B 站、腾讯文档等「QQ小程序」卡片时不再走 QQ 内置的打开逻辑，改取卡片里的网页链接用默认浏览器打开；同时装了 QQ 增强时也会优先使用琉璃的处理 |
 | **设置面板** | 「外观 / 壁纸 / 配色 / 布局 / 文字 / 诊断」六个分区：材质模糊、不透明度、泛光、阴影、亮色与暗色主题遮罩、壁纸与适应模式、布局及字体等 |
 | **导出诊断包** | 「诊断」分区把运行环境、主题资源、日志、UI/壁纸状态打成 zip，附带「打开文件夹」和最近错误列表 |
@@ -64,11 +64,11 @@
 
 ### 方式一：琉璃套件版安装器
 
-在本仓库 [v1.3.5+snowlora.4](https://github.com/LilycleHeart/qqnt-liuli-theme/releases/tag/v1.3.5%2Bsnowlora.4) 下载 `SnowLora-Liuli-Installer-2.0.0.exe`，一次装好加载器 SnowLora 和琉璃主题。
+在本仓库 [v1.3.5+snowlora.2](https://github.com/LilycleHeart/qqnt-liuli-theme/releases/tag/v1.3.5%2Bsnowlora.2) 下载 `SnowLora-Liuli-Installer-2.0.0.exe`，一次装好加载器 SnowLora 和琉璃主题。
 
 ### 方式二：从本地安装
 
-在本仓库 [Releases](https://github.com/LilycleHeart/qqnt-liuli-theme/releases) 下载 `qqnt-liuli-theme-<版本>.zip`（SnowLora 版的 release tag 形如 `v1.3.5+snowlora.4`），到 QQ 设置 → SnowLora → 插件管理 → 本地安装，选择 zip 文件。
+在本仓库 [Releases](https://github.com/LilycleHeart/qqnt-liuli-theme/releases) 下载 `qqnt-liuli-theme-<版本>.zip`（SnowLora 版的 release tag 形如 `v1.3.5+snowlora.2`），到 QQ 设置 → SnowLora → 插件管理 → 本地安装，选择 zip 文件。
 
 ### 方式三：在线安装
 
@@ -130,7 +130,9 @@ gh release create "v<版本>" --repo LilycleHeart/qqnt-liuli-theme --latest=fals
 
 ## 致谢
 
-加载器 [SnowLora](https://github.com/SnowLuma/SnowLora) 由 MliKiowa 开发，SnowLuma 维护，MIT 许可。
+感谢 [MliKiowa](https://github.com/MliKiowa) 开发的 [SnowLora](https://github.com/SnowLuma/SnowLora) 加载器，以及 [SnowLuma](https://github.com/SnowLuma) 的维护工作。SnowLora 提供了本项目运行所需的加载与窗口注入能力，是 SnowLora 版的重要基础，采用 MIT 许可。
+
+完整贡献说明见 [贡献者](CONTRIBUTORS.md)。
 
 ## 问题反馈
 

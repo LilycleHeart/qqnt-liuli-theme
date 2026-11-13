@@ -2,15 +2,20 @@
   const preference = matchMedia('(prefers-reduced-motion: reduce)');
   const running = new Map();
   const messages = new Set();
+  const rowEntries = new Set();
   const enabled = () => !preference.matches && !document.hidden;
 
   function play(element, frames, options) {
     if (!enabled() || !element.isConnected || typeof element.animate !== 'function') return;
     running.get(element)?.cancel();
-    const animation = element.animate(frames, { ...options, fill: 'backwards' });
+    const { rowEntry, ...nativeOptions } = options || {};
+    const animation = element.animate(frames, { ...nativeOptions, fill: 'backwards' });
     running.set(element, animation);
+    if (rowEntry) rowEntries.add(element);
+    else rowEntries.delete(element);
     const release = () => {
       if (running.get(element) === animation) running.delete(element);
+      if (!running.has(element)) rowEntries.delete(element);
     };
     animation.finished.then(() => {
       release();
@@ -23,6 +28,14 @@
     for (const animation of running.values()) animation.cancel();
     running.clear();
     messages.clear();
+    rowEntries.clear();
+  }
+  function cancelEntries(scope) {
+    for (const element of rowEntries) if (!scope || element === scope || scope.contains(element)) {
+      running.get(element)?.cancel();
+      running.delete(element);
+      rowEntries.delete(element);
+    }
   }
   preference.addEventListener('change', () => {
     if (preference.matches) cancelAll();
@@ -91,6 +104,7 @@
   window.LiuliMotion = Object.freeze({
     play,
     enterMessages,
+    cancelEntries,
     get reduced() {
       return preference.matches;
     }

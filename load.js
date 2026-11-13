@@ -10,6 +10,9 @@ const root = path.dirname(snowlora.script);
 // so window state has to outlive a single execution.
 const windows = (globalThis.__snowloraLiuliWindows ??= new Map());
 let diagnostics = globalThis.__snowloraLiuliDiagnostics ?? null;
+const profiles = (globalThis.__snowloraLiuliProfiles ??= require('./standalone-profile.cjs')({
+  log: entry => diagnostics?.log(entry)
+}));
 
 // Only QQ's main renderer document, and only its UI routes, receive the theme:
 // hiddenWindow.html / screenshot.html / newLogin.html, about: shells, the
@@ -146,6 +149,7 @@ async function apply(state, generation = state.generation) {
     return false;
   }
   state.applied = true;
+  await profiles.themeReady(state);
   diagnostics.log({ event: 'theme-ready', window: wc.id, url: url.slice(0, 120) });
   return true;
 }
@@ -209,6 +213,7 @@ function attach(browserWindow) {
   if (!wc || wc.isDestroyed()) return null;
   const existing = windows.get(wc.id);
   if (existing) {
+    profiles.attach(existing);
     if (existing.managed) return existing;
     // Adopt a state left by an older load.js: it already injected this document
     // and already owns its listeners, so neither re-attach nor re-inject.
@@ -233,6 +238,7 @@ function attach(browserWindow) {
     onRoute(state, event, url, isMainFrame)
   );
   wc.once('destroyed', () => windows.delete(wc.id));
+  profiles.attach(state);
   const url = stateUrl(state);
   if (eligible(url)) {
     // Already past the load event (windows that existed before this injection,

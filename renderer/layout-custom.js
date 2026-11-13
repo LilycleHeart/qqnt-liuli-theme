@@ -7,16 +7,70 @@
     menuOrder: [],
     barOrder: [],
     barPinned: 1,
+    inputLayout: 'float',
     navHidden: [],
     titlebar: 'float',
     navPin: false,
-    sidebarShortcut: 'native',
+    unlockSidebarShortcuts: false,
     edgeHints: true
   };
-  const ICON_UP =
-    '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>';
-  const ICON_DOWN =
-    '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>';
+  const ICON_GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
+  const REPEAT_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path fill="none" d="M21 11.5a9 9 0 0 1-9 9 9.8 9.8 0 0 1-4-.85L3 21l1.35-4.45A9 9 0 1 1 21 11.5Z"/><path fill="none" d="M6.5 11.5h5m-2.5-2.5v5m5-4.5 2-1v6"/></svg>';
+  const ICONS_KEY = 'liuli-layout-icons';
+  const iconTags = new Set(['svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon', 'use', 'defs', 'clippath']);
+  const iconAttrs = new Set(['viewbox', 'width', 'height', 'fill', 'fill-rule', 'clip-rule', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'fill-opacity', 'stroke-opacity', 'd', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'transform', 'href', 'xlink:href']);
+  function cleanIcon(source) {
+    if (!source) return '';
+    let node = source;
+    if (typeof source === 'string') {
+      if (source.length > 16000) return '';
+      const template = document.createElement('template');
+      template.innerHTML = source;
+      node = template.content.querySelector('svg');
+    }
+    if (node?.localName?.toLowerCase() !== 'svg') return '';
+    const copy = node.cloneNode(true);
+    for (const element of [copy, ...copy.querySelectorAll('*')]) {
+      if (!iconTags.has(element.localName.toLowerCase())) { element.remove(); continue; }
+      for (const attr of [...element.attributes]) {
+        const name = attr.name.toLowerCase(), value = attr.value.trim();
+        if (!iconAttrs.has(name) ||
+          ((name === 'href' || name === 'xlink:href') && !/^(?:#|\/(?!\/)|app:\/\/)/i.test(value)) ||
+          (/url\s*\(/i.test(value) && !/^url\(\s*#[\w-]+\s*\)$/i.test(value))) element.removeAttribute(attr.name);
+      }
+    }
+    copy.setAttribute('aria-hidden', 'true');
+    copy.setAttribute('focusable', 'false');
+    return copy.outerHTML;
+  }
+  function loadIcons() {
+    try {
+      const icons = JSON.parse(localStorage.getItem(ICONS_KEY) || '{}');
+      return icons && typeof icons === 'object' && !Array.isArray(icons) ? icons : {};
+    } catch (_) { return {}; }
+  }
+  function rememberIcons(kind, entries) {
+    const icons = loadIcons();
+    let changed = false;
+    for (const [name, node] of entries) {
+      const svg = cleanIcon(node?.matches?.('svg') ? node : node?.querySelector('svg'));
+      const key = kind + ':' + name;
+      if (svg && icons[key] !== svg) { icons[key] = svg; changed = true; }
+    }
+    if (changed) {
+      try { localStorage.setItem(ICONS_KEY, JSON.stringify(icons)); } catch (_) {}
+      refreshIcons();
+    }
+  }
+  function refreshIcons() {
+    const icons = loadIcons();
+    document.querySelectorAll('.liuli-lo-icon[data-icon-key]').forEach(node => {
+      const svg = cleanIcon(icons[node.dataset.iconKey]);
+      if (svg && node.innerHTML !== svg) node.innerHTML = svg;
+      node.classList.toggle('has-icon', !!svg);
+    });
+  }
+  addEventListener('storage', event => { if (event.key === ICONS_KEY) refreshIcons(); });
   const ICON_SHOW =
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
   const ICON_HIDE =
@@ -104,7 +158,15 @@
     if (!menu || !menu.classList.contains('aio-right-click-menu')) return;
     const cfg = loadLayout();
     const items = [...menu.querySelectorAll(':scope > .q-context-menu-item')];
+    for (const item of items) {
+      const icon = item.querySelector('.q-context-menu-item__icon');
+      if (item.classList.contains('qe-repeat-item') && icon && icon.dataset.liuliRepeatIcon !== '1') {
+        icon.innerHTML = REPEAT_ICON;
+        icon.dataset.liuliRepeatIcon = '1';
+      }
+    }
     const labels = items.map(menuLabel);
+    rememberIcons('menu', items.map((item, i) => [labels[i], item.querySelector('.q-context-menu-item__icon')]));
     remember('menu', labels);
     const order = cfg.menuOrder || [];
     menu.classList.toggle('liuli-menu-sorted', order.length > 0);
@@ -149,6 +211,14 @@
   }
   function applyBar() {
     const icons = barIcons();
+    rememberIcons('bar', icons.map(icon => [icon.label, icon.item]));
+    if (loadLayout().inputLayout === 'native') {
+      for (const icon of icons) {
+        icon.el.classList.remove('liuli-pinned', 'liuli-in-menu');
+        icon.el.style.removeProperty('order');
+      }
+      return [];
+    }
     if (!icons.length) return [];
     remember(
       'bar',
@@ -202,6 +272,7 @@
   function applyNav() {
     const list = navEntries();
     if (!list.length) return;
+    rememberIcons('nav', list.map(item => [item.key, item.el]));
     remember(
       'nav',
       list.map(x => x.key)
@@ -218,7 +289,15 @@
   function applyAll() {
     try {
       const cfg = loadLayout();
-      window.LiuliQQ?.sidebarShortcut?.(cfg.sidebarShortcut);
+      document.body.dataset.liuliInputLayout = cfg.inputLayout === 'native' ? 'native' : 'float';
+      if (cfg.inputLayout === 'native') {
+        document.querySelectorAll('.chat-func-bar.liuli-expanded').forEach(bar => bar.classList.remove('liuli-expanded'));
+        document.querySelectorAll('.chat-input-area').forEach(area => area.style.removeProperty('z-index'));
+        const overlay = document.getElementById('liuli-input-overlay');
+        if (overlay) overlay.style.display = 'none';
+        document.body.style.removeProperty('--liuli-bar-pad');
+      }
+      window.LiuliQQ?.sidebarShortcutLimit?.(cfg.unlockSidebarShortcuts === true);
       document.body.toggleAttribute('data-liuli-menu-compact', !!cfg.menuCompact);
       document.body.toggleAttribute('data-liuli-hide-edge-hints', cfg.edgeHints === false);
       const tb = cfg.titlebar === 'native' ? 'native' : 'float';
@@ -276,7 +355,27 @@
   }
   function sortList(host, items, opts) {
     const box = el('div', 'liuli-lo-list');
+    box.setAttribute('role', 'list');
+    box.dataset.iconKind = opts.iconKind || '';
     host.appendChild(box);
+    const status = el('span', 'liuli-lo-status');
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    host.appendChild(status);
+    let dragging = null;
+    function clearDrop() {
+      box.querySelectorAll('.is-drop-before, .is-drop-after').forEach(row => row.classList.remove('is-drop-before', 'is-drop-after'));
+    }
+    function move(name, destination, focus) {
+      const from = items.indexOf(name);
+      if (from < 0 || from === destination) return;
+      items.splice(destination, 0, items.splice(from, 1)[0]);
+      opts.onChange(items);
+      draw();
+      const row = [...box.querySelectorAll('.liuli-lo-row')].find(row => row.dataset.orderKey === name);
+      if (focus) row?.querySelector('.liuli-lo-grip')?.focus({ preventScroll: true });
+      status.textContent = (opts.nameOf ? opts.nameOf(name) : name) + '，第 ' + (destination + 1) + ' 项，共 ' + items.length + ' 项';
+    }
     function draw() {
       box.innerHTML = '';
       if (!items.length) {
@@ -287,26 +386,59 @@
         if (opts.divider && i === opts.divider())
           box.appendChild(el('div', 'liuli-lo-divider', opts.dividerText));
         const row = el('div', 'liuli-lo-row');
+        row.dataset.orderKey = name;
+        row.setAttribute('role', 'listitem');
         if (opts.isOff && opts.isOff(name)) row.classList.add('is-off');
-        row.appendChild(el('span', 'liuli-lo-name', opts.nameOf ? opts.nameOf(name) : name));
         if (opts.sortable !== false) {
-          const up = iconBtn(ICON_UP, '上移'),
-            down = iconBtn(ICON_DOWN, '下移');
-          up.disabled = i === 0;
-          down.disabled = i === items.length - 1;
-          up.addEventListener('click', () => {
-            items.splice(i - 1, 0, items.splice(i, 1)[0]);
-            opts.onChange(items);
-            draw();
+          const grip = iconBtn(ICON_GRIP, '拖动排序，或用 ↑ ↓ 键调整');
+          grip.classList.add('liuli-lo-grip');
+          grip.setAttribute('aria-label', '调整' + name + '顺序');
+          grip.setAttribute('aria-keyshortcuts', 'ArrowUp ArrowDown');
+          grip.addEventListener('keydown', event => {
+            const destination = event.key === 'ArrowUp' ? i - 1 : event.key === 'ArrowDown' ? i + 1 : -1;
+            if (destination >= 0 && destination < items.length) {
+              event.preventDefault();
+              move(name, destination, true);
+            }
           });
-          down.addEventListener('click', () => {
-            items.splice(i + 1, 0, items.splice(i, 1)[0]);
-            opts.onChange(items);
-            draw();
+          row.appendChild(grip);
+          row.draggable = true;
+          row.addEventListener('dragstart', event => {
+            dragging = { name, destination: i };
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', name);
+            row.classList.add('is-dragging');
           });
-          row.appendChild(up);
-          row.appendChild(down);
+          row.addEventListener('dragover', event => {
+            if (!dragging) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            clearDrop();
+            const after = event.clientY > row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+            row.classList.add(after ? 'is-drop-after' : 'is-drop-before');
+            const from = items.indexOf(dragging.name);
+            const slot = i + Number(after);
+            dragging.destination = Math.max(0, Math.min(items.length - 1, slot - Number(from < slot)));
+          });
+          row.addEventListener('drop', event => {
+            if (!dragging) return;
+            event.preventDefault();
+            const { name, destination } = dragging;
+            dragging = null;
+            clearDrop();
+            move(name, destination, false);
+          });
+          row.addEventListener('dragend', () => {
+            dragging = null;
+            clearDrop();
+            row.classList.remove('is-dragging');
+          });
         }
+        const icon = el('span', 'liuli-lo-icon');
+        icon.dataset.iconKey = (opts.iconKind || '') + ':' + name;
+        icon.setAttribute('aria-hidden', 'true');
+        row.appendChild(icon);
+        row.appendChild(el('span', 'liuli-lo-name', opts.nameOf ? opts.nameOf(name) : name));
         if (opts.toggle) {
           const off = opts.isOff(name);
           const t = iconBtn(off ? ICON_HIDE : ICON_SHOW, off ? '已隐藏，点击显示' : '点击隐藏');
@@ -320,6 +452,7 @@
       });
       if (opts.divider && opts.divider() >= items.length)
         box.appendChild(el('div', 'liuli-lo-divider', opts.dividerText));
+      refreshIcons();
     }
     draw();
     return draw;
@@ -328,7 +461,12 @@
     const cfg = loadLayout();
     const seen = loadSeen();
     const save = () => saveLayout(cfg);
-    host.appendChild(el('div', 'liuli-panel__group', '窗口按钮'));
+    function section(key, title) {
+      const heading = el('div', 'liuli-panel__group', title);
+      heading.dataset.liuliSectionKey = key;
+      host.appendChild(heading);
+    }
+    section('window-controls', '窗口按钮');
     seg(
       host,
       '标题栏控件',
@@ -346,7 +484,7 @@
       el(
         'div',
         'liuli-field__hint',
-        '悬浮：最小化 / 关闭按钮和头像平时隐藏，鼠标移到窗口顶边左右两端时出现。常驻：恢复 QQ 原来的标题栏，按钮一直显示。'
+        '仅效率模式生效。悬浮时头像和窗口按钮在顶边唤出，常驻时一直显示；经典模式始终使用 QQ 原生标题栏。'
       )
     );
     seg(host, '显示边缘提示标记', [['1', '开启'], ['0', '关闭']], cfg.edgeHints === false ? '0' : '1', value => {
@@ -354,7 +492,7 @@
       save();
     });
     host.appendChild(el('div', 'liuli-field__hint', '只隐藏顶部短横线和左侧提示线，鼠标移到边缘仍可唤出控件。'));
-    host.appendChild(el('div', 'liuli-panel__group', '右键菜单'));
+    section('context-menu', '右键菜单');
     seg(
       host,
       '显示方式',
@@ -372,11 +510,12 @@
       el(
         'div',
         'liuli-field__hint',
-        '调整消息右键菜单里各项的顺序。名单来自你右键过的消息，右键过图片、文件等消息后，对应的菜单项也会出现在这里。'
+        '拖动条目调整顺序，也可聚焦拖动柄后按 ↑ ↓ 键。原图标和名单来自你右键过的消息，图片、文件等消息的菜单项会在使用后补齐。'
       )
     );
     const menuItems = mergedOrder(cfg.menuOrder || [], seen.menu);
     sortList(host, menuItems, {
+      iconKind: 'menu',
       empty: '先在聊天里右键一条消息，菜单项就会出现在这里。',
       onChange: list => {
         cfg.menuOrder = list.slice();
@@ -390,7 +529,13 @@
       rebuild();
     });
     host.appendChild(resetMenu);
-    host.appendChild(el('div', 'liuli-panel__group', '输入框按钮'));
+    section('input-layout', '输入框');
+    seg(host, '输入框布局', [['float', 'TG'], ['native', '原版']], cfg.inputLayout === 'native' ? 'native' : 'float', value => {
+      cfg.inputLayout = value;
+      save();
+    });
+    host.appendChild(el('div', 'liuli-field__hint', '原版保留 QQ 的工具栏、编辑区、发送按钮和高度拖动；TG 使用随内容增高的单行输入卡及「更多」菜单。下方按钮数量和排序仅用于 TG 布局。'));
+    section('input-buttons', '输入框按钮');
     const lay = barLayout();
     const barItems = lay.order.slice();
     if (!cfg.barOrder || !cfg.barOrder.length) cfg.barOrder = barItems.slice();
@@ -412,11 +557,12 @@
       el(
         'div',
         'liuli-field__hint',
-        '分界线上面的按钮放在输入框里，下面的收进「更多」。用箭头调顺序，把按钮挪过分界线就换了位置。'
+        '分界线上面的按钮放在输入框里，下面的收进「更多」。拖动条目跨过分界线即可交换位置，也可用 ↑ ↓ 键调整。'
       )
     );
     let pinned = lay.pinned.length;
     const drawBar = sortList(host, barItems, {
+      iconKind: 'bar',
       empty: '先打开一个聊天，输入框的按钮就会出现在这里。',
       divider: () => pinned,
       dividerText: '以上在输入框 · 以下在「更多」',
@@ -457,12 +603,13 @@
       rebuild();
     });
     host.appendChild(resetBar);
-    host.appendChild(el('div', 'liuli-panel__group', '左侧边栏'));
-    seg(host, '底部快捷入口', [['native', '跟随 QQ'], ['favorite', '收藏'], ['mail', '邮箱']],
-      ['favorite', 'mail'].includes(cfg.sidebarShortcut) ? cfg.sidebarShortcut : 'native', value => {
-        cfg.sidebarShortcut = value;
+    section('sidebar', '左侧边栏');
+    seg(host, '解除底部快捷入口数量限制', [['1', '开启'], ['0', '关闭']],
+      cfg.unlockSidebarShortcuts ? '1' : '0', value => {
+        cfg.unlockSidebarShortcuts = value === '1';
         save();
       });
+    host.appendChild(el('div', 'liuli-field__hint', '开启后，在 QQ 底部「更多」中点固定图标，可同时保留多个原生入口；关闭后恢复 QQ 原来的数量。'));
     seg(
       host,
       '导航栏',
@@ -480,11 +627,12 @@
       el(
         'div',
         'liuli-field__hint',
-        '固定后导航栏一直显示，不再盖在会话列表上。自动隐藏：鼠标移到窗口左边缘时滑出，移开收起。'
+        '仅效率模式生效。固定时导航栏独立占位；自动隐藏时从左边缘唤出。经典模式保留 QQ 原生导航栏。'
       )
     );
     host.appendChild(el('div', 'liuli-field__hint', '点眼睛图标隐藏或显示侧边栏上的按钮。'));
     sortList(host, seen.nav.slice(), {
+      iconKind: 'nav',
       sortable: false,
       empty: '主界面打开后，侧边栏按钮就会出现在这里。',
       nameOf: navName,

@@ -1,0 +1,83 @@
+/* Native QQ forwarded-card layout; contains no message content or resource locations. */
+.message-container { display: grid; grid-auto-rows: min-content; grid-template-areas: "checkbox avatar . nickname nickname nickname" "checkbox avatar . content status ." "checkbox avatar . tips . ."; grid-template-columns: auto var(--avatar_size_2) 8px auto calc(var(--avatar_size_2) + 8px) 1fr; justify-content: start; padding: 8px 20px; transition-duration: 0.3s; }
+.message-container > * { min-width: 0px; }
+.message-container .msg-picker { align-self: start; grid-area: checkbox; margin: 10px 12px 0px 0px; }
+.message-container .avatar-span { align-self: start; display: inline-block; grid-area: avatar; min-width: 32px; }
+.message-container .only-time { font-size: 10px; grid-area: nickname; height: 0px; }
+.message-container .only-time .send-time { color: var(--on_bg_text); font-size: var(--font_size_2); line-height: var(--font_size_2); position: relative; top: calc(-2px - var(--font_size_2)); }
+.message-container .user-name { align-items: center; color: var(--on_bg_text); display: flex; grid-area: nickname; min-height: 18px; padding: 0 calc(var(--avatar_size_2) + 8px) 0 0; position: relative; top: -2px; user-select: none; font-size: var(--font_size_2) !important; line-height: var(--line_height_2) !important; }
+.message-container .user-name .user-label { border-radius: 4px; box-sizing: border-box; color: var(--text-white); display: inline-block; font-size: 10px; height: 14px; line-height: 15px; margin-right: 4px; padding: 0px 4px; }
+.message-container .user-name .send-time { margin-left: 4px; }
+.message-container .user-name .group-member-label { margin-left: 0px; margin-right: 4px; font-size: min(var(--font_size_1),14px) !important; line-height: min(var(--line_height_1),20px) !important; }
+.message-container .message-content__wrapper { color: var(--bubble_guest_text); display: flex; grid-area: content; max-width: -webkit-fill-available; min-height: 38px; overflow: visible; }
+.message-container .message-content__wrapper .msg-content-container { position: relative; }
+.message-container .message-content__wrapper .msg-content-container:focus:not(:focus-visible) { filter: brightness(0.9); outline: none; user-select: text; }
+.message-container .message-content__wrapper .msg-content-container.ark-msg-content-container_with_qidian_general:focus::before { content: ""; display: block; height: 0px; pointer-events: none; position: absolute; top: 0px; width: 0px; }
+.message-container .message-content__wrapper .msg-content-container:focus .image::after { background: rgba(0, 0, 0, 0.07); content: ""; display: block; height: 100%; pointer-events: none; position: absolute; top: 0px; width: 100%; }
+.message-container .content-status { display: flex; flex-direction: column; grid-area: status; justify-content: flex-end; line-height: 0; padding: 0px 8px; user-select: auto; }
+.message-container .content-status > * { user-select: none; }
+.message-container .message-tips { display: flex; grid-area: tips; justify-self: start; }
+.message-container .message-extra-top { grid-area: nickname; margin-bottom: 4px; }
+.message-container.message-container--align-right { grid-template-areas: "checkbox nickname nickname nickname . avatar" "checkbox . status content . avatar" "checkbox . . tips . avatar"; grid-template-columns: auto 1fr calc(var(--avatar_size_2) + 8px) auto 8px var(--avatar_size_2); justify-content: end; justify-items: end; }
+.message-container.message-container--align-right .send-time { margin-right: 4px; }
+.message-container.message-container--align-right .user-name { padding: 0 0 0 calc(var(--avatar_size_2) + 8px); }
+.message-container.message-container--align-right .user-name .send-time { margin-left: 0px; order: -1; }
+.message-container.message-container--active { background-color: var(--overlay_active); }
+.message-container.message-container--focus { background-color: var(--overlay_active); transition-property: background-color; }
+.message-container.message-container--selection-mod { transition-duration: 0s; user-select: none !important; }
+.message-container.message-container--selection-mod > * { pointer-events: none; }
+.message-container .message-container__avatar { height: var(--avatar_size_2) !important; width: var(--avatar_size_2) !important; }
+.message-container .reaction-panel:not(:empty) { margin-left: 6px; }
+.forward-msg[data-v-425cf6c2] { background-color: var(--bg_bottom_light); border-radius: 8px; max-width: 100%; padding: 10px 10px 6px; user-select: auto; width: 226px; }
+.forward-msg .fwd-title[data-v-425cf6c2] { color: var(--text-primary); font-size: var(--font_size_main_2); line-height: var(--line_height_main_2); padding-bottom: 4px; }
+.forward-msg .fwd-content[data-v-425cf6c2] { margin-bottom: 3px; }
+.forward-msg .count[data-v-425cf6c2], .forward-msg .fwd-content[data-v-425cf6c2] { color: var(--text_secondary); font-size: var(--font_size_2) !important; line-height: var(--line_height_2) !important; }
+.forward-msg .count[data-v-425cf6c2] { border-top: 1px solid var(--border_standard); margin-top: 10px; padding: 6px 0px 0px; }
+.forward-msg[data-v-425cf6c2]:hover { background-color: var(--nt_bg_white_2_overlay_hover_2_mix); }
+.forward-msg[data-v-425cf6c2]:active { background-color: var(--nt_bg_white_2_overlay_pressed_2_mix); }
+.file-message.message-container--readonly[data-v-0358c09e] { grid-template-columns: auto var(--avatar_size_2) 8px auto 0 1fr; }
+.file-message.message-container--readonly.message-container--align-right[data-v-0358c09e] { grid-template-columns: auto 1fr 0 auto 8px var(--avatar_size_2); }
+.file-message.message-container--readonly[data-v-0358c09e] .content-status { padding: 0px; }
+.message-container.ptt-message[data-v-3c5afce1]:has(.container--others) { grid-template-columns: auto var(--avatar_size_2) 8px minmax(300px,auto) calc(var(--avatar_size_2) + 36px) 1fr; }
+.message-container { display: grid; grid-auto-rows: min-content; grid-template-areas: "checkbox avatar . nickname nickname nickname" "checkbox avatar . content status ." "checkbox avatar . tips . ."; grid-template-columns: auto var(--avatar_size_2) 8px auto calc(var(--avatar_size_2) + 36px) 1fr; justify-content: start; padding: 8px 20px; transition-duration: 0.3s; }
+.message-container.message-container--mix-or-markdown { grid-template-areas: "checkbox avatar . nickname . ." "checkbox avatar . content status ." "checkbox avatar . tips . ."; }
+.message-container > * { min-width: 0px; }
+.message-container .msg-picker { align-self: start; grid-area: checkbox; margin: 10px 12px 0px 0px; }
+.message-container .avatar-span { align-self: start; display: inline-block; grid-area: avatar; min-width: 32px; }
+body.tab-navigation-mode .message-container .avatar-span:focus-visible { outline: none !important; }
+body.tab-navigation-mode .message-container .avatar-span:focus-visible .avatar { outline: var(--focus-outline-width) solid var(--brand_standard); outline-offset: 1px; }
+.message-container .avatar-span .avatar { background-position: 50% center; background-repeat: no-repeat; background-size: cover; border-radius: 50%; flex-shrink: 0; height: 32px; position: relative; width: 32px; }
+.message-container .avatar-span .avatar-sys { align-items: center; display: flex; justify-content: center; }
+.message-container .only-time { font-size: 10px; grid-area: nickname; height: 0px; }
+.message-container .only-time .send-time { color: var(--on_bg_text); font-size: var(--font_size_2); line-height: var(--font_size_2); position: relative; top: calc(-2px - var(--font_size_2)); }
+.message-container .user-name { align-items: center; color: var(--on_bg_text); display: flex; grid-area: nickname; min-height: 18px; padding: 0 calc(var(--avatar_size_2) + 8px) 0 0; position: relative; top: -2px; user-select: none; font-size: var(--font_size_2) !important; line-height: var(--line_height_2) !important; }
+.message-container .user-name .user-label { border-radius: 4px; box-sizing: border-box; color: var(--text-white); display: inline-block; font-size: 10px; height: 14px; line-height: 15px; margin-right: 4px; padding: 0px 4px; }
+.message-container .user-name .send-time { margin-left: 4px; }
+.message-container .user-name .group-member-label { margin-left: 0px; margin-right: 4px; font-size: min(var(--font_size_1),14px) !important; line-height: min(var(--line_height_1),20px) !important; }
+.message-container .message-content__wrapper { color: var(--bubble_guest_text); display: flex; grid-area: content; max-width: -webkit-fill-available; min-height: 38px; overflow: visible; position: relative; }
+.message-container .message-content__wrapper .msg-content-container { position: relative; }
+.message-container .message-content__wrapper .msg-content-container:focus { filter: brightness(0.9); outline: none; user-select: text; }
+body.tab-navigation-mode .message-container .message-content__wrapper .msg-content-container:focus-visible { filter: none; }
+.message-container .message-content__wrapper .msg-content-container.ark-msg-content-container_with_qidian_general:focus::before { content: ""; display: block; height: 0px; pointer-events: none; position: absolute; top: 0px; width: 0px; }
+.message-container .message-content__wrapper .msg-content-container:focus .image::after { background: rgba(0, 0, 0, 0.07); content: ""; display: block; height: 100%; pointer-events: none; position: absolute; top: 0px; width: 100%; }
+.message-container .content-status { display: flex; flex-direction: column; grid-area: status; justify-content: flex-end; line-height: 0; padding: 0px 8px; user-select: auto; }
+.message-container .content-status > * { user-select: none; }
+.message-container .message-tips { display: flex; grid-area: tips; justify-self: start; }
+.message-container.message-container--align-right { grid-template-areas: "checkbox nickname nickname nickname . avatar" "checkbox . status content . avatar" "checkbox . . tips . avatar"; grid-template-columns: auto 1fr calc(var(--avatar_size_2) + 8px) auto 8px var(--avatar_size_2); justify-content: end; justify-items: end; }
+.message-container.message-container--align-right .send-time { margin-right: 4px; }
+.message-container.message-container--align-right .user-name { padding: 0 0 0 calc(var(--avatar_size_2) + 8px); }
+.message-container.message-container--align-right .user-name .send-time { margin-left: 0px; order: -1; }
+.message-container.message-container--active { background-color: var(--overlay_active); }
+.message-container.message-container--focus { background-color: var(--overlay_active); transition-property: background-color; }
+.message-container.message-container--selection-mod { transition-duration: 0s; user-select: none !important; }
+.message-container.message-container--selection-mod > * { pointer-events: none; }
+.message-container .message-container__avatar { height: var(--avatar_size_2) !important; width: var(--avatar_size_2) !important; }
+.message-container .reaction-panel:not(:empty) { margin-left: 6px; }
+.message-container .plus-one-btn { align-items: center; border-radius: 8px; cursor: pointer; display: flex; height: 30px; justify-content: center; opacity: 1; position: absolute; right: -38px; top: 50%; transform: translateY(-50%); user-select: none; width: 30px; }
+.message-container .plus-one-btn:hover { background-color: var(--overlay_hover); }
+.message-container .plus-one-btn:active { background-color: var(--overlay_pressed); }
+.message-container.message-container--align-right .plus-one-btn { left: -38px; }
+.message-container .status-warning { color: var(--feedback_error); }
+.message-container .status-warning:hover { opacity: 0.8; }
+.message-container .status-warning:active { opacity: 0.6; }
+.invite-item .user-info .user-name[data-v-11abe54e] { flex-shrink: 1; max-width: calc(100% - 40px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font_size_3) !important; line-height: var(--line_height_3) !important; }

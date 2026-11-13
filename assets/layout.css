@@ -88,7 +88,7 @@ body[data-liuli-dark="0"] .aio > .chat-header {
 /* ── 正文卡：按用户要求不加材质，壁纸直接透出；只保留左侧间距 ──
  * 独立聊天窗（#/chat）同样要有这 8px：它的 .chat-msg-area 原来贴到左边 4，
  * 比标题（margin-left 8）和主窗都靠左（2026-11-10）。 */
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio *:has(> .chat-input-area) {
+body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio *:has(> .chat-input-area) {
   position: relative !important;
   margin-left: var(--ll-dock-gap) !important;
   border: none !important;
@@ -104,7 +104,7 @@ body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio *:has(> .chat-inp
 /* ── 浮动输入卡：不再是贴底的整条，而是正文卡里四周留白的卡片。
  * ⚠️ 仍然不加 backdrop-filter（会让 ProseMirror 不绘制），
  * 下面是正文卡的磨砂，这里只给更实的底色。 ── */
-body[data-liuli-scope="main"] .aio .chat-input-area {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat-input-area {
   /* 上边 10px：聊天记录最后一条不贴输入框（2026-10-30） */
   margin: 10px 10px 10px !important;
   width: auto !important;
@@ -117,7 +117,7 @@ body[data-liuli-scope="main"] .aio .chat-input-area {
 }
 
 /* 输入卡本身就是框，里面不再套第二层框 */
-body[data-liuli-scope="main"] .aio .chat-input-area > .msg-input {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat-input-area > .msg-input {
   background: transparent !important;
   border: none !important;
   border-radius: var(--ll-radius) !important;
@@ -139,7 +139,11 @@ body[data-liuli-scope="main"] .aio .chat-input-area > .msg-input {
 /* ── 会话列表项：12px 圆角，hover 品牌 8%，选中 primaryContainer + 左指示条 ── */
 .recent-contact-item {
   border-radius: 12px !important;
-  margin: 2px 6px !important;
+  /* QQ measures one row box for its uniform virtual-list stride. Vertical
+   * margins sit outside that box and made 64px rows advance by 66px, so the
+   * same conversation jumped whenever the rendered range was replaced.
+   * Visual spacing belongs inside the row, rather than in outer margins. */
+  margin: 0 6px !important;
 }
 .recent-contact-item .item__content {
   background: transparent !important;
@@ -173,22 +177,22 @@ body[data-liuli-scope="main"] .aio .chat-input-area > .msg-input {
  * 改为在 44px 单行高度里垂直居中（(44 - 30) / 2 = 7），多行时仍贴底行。
  * 独立聊天窗（#/chat）的输入卡同样去掉了内边距，沿用主窗这套 8/7（2026-11-10）：
  * 原来用 input-bar.css 的 18/16，单行 45px 时发送键贴着卡片上沿。 */
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio .chat-input-area > .operation {
+body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio .chat-input-area > .operation {
   right: 8px !important;
   bottom: 7px !important;
 }
 
 /* 发送图标错位：QQ 给 .send-btn-wrap 写了 padding-right:11px，
  * .send 被挤到左边 5px，纸飞机就偏了。三层全部归零、居中。 */
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-btn-wrap,
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send,
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg {
+body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-btn-wrap,
+body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send,
+body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg {
   padding: 0 !important;
   margin: 0 !important;
   box-sizing: border-box !important;
 }
 /* 纸飞机图形的视觉重心偏左下，向右上补 1px */
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg::after {
+body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .operation .send-msg::after {
   transform: translate(-1px, 1px) !important;
 }
 
@@ -198,10 +202,10 @@ body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area > .op
  *   左上：头像 + 名字胶囊        右上：窗口按钮胶囊
  * 顶部 40px 仍是 QQ 原本的拖动区，只把内容收成两颗胶囊。
  * ════════════════════════════════════════════════════════════ */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .qq-logo {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-content .qq-logo {
   display: none !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile {
   flex: 0 0 auto !important;
   /* QQ 自己写了 width:0 + flex:1，flex 改成 auto 后宽度会塌到 0，必须显式给宽 */
   width: max-content !important;
@@ -217,22 +221,22 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .use
   box-shadow: var(--ll-shadow) !important;
   box-sizing: border-box !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__content,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__info {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__content,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__info {
   flex: 1 1 auto !important;
   min-width: 0 !important;
   max-width: 100% !important;
   height: 30px !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container {
   flex: 0 0 24px !important;
   height: 30px !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile :is(.user-profile-card__nick-row, .user-profile-card__nickname, .user-profile-card__long-nick) {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile :is(.user-profile-card__nick-row, .user-profile-card__nickname, .user-profile-card__long-nick) {
   min-width: 0 !important;
   max-width: 100% !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile :is(.profile-nickname__text, .profile_signature) {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile :is(.profile-nickname__text, .profile_signature) {
   display: block !important;
   min-width: 0 !important;
   max-width: 100% !important;
@@ -240,22 +244,22 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile :is(
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-avatar {
   margin-top: -5px !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container * {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container * {
   top: auto;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .avatar.user-avatar {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .avatar.user-avatar {
   margin: 3px 0 0 !important;
 }
 /* 空签名占位（"编辑个性签名"）不进胶囊 */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__long-nick:has(.empty-long-nick) {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-profile-card__long-nick:has(.empty-long-nick) {
   display: none !important;
 }
 
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
   height: 30px !important;
   margin: 5px var(--ll-dock-gap) 0 0 !important;
   padding: 2px 4px !important;
@@ -268,7 +272,7 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .w
   box-shadow: var(--ll-shadow) !important;
   box-sizing: border-box !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area > * {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area > * {
   width: 34px !important;
   height: 26px !important;
   padding: 0 !important;
@@ -279,11 +283,11 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .w
   color: var(--ll-on-glass-2) !important;
   transition: background-color 140ms ease, color 140ms ease !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area > *:hover {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area > *:hover {
   background: rgba(var(--ll-brand-rgb), 0.14) !important;
   color: var(--ll-on-glass) !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area > .close:hover {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area > .close:hover {
   background: var(--ll-danger, #e5484d) !important;
   color: var(--ll-on-danger) !important;
 }
@@ -337,7 +341,7 @@ body[data-hash^="#/chat"]:not([data-liuli-tb="native"]) .window-title-bar > .win
  * 鼠标移到左缘时滑出，盖在会话列表上，不挤动布局。
  * ::before 向左延伸 14px 作为感应区，滑出后鼠标仍在元素范围内，不会抖动。
  * ════════════════════════════════════════════════════════════ */
-.global-container .container-content > .container-sidebar {
+.global-container.container--wide .container-content > .container-sidebar {
   position: fixed !important;
   left: var(--ll-dock-gap) !important;
   top: 40px !important;
@@ -349,12 +353,12 @@ body[data-hash^="#/chat"]:not([data-liuli-tb="native"]) .window-title-bar > .win
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease !important;
   box-shadow: none !important;
 }
-.global-container .container-content > .container-sidebar:hover,
-.global-container .container-content > .container-sidebar:has(:focus-visible) {
+.global-container.container--wide .container-content > .container-sidebar:hover,
+.global-container.container--wide .container-content > .container-sidebar:has(:focus-visible) {
   transform: translateX(0) !important;
   box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
 }
-.global-container .container-content > .container-sidebar::before {
+.global-container.container--wide .container-content > .container-sidebar::before {
   content: "" !important;
   position: absolute !important;
   top: 0 !important;
@@ -362,7 +366,7 @@ body[data-hash^="#/chat"]:not([data-liuli-tb="native"]) .window-title-bar > .win
   left: -14px !important;
   width: 14px !important;
 }
-.global-container .container-content > .container-sidebar::after {
+.global-container.container--wide .container-content > .container-sidebar::after {
   content: "" !important;
   position: absolute !important;
   top: 50% !important;
@@ -376,8 +380,8 @@ body[data-hash^="#/chat"]:not([data-liuli-tb="native"]) .window-title-bar > .win
   pointer-events: none !important;
   transition: opacity 160ms ease !important;
 }
-.global-container .container-content > .container-sidebar:hover::after,
-.global-container .container-content > .container-sidebar:has(:focus-visible)::after {
+.global-container.container--wide .container-content > .container-sidebar:hover::after,
+.global-container.container--wide .container-content > .container-sidebar:has(:focus-visible)::after {
   opacity: 0 !important;
 }
 .container-sidebar > .sidebar-nav {
@@ -393,8 +397,8 @@ body[data-hash^="#/chat"]:not([data-liuli-tb="native"]) .window-title-bar > .win
 /* 展开的导航盖在会话列表上：常态材质 0.3 太透，压在列表文字上读不清。
  * 底色是 renderer 内联写的 rgba(acrylic, var(--ll-material-opacity))，
  * 在元素自身改写变量即可，不用和内联 !important 抢。 */
-.global-container .container-content > .container-sidebar:hover,
-.global-container .container-content > .container-sidebar:has(:focus-visible) {
+.global-container.container--wide .container-content > .container-sidebar:hover,
+.global-container.container--wide .container-content > .container-sidebar:has(:focus-visible) {
   --ll-material-opacity: 0.92;
   backdrop-filter: blur(24px) saturate(1.6) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
@@ -488,36 +492,36 @@ body .contact-layout .contact-profile .q-divider {
  * ════════════════════════════════════════════════════════════ */
 
 /* ── 拖动区 ── */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .draggable-view:not(.draggable-view__container):nth-child(1) {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .draggable-view:not(.draggable-view__container):nth-child(1) {
   height: var(--ll-dock-gap) !important;
 }
 /* 左侧 52px 的拖动区跟导航收起走，与标题栏模式无关（原版常驻时也要去掉，
  * 否则会话列表左边那条会变成拖窗口） */
-body[data-liuli-scope="main"] .draggable-view:not(.draggable-view__container):nth-child(2) {
+body[data-liuli-scope="main"]:has(.global-container.container--wide) .draggable-view:not(.draggable-view__container):nth-child(2) {
   display: none !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .aio > .chat-header {
   -webkit-app-region: drag;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header .panel-header__action,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header .panel-header__action *,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header button,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header [role="button"],
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .aio > .chat-header input {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .aio > .chat-header .panel-header__action,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .aio > .chat-header .panel-header__action *,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .aio > .chat-header button,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .aio > .chat-header [role="button"],
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .aio > .chat-header input {
   -webkit-app-region: no-drag;
 }
 
 /* ── 标题栏收起：内容区顶到窗口上沿（留 8px） ── */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container > .topbar,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container > .topbar .topbar-content {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .global-container > .topbar,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .global-container > .topbar .topbar-content {
   height: 0 !important;
   min-height: 0 !important;
   overflow: visible !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container .container-content {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .global-container .container-content {
   padding-top: var(--ll-dock-gap) !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container .container-content > .container-sidebar {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .global-container.container--wide .container-content > .container-sidebar {
   top: var(--ll-dock-gap) !important;
 }
 
@@ -528,8 +532,8 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .global-container .c
  *   一次布局 + IPC 才更新到窗口，这段时间里鼠标落在「拖动区」上，系统把它
  *   当成非客户区，页面收到 mouseleave，胶囊随即收起 —— 就是「消失太快点不到」。
  *   现在胶囊常驻布局（透明、不接收点击），no-drag 区域始终有效。 */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
   position: fixed !important;
   top: 6px !important;
   margin: 0 !important;
@@ -541,29 +545,29 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .w
   transform: translateY(-3px) !important;
   transition: opacity 180ms ease 120ms, transform 200ms cubic-bezier(0.22, 1, 0.36, 1) 120ms !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile {
   /* 让出左侧导航条（约 56px），展开时不压住导航顶部（2026-10-30） */
   left: calc(var(--ll-dock-gap) + 56px) !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
   right: var(--ll-dock-gap) !important;
   /* SnowLora 适配：保持原生命中区域不动，显隐只改透明度 */
   transform: none !important;
 }
 /* SnowLora 适配：QQ 的标题栏自身是层叠上下文，必须整体高于透明感应条；
  * 控件子元素保持 no-drag，避免悬浮胶囊显隐时拖动区错位。 */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar {
   z-index: 3800 !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area * {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area * {
   -webkit-app-region: no-drag !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-l] .topbar-content .user-profile-card.topbar-profile,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile:hover,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile:has(:focus-visible),
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-r] .window-title-bar .window-control-area,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area:hover,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .window-title-bar .window-control-area:has(:focus-visible) {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"])[data-liuli-r-l] .topbar-content .user-profile-card.topbar-profile,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile:hover,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile:has(:focus-visible),
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"])[data-liuli-r-r] .window-title-bar .window-control-area,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area:hover,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area:has(:focus-visible) {
   opacity: 1 !important;
   pointer-events: auto !important;
   transform: none !important;
@@ -598,7 +602,7 @@ body:not([data-liuli-scope="main"]) #liuli-ctl-shield {
   display: none !important;
 }
 /* 感应条：窗口顶边 8px，左右各一段，中间仍是拖动区 */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .liuli-top-hint {
   position: fixed;
   top: 0;
   height: var(--ll-dock-gap);
@@ -607,10 +611,10 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint {
   -webkit-app-region: no-drag;
   cursor: default;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-l { left: 56px; }   /* 跟着头像胶囊让出导航条 */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-r { right: 0; }
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) #liuli-top-hint-l { left: 56px; }   /* 跟着头像胶囊让出导航条 */
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) #liuli-top-hint-r { right: 0; }
 /* 提示短横：告诉用户这里能唤出东西（DSH WindowControls 的 .hint 同款） */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint::after {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .liuli-top-hint::after {
   content: "";
   position: absolute;
   top: 2px;
@@ -622,35 +626,35 @@ body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint::aft
   opacity: 0.7;
   transition: opacity 140ms ease;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-l::after { left: 24px; }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) #liuli-top-hint-r::after { right: 24px; }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .liuli-top-hint:hover::after,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-l] #liuli-top-hint-l::after,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"])[data-liuli-r-r] #liuli-top-hint-r::after {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) #liuli-top-hint-l::after { left: 24px; }
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) #liuli-top-hint-r::after { right: 24px; }
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .liuli-top-hint:hover::after,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"])[data-liuli-r-l] #liuli-top-hint-l::after,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"])[data-liuli-r-r] #liuli-top-hint-r::after {
   opacity: 0;
 }
 
 /* ── 左侧导航：完全收起，入口是左边缘的把手 ── */
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar {
+body[data-liuli-scope="main"] .global-container.container--wide .container-content > .container-sidebar {
   transform: translateX(calc(-100% - var(--ll-dock-gap) - 4px)) !important;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1) 180ms,
     box-shadow 220ms ease 180ms !important;
   -webkit-app-region: no-drag !important;
 }
-body[data-liuli-scope="main"][data-liuli-r-nav] .global-container .container-content > .container-sidebar,
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:hover,
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar:has(:focus-visible) {
+body[data-liuli-scope="main"][data-liuli-r-nav] .global-container.container--wide .container-content > .container-sidebar,
+body[data-liuli-scope="main"] .global-container.container--wide .container-content > .container-sidebar:hover,
+body[data-liuli-scope="main"] .global-container.container--wide .container-content > .container-sidebar:has(:focus-visible) {
   transform: translateX(0) !important;
   transition-delay: 0s !important;
   box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
   --ll-material-opacity: 0.92;
 }
-body[data-liuli-scope="main"][data-liuli-r-nav] .global-container .container-content > .container-sidebar {
+body[data-liuli-scope="main"][data-liuli-r-nav] .global-container.container--wide .container-content > .container-sidebar {
   backdrop-filter: blur(24px) saturate(1.6) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
 }
 /* 旧的 6px 露边提示条不要了 */
-body[data-liuli-scope="main"] .global-container .container-content > .container-sidebar::after {
+body[data-liuli-scope="main"] .global-container.container--wide .container-content > .container-sidebar::after {
   content: none !important;
 }
 
@@ -720,11 +724,11 @@ body {
 }
 
 /* 1. 输入区 / 工具栏面板 / 展开的侧栏：同一底色 */
-body[data-liuli-scope="main"] .aio .chat-input-area,
-body[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat-input-area,
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
   background: var(--ll-noise), var(--ll-float-bg) !important;
 }
-body[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
   backdrop-filter: var(--ll-float-blur) !important;
   -webkit-backdrop-filter: var(--ll-float-blur) !important;
   border: none !important;
@@ -732,7 +736,7 @@ body[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
   box-shadow: var(--ll-float-shadow) !important;
 }
 /* 展开的导航盖在会话列表正上方，跟着 0.4 这类低不透明度会看不清下面的字，保持原来的 90% + 28px 模糊 */
-body[data-liuli-r-nav] .global-container .container-content > .container-sidebar.container-sidebar {
+body[data-liuli-r-nav] .global-container.container--wide .container-content > .container-sidebar.container-sidebar {
   background: var(--ll-noise), rgba(var(--ll-acrylic), 0.9) !important;
   backdrop-filter: blur(28px) saturate(1.6) !important;
   -webkit-backdrop-filter: blur(28px) saturate(1.6) !important;
@@ -973,18 +977,39 @@ body[data-liuli-hide-edge-hints] #liuli-nav-handle::after {
  * 第 6 轮（2026-10-28）
  * ════════════════════════════════════════════════════════════ */
 
-/* ── 系统头像：浅底深图标（用户要求对调） ── */
-body .avatar.avatar-sys,
-body [class*="avatar-sys"] {
-  background: var(--ll-on-primary-container) !important;
-  background-color: var(--ll-on-primary-container) !important;
-  color: var(--ll-primary-container) !important;
+/* 系统头像使用成对的强调色，不借用选中项的容器文字色。 */
+body .avatar.avatar-sys {
+  background: var(--ll-brand) !important;
+  color: var(--ll-on-brand) !important;
 }
-body .avatar.avatar-sys .q-svg-icon,
-body .avatar.avatar-sys svg,
-body [class*="avatar-sys"] .q-svg-icon {
-  color: var(--ll-primary-container) !important;
+body .avatar.avatar-sys::before {
+  border: 0 !important;
+}
+body .avatar.avatar-sys :is(.q-svg-icon, svg) {
+  color: var(--ll-on-brand) !important;
   fill: currentColor;
+}
+
+/* 原生这两个 SVG 的 path 写死白色；用原资源作遮罩，保留轮廓并正确取色。 */
+body .avatar.avatar-sys .q-svg-icon:has(use[*|href^="/_upper_/resource/icons/oh_foldgroup_24.svg"]) {
+  --ll-system-avatar-mask: url("/_upper_/resource/icons/oh_foldgroup_24.svg");
+}
+body .avatar.avatar-sys .q-svg-icon:has(use[*|href^="/_upper_/resource/icons/oh_myphone_24.svg"]) {
+  --ll-system-avatar-mask: url("/_upper_/resource/icons/oh_myphone_24.svg");
+}
+body .avatar.avatar-sys .q-svg-icon:has(
+  use[*|href^="/_upper_/resource/icons/oh_foldgroup_24.svg"],
+  use[*|href^="/_upper_/resource/icons/oh_myphone_24.svg"]
+) {
+  background: currentColor;
+  -webkit-mask: var(--ll-system-avatar-mask) center / contain no-repeat;
+  mask: var(--ll-system-avatar-mask) center / contain no-repeat;
+}
+body .avatar.avatar-sys .q-svg-icon:has(
+  use[*|href^="/_upper_/resource/icons/oh_foldgroup_24.svg"],
+  use[*|href^="/_upper_/resource/icons/oh_myphone_24.svg"]
+) > svg {
+  visibility: hidden;
 }
 
 /* ── 非主界面（独立窗口：群公告、状态、好友管理器、独立聊天窗…）──
@@ -1112,14 +1137,14 @@ body {
   --ll-card-bg: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-material-opacity));
   --ll-card-blur-strong: blur(40px) saturate(1.6);
 }
-body[data-liuli-r-nav] .global-container .container-content > .container-sidebar.container-sidebar {
+body[data-liuli-r-nav] .global-container.container--wide .container-content > .container-sidebar.container-sidebar {
   --ll-material-opacity: inherit;
   background: var(--ll-card-bg) !important;
   backdrop-filter: var(--ll-card-blur-strong) !important;
   -webkit-backdrop-filter: var(--ll-card-blur-strong) !important;
   box-shadow: var(--ll-card-shadow) !important;
 }
-body[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
   background: var(--ll-card-bg) !important;
   backdrop-filter: var(--ll-card-blur-strong) !important;
   -webkit-backdrop-filter: var(--ll-card-blur-strong) !important;
@@ -1127,12 +1152,12 @@ body[data-liuli-scope="main"] .chat-input-area > .chat-func-bar.liuli-expanded {
 }
 /* 输入区自身不能挂 backdrop-filter（会让 ProseMirror 不绘制），
  * 用 DSH composer-card 的做法：磨砂放在 ::before 上，内容在其上方。 */
-body[data-liuli-scope="main"] .aio .chat-input-area {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat-input-area {
   background: transparent !important;
   isolation: isolate !important;
   box-shadow: var(--ll-card-shadow) !important;
 }
-body[data-liuli-scope="main"] .aio .chat-input-area::before {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat-input-area::before {
   content: "" !important;
   position: absolute !important;
   inset: 0 !important;
@@ -1147,7 +1172,7 @@ body[data-liuli-scope="main"] .aio .chat-input-area::before {
 /* ── 独立聊天窗（#/chat）输入卡：和主窗同一套玻璃材质（#52） ──
  * 独立窗也走 TG 单行输入条，但 .aio 的承载规则是主窗专属，这里单独补齐；
  * 材质放在 ::before 上（理由同主窗：直接给输入区挂 backdrop-filter 会让编辑器不绘制）。 */
-body[data-hash^="#/chat"] .chat-input-area {
+body:not([data-liuli-input-layout="native"])[data-hash^="#/chat"] .chat-input-area {
   /* 底边和主窗一致：贴住正文卡底（0），只有左右上 10px；
    * 原来 10px 四周，底部多出 10px，输入卡和右侧群成员卡不在同一条底线上（2026-11-10） */
   margin: 10px 10px 0 !important;
@@ -1162,7 +1187,7 @@ body[data-hash^="#/chat"] .chat-input-area {
   height: auto !important;
   max-height: 50vh !important;
 }
-body[data-hash^="#/chat"] .chat-input-area::before {
+body:not([data-liuli-input-layout="native"])[data-hash^="#/chat"] .chat-input-area::before {
   content: "" !important;
   position: absolute !important;
   inset: 0 !important;
@@ -1173,7 +1198,7 @@ body[data-hash^="#/chat"] .chat-input-area::before {
   -webkit-backdrop-filter: var(--ll-card-blur-strong) !important;
   pointer-events: none !important;
 }
-body[data-hash^="#/chat"] .chat-input-area > .msg-input {
+body:not([data-liuli-input-layout="native"])[data-hash^="#/chat"] .chat-input-area > .msg-input {
   background: transparent !important;
   border: none !important;
   border-radius: var(--ll-radius) !important;
@@ -1216,7 +1241,7 @@ body .sys-status-editor .entrance-btn {
 
 /* ── 输入卡底边与左侧会话列表卡、右侧群成员卡对齐（2026-10-29）──
  * 原来 margin-bottom:10px，输入卡底边在 863，两侧卡片底边在 873。 */
-body[data-liuli-scope="main"] .aio .chat-input-area:not(#ll) {
+body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat-input-area:not(#ll) {
   margin-bottom: 0 !important;
 }
 
@@ -1233,7 +1258,7 @@ body[data-liuli-scope="main"] .aio .chat-input-area:not(#ll) {
  * 磨砂挪到 ::before（DSH composer-card 做法），::after 填住空隙，
  * 子菜单从行的右侧展开。
  * ════════════════════════════════════════════════════════════ */
-body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll) {
+body:not([data-liuli-input-layout="native"]) .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll) {
   left: 2px !important;
   right: auto !important;
   bottom: calc(100% + 8px) !important;
@@ -1255,7 +1280,7 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll) {
   isolation: isolate !important;
   transform-origin: bottom left !important;
 }
-body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::before {
+body:not([data-liuli-input-layout="native"]) .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::before {
   animation: liuli-fade-in 160ms ease backwards;
   content: "";
   position: absolute;
@@ -1270,7 +1295,7 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::before {
   pointer-events: none;
 }
 /* 感应桥：填住工具栏和「+」之间的空隙 */
-body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::after {
+body:not([data-liuli-input-layout="native"]) .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::after {
   content: "";
   position: absolute;
   left: 0;
@@ -1278,8 +1303,8 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll)::after {
   top: 100%;
   height: 12px;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .chat-func-bar__left,
-body .chat-func-bar.liuli-expanded:not(#ll) .func-bar-native {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .chat-func-bar__left,
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .func-bar-native {
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
@@ -1290,12 +1315,12 @@ body .chat-func-bar.liuli-expanded:not(#ll) .func-bar-native {
   padding: 0 !important;
 }
 /* 右侧那组（聊天记录）接在下面，中间一道分隔 */
-body .chat-func-bar.liuli-expanded:not(#ll) > .func-bar-native {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) > .func-bar-native {
   margin-top: 4px !important;
   padding-top: 6px !important;
   border-top: 1px solid rgba(var(--ll-on-glass-rgb), 0.08) !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon {
   position: relative !important;
   display: flex !important;
   align-items: center !important;
@@ -1307,18 +1332,18 @@ body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon {
   box-sizing: border-box !important;
   transition: background-color 120ms ease !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon[style*="display: none"],
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:not(:has(.icon-item[aria-label]:not([aria-label=""]))) {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon[style*="display: none"],
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:not(:has(.icon-item[aria-label]:not([aria-label=""]))) {
   display: none !important;
 }
 /* 「表情」已经有独立按钮，菜单里不重复（原生节点保留，独立按钮靠它打开面板） */
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
   display: none !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover {
   background: rgba(var(--ll-brand-rgb), 0.12) !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item {
   flex: 1 1 auto !important;
   display: flex !important;
   align-items: center !important;
@@ -1331,24 +1356,24 @@ body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item {
   color: var(--ll-on-glass-2) !important;
   cursor: pointer !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item::after {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item::after {
   content: attr(data-liuli-label);
   font-size: 13px;
   line-height: 18px;
   color: var(--ll-on-glass);
   white-space: nowrap;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover > .icon-item,
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover > .icon-item::after {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover > .icon-item,
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon:hover > .icon-item::after {
   color: var(--ll-brand) !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item svg {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .icon-item svg {
   flex: 0 0 auto !important;
   width: 18px !important;
   height: 18px !important;
 }
 /* 有子菜单的行：箭头放到行尾，指向右边 */
-body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .arrow {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .arrow {
   flex: 0 0 auto !important;
   height: 34px !important;
   display: flex !important;
@@ -1367,7 +1392,7 @@ body .chat-func-bar.liuli-expanded:not(#ll) .bar-icon > .arrow {
  * 子菜单（截图/文件）改为从整个面板上方弹出：格子取消 position，
  * .bar-more-menu 就以面板为定位基准，不会盖住相邻格子。
  * ════════════════════════════════════════════════════════════ */
-body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll) {
+body:not([data-liuli-input-layout="native"]) .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll) {
   display: grid !important;
   grid-template-columns: repeat(4, 76px) !important;
   grid-auto-rows: 64px !important;
@@ -1377,19 +1402,19 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll) {
   max-width: none !important;
   padding: 8px !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .chat-func-bar__left,
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .func-bar-native {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .chat-func-bar__left,
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .func-bar-native {
   display: contents !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) > .func-bar-native {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) > .func-bar-native {
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
   display: flex !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon {
   position: static !important;
   width: 76px !important;
   height: 64px !important;
@@ -1397,7 +1422,7 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon {
   justify-content: center !important;
   border-radius: 12px !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item {
   flex: 1 1 auto !important;
   flex-direction: column !important;
   justify-content: center !important;
@@ -1407,11 +1432,11 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item {
   height: 64px !important;
   padding: 0 2px !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item svg {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item svg {
   width: 22px !important;
   height: 22px !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item::after {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item::after {
   font-size: 12px;
   line-height: 16px;
   max-width: 72px;
@@ -1419,13 +1444,13 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .icon-item::aft
   text-overflow: ellipsis;
 }
 /* 有子菜单的格子：右上角一个小三角提示，点它展开 */
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon {
   isolation: auto !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon:has(> .arrow) {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon:has(> .arrow) {
   position: relative !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .arrow {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .arrow {
   position: absolute !important;
   top: 2px !important;
   right: 2px !important;
@@ -1436,14 +1461,14 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .arrow {
   border-radius: 6px !important;
   transform: none !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .arrow:hover {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll) .bar-icon > .arrow:hover {
   background: rgba(var(--ll-brand-rgb), 0.18) !important;
   color: var(--ll-brand) !important;
 }
 
 /* 宫格固定 2×4：群里多一个「机器人指令」时第 9 格会换到第三行。
  * 表情已有独立按钮，这种情况下从宫格里拿掉，正好 8 格。 */
-body .chat-input-area > .chat-func-bar.liuli-expanded:has(.icon-item[aria-label="机器人指令"]):not(#ll):not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
+body:not([data-liuli-input-layout="native"]) .chat-input-area > .chat-func-bar.liuli-expanded:has(.icon-item[aria-label="机器人指令"]):not(#ll):not(#ll) .bar-icon:has(> .icon-item[aria-label="表情"]) {
   display: none !important;
 }
 
@@ -1456,7 +1481,7 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:has(.icon-item[aria-label=
  * QQ 按窗口坐标算出的子菜单位置就被平移到了面板内部。
  * 面板本身只做透明度渐入，位移动画只留在图标上。
  * ════════════════════════════════════════════════════════════ */
-body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) {
+body:not([data-liuli-input-layout="native"]) .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) {
   grid-template-columns: repeat(4, 38px) !important;
   grid-auto-rows: 38px !important;
   gap: 4px !important;
@@ -1466,7 +1491,7 @@ body .chat-input-area > .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll)
   animation: none !important;
   transform: none !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon {
   position: relative !important;
   width: 38px !important;
   height: 38px !important;
@@ -1474,7 +1499,7 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon {
   border-radius: 10px !important;
   justify-content: center !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item {
   flex: 0 0 auto !important;
   width: 38px !important;
   height: 38px !important;
@@ -1483,16 +1508,16 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-
   justify-content: center !important;
   align-items: center !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item::after {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item::after {
   content: none !important;
   display: none !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item svg {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .icon-item svg {
   width: 20px !important;
   height: 20px !important;
 }
 /* 有子菜单的格子：右下角一个小三角作入口 */
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow {
   position: absolute !important;
   right: 1px !important;
   bottom: 1px !important;
@@ -1506,12 +1531,12 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow
   color: var(--ll-on-glass-3) !important;
   border-radius: 4px !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow:hover {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow:hover {
   background: rgba(var(--ll-brand-rgb), 0.18) !important;
   color: var(--ll-brand) !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow svg,
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow i {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow svg,
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow i {
   width: 10px !important;
   height: 10px !important;
 }
@@ -1522,7 +1547,7 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll) .bar-icon > .arrow
  * 之前竖排菜单时代的 top:-6px !important 盖掉了 QQ 的内联 top，子菜单就压在宫格上。
  * 外层是 0×0 的定位壳：不给它材质和动画，只用 translateZ(0) 固定成定位基准，
  * 动画和材质只在真正可见的 .bar-more-menu-inner 上。 */
-body .chat-func-bar.liuli-expanded .bar-more-menu {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded .bar-more-menu {
   animation: none !important;
   transform: translateZ(0) !important;
   background: transparent !important;
@@ -1750,11 +1775,11 @@ body .group-box__wrapper .group-box__toggle:has(.toggle-button--unfold) i.group-
  * 再点一次已选中的会话，QQ 会收起聊天面板，显示空白页（.empty-panel.empty-aio）。
  * 这时没有聊天标题栏，能拖窗口的只剩顶部 8px。空白页里没有可点的东西，整块都设成拖动区；
  * 万一里面出现按钮、链接、输入框（例如广告位），仍然保持可点。 */
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .empty-panel.empty-aio,
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .empty-panel.empty-aio .draggable-view__container {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .empty-panel.empty-aio,
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .empty-panel.empty-aio .draggable-view__container {
   -webkit-app-region: drag !important;
 }
-body[data-liuli-scope="main"]:not([data-liuli-tb="native"]) .empty-panel.empty-aio :is(a, button, input, textarea, [role="button"], [tabindex]:not([tabindex="-1"])) {
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .empty-panel.empty-aio :is(a, button, input, textarea, [role="button"], [tabindex]:not([tabindex="-1"])) {
   -webkit-app-region: no-drag !important;
 }
 
@@ -1772,7 +1797,7 @@ body .expression-panel .expression-panel-inner .sticker-panel:not(#ll) {
  * 第一版做成伸出格子外的实底小标，和玻璃面板是两种材质，看着像贴上去的（2026-11-02 用户反馈「割裂」）。
  * 现在收进格子里：右下角 14px 圆角块，底色和格子悬停同一套墨色（on-glass 10%），没有投影；
  * 指向格子时加深到 16%，指向角标本身换品牌色。 */
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow {
   top: auto !important;
   left: auto !important;
   right: 2px !important;
@@ -1786,15 +1811,15 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon
   z-index: 2 !important;
   transition: background-color 140ms ease, color 140ms ease !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon:hover > .arrow {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon:hover > .arrow {
   background: rgba(var(--ll-on-glass-rgb), 0.16) !important;
   color: var(--ll-on-glass) !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow:hover {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow:hover {
   background: var(--ll-brand) !important;
   color: var(--ll-on-brand) !important;
 }
-body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow svg {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon > .arrow svg {
   width: 12px !important;
   min-width: 12px !important;
   height: 12px !important;
@@ -1806,7 +1831,7 @@ body .chat-func-bar.liuli-expanded:not(#ll):not(#ll):not(#ll):not(#ll) .bar-icon
  * QQ 把子菜单的左边放在小三角的中心、底边贴着格子上沿，结果它横着错出去半个格子，
  * 底边又和面板上沿压住 2px，两块半透明玻璃叠出一道深边。
  * 往上让出 8px（和卡片之间的缝一样），左边对齐所在的格子。 */
-body .chat-func-bar.liuli-expanded .bar-more-menu .bar-more-menu-inner.q-context-menu:not(#ll) {
+body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded .bar-more-menu .bar-more-menu-inner.q-context-menu:not(#ll) {
   margin-top: -10px !important;
   margin-left: -29px !important;  /* 小三角中心在格子左边 + 29px */
 }
@@ -1818,14 +1843,14 @@ body .chat-func-bar.liuli-expanded .bar-more-menu .bar-more-menu-inner.q-context
  * :has() 不能嵌套，所以都用兄弟选择器写在一层 :has() 里。
  * 多选时编辑器 .msg-input 仍占 44px，主题浮在输入框上的按钮（#liuli-input-overlay）也还在，
  * 操作栏被挤到底、文字贴着卡片下沿。这里把两样收掉，上下各留 10px，操作栏居中。 */
-body .aio .chat-input-area > .msg-input:has(~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])),
-body .aio .chat-input-area > .chat-func-bar:has(~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) {
+body:not([data-liuli-input-layout="native"]) .aio .chat-input-area > .msg-input:has(~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])),
+body:not([data-liuli-input-layout="native"]) .aio .chat-input-area > .chat-func-bar:has(~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) {
   display: none !important;
 }
-body:has(.aio .chat-input-area > .msg-input ~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) #liuli-input-overlay {
+body:not([data-liuli-input-layout="native"]):has(.aio .chat-input-area > .msg-input ~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) #liuli-input-overlay {
   display: none !important;
 }
-body .aio .chat-input-area:has(> .msg-input ~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) {
+body:not([data-liuli-input-layout="native"]) .aio .chat-input-area:has(> .msg-input ~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) {
   justify-content: center !important;
   padding: 10px 0 !important;
 }
@@ -1834,4 +1859,35 @@ body .aio .chat-input-area:has(> .msg-input ~ .forward-ops:not([style*="display:
 body[data-liuli-scope="main"][data-liuli-hide-empty-logo] .empty-aio .q-empty-page-img,
 body[data-liuli-scope="main"][data-liuli-hide-empty-logo] .empty-aio .qq-logo {
   display: none !important;
+}
+/* QQ 经典模式保留原生标题栏/头像区/导航；悬浮入口只用于效率模式。 */
+body:has(.global-container.container--narrow) :is(.liuli-top-hint, #liuli-nav-handle, #liuli-ctl-shield) {
+  display: none !important;
+}
+
+/* 原版输入区保留 QQ 内部排版，外层使用独立玻璃卡片。
+ * 模糊留在背景伪元素，避免直接作用编辑器所在合成层。 */
+body[data-liuli-input-layout="native"]:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area {
+  position: relative !important;
+  isolation: isolate !important;
+  z-index: 120 !important;
+  margin: 10px 10px 0 !important;
+  width: auto !important;
+  align-self: stretch !important;
+  border-radius: var(--ll-radius) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: var(--ll-card-shadow) !important;
+}
+body[data-liuli-input-layout="native"]:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-input-area::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  background: var(--ll-noise), rgba(var(--ll-acrylic), var(--ll-material-opacity)) !important;
+  backdrop-filter: var(--ll-material-blur) !important;
+  -webkit-backdrop-filter: var(--ll-material-blur) !important;
 }

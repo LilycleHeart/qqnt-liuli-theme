@@ -130,14 +130,7 @@ body {
   --background-05: transparent !important;
   --background-dialogue: transparent !important;
 
-  /* ── 气泡：亚克力 / 品牌容器 ── */
-  --bubble_guest: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
-  --bubble_guest_text: var(--ll-on-glass) !important;
-  --bubble_host: rgba(var(--ll-brand-rgb), 0.22) !important;
-  --bubble_host_text: var(--ll-on-glass) !important;
-  --bubble_host_1: var(--ll-brand) !important;
-  --bubble_host_2: var(--ll-brand) !important;
-  --on_bubble_host_text: var(--ll-on-glass) !important;
+  /* 气泡 token 在下方按风格覆盖，原版保留 QQ 的值。 */
   --on_bg_text: var(--ll-on-glass-2) !important;
 
   /* ── 徽标 ── */
@@ -201,11 +194,6 @@ body.q-theme-tokens-dark:not([data-liuli-dark='0']),
 body[data-liuli-dark='1'] {
   --text_black: var(--ll-on-glass) !important;
   --icon_black: var(--ll-on-glass) !important;
-  --bubble_guest: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
-  --bubble_guest_text: var(--ll-on-glass) !important;
-  --bubble_host: rgba(var(--ll-brand-rgb), 0.22) !important;
-  --bubble_host_text: var(--ll-on-glass) !important;
-  --on_bubble_host_text: var(--ll-on-glass) !important;
   --overlay_mask_standard: rgba(var(--ll-scrim-rgb), 0.55) !important;
 }
 
@@ -244,10 +232,20 @@ body {
   --background_dialogue: var(--ll-popup-bg) !important;
   /* 文件卡片、推荐消息等浮在消息上的底 */
   --blur_middle_standard: rgba(var(--ll-acrylic-high), 0.9) !important;
-  /* 自己点过的表情回应、语音转文字块：跟自己的气泡同色 */
-  --host_bubble_bg_css_value: var(--ll-bubble-self, var(--ll-primary-container)) !important;
   /* 只用在撤回提示的「重新编辑」上，当链接色用 */
   --bubble-host: var(--ll-link, var(--ll-brand)) !important;
+}
+
+/* 原版气泡不重定义 QQ 的气泡专用 token。 */
+body:not([data-liuli-chat-style='classic']) {
+  --bubble_guest: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.12)) !important;
+  --bubble_guest_text: var(--ll-on-glass) !important;
+  --bubble_host: rgba(var(--ll-brand-rgb), 0.22) !important;
+  --bubble_host_text: var(--ll-on-glass) !important;
+  --bubble_host_1: var(--ll-brand) !important;
+  --bubble_host_2: var(--ll-brand) !important;
+  --on_bubble_host_text: var(--ll-on-glass) !important;
+  --host_bubble_bg_css_value: var(--ll-bubble-self, var(--ll-primary-container)) !important;
 }
 
 /* ── #27.4 红包蒙层不要跟着壁纸走（2026-11-06）──────────────────────────

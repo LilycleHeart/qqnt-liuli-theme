@@ -71,6 +71,7 @@ body[data-liuli-dark='0'] .ll-inline-md .text-normal .ll-spoiler {
  * 名字颜色：统一用 MCU 从壁纸派生的 tertiary（第三色），和品牌色区分开
  * 身份标签（群主/管理员）同色淡底。
  * ============================================================ */
+@scope (body:not([data-liuli-chat-style='classic'])) {
 .ml-item .msg-content-container .user-name,
 .ml-item .msg-content-container .user-name * {
   color: var(--ll-name, var(--ll-tertiary, var(--ll-brand))) !important;
@@ -78,6 +79,8 @@ body[data-liuli-dark='0'] .ll-inline-md .text-normal .ll-spoiler {
 .ml-item .msg-content-container .user-name .q-tag,
 .ml-item .msg-content-container .user-name .group-member-label {
   background: color-mix(in srgb, var(--ll-tertiary, var(--ll-brand)) 18%, transparent) !important;
+}
+
 }
 
 /* ============================================================

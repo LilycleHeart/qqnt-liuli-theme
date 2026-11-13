@@ -104,37 +104,36 @@ body .recent-contact-item:has(.q-badge__grey):not(.recent-contact-item--selected
 /* ── 4. 身份标签分色：群主 tertiary、管理员 secondary（都由壁纸派生） ──
  * 群成员栏和气泡里的名字标签用同一套。 */
 body .group-user .q-tag.q-tag--orange:not(#ll),
-body .message-container .user-name .q-tag.q-tag--orange:not(#ll) {
+body:not([data-liuli-chat-style='classic']) .message-container .user-name .q-tag.q-tag--orange:not(#ll) {
   background: var(--ll-tertiary-container) !important;
   color: var(--ll-on-tertiary-container) !important;
   border: none !important;
 }
 body .group-user .q-tag.q-tag--blue:not(#ll),
-body .message-container .user-name .q-tag.q-tag--blue:not(#ll) {
+body:not([data-liuli-chat-style='classic']) .message-container .user-name .q-tag.q-tag--blue:not(#ll) {
   background: var(--ll-secondary-container) !important;
   color: var(--ll-on-secondary-container) !important;
   border: none !important;
 }
 body .group-user .q-tag.q-tag--orange:not(#ll) *,
 body .group-user .q-tag.q-tag--blue:not(#ll) *,
-body .message-container .user-name .q-tag.q-tag--orange:not(#ll) *,
-body .message-container .user-name .q-tag.q-tag--blue:not(#ll) * {
+body:not([data-liuli-chat-style='classic']) .message-container .user-name .q-tag.q-tag--orange:not(#ll) *,
+body:not([data-liuli-chat-style='classic']) .message-container .user-name .q-tag.q-tag--blue:not(#ll) * {
   background: transparent !important;
   color: inherit !important;
 }
-/* 标签字号：QQ 原本 10px / 常规粗细。实测本机缩放 100%（devicePixelRatio=1），
+/* 成员侧栏标签字号：QQ 原本 10px / 常规粗细。消息气泡的标签字号与高度
+ * 由 bubbles.css 和用户的头衔字号设置控制，不能在这里固定为 11px / 16px。
+ * 实测本机缩放 100%（devicePixelRatio=1），
  * 10px 的中文笔画挤在一起，在半透明玻璃上又只能用灰度抗锯齿，看起来发虚。
  * 改成 11px + 中粗，行高取整数像素。 */
 body .group-user .q-tag:not(#ll),
-body .group-user .q-tag:not(#ll) *,
-body .message-container .user-name .q-tag:not(#ll),
-body .message-container .user-name .q-tag:not(#ll) * {
+body .group-user .q-tag:not(#ll) * {
   font-size: 11px !important;
   font-weight: 600 !important;
   line-height: 16px !important;
 }
-body .group-user .q-tag:not(#ll),
-body .message-container .user-name .q-tag:not(#ll) {
+body .group-user .q-tag:not(#ll) {
   height: 16px !important;
   padding: 0 5px !important;
 }
@@ -258,18 +257,19 @@ body .group-member .group-user[data-liuli-active='hot'] .group-user__avatar {
 body .recent-contact .recent-contact-item.recent-contact-item--selected:not(#ll):not(#ll),
 body .recent-contact .recent-contact-item.recent-contact-item--selected:not(#ll):not(#ll):hover {
   --ll-on-glass: var(--ll-on-selected, var(--ll-on-brand));
-  --ll-on-glass-2: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 84%, var(--ll-selected, var(--ll-brand)));
-  --ll-on-glass-3: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 76%, var(--ll-selected, var(--ll-brand)));
+  --ll-on-glass-2: var(--ll-selection-summary-fg, var(--ll-on-selected, var(--ll-on-brand)));
+  --ll-on-glass-3: var(--ll-selection-meta-fg, var(--ll-on-selected, var(--ll-on-brand)));
   --text_primary: var(--ll-on-selected, var(--ll-on-brand));
-  --text_secondary: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 84%, var(--ll-selected, var(--ll-brand)));
-  --text_tertiary: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 76%, var(--ll-selected, var(--ll-brand)));
+  --text_secondary: var(--ll-selection-summary-fg, var(--ll-on-selected, var(--ll-on-brand)));
+  --text_tertiary: var(--ll-selection-meta-fg, var(--ll-on-selected, var(--ll-on-brand)));
   --icon_primary: var(--ll-on-selected, var(--ll-on-brand));
-  --icon_secondary: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 76%, var(--ll-selected, var(--ll-brand)));
+  --icon_secondary: var(--ll-selection-meta-fg, var(--ll-on-selected, var(--ll-on-brand)));
   color: var(--ll-on-selected, var(--ll-on-brand)) !important;
 }
 body .recent-contact .recent-contact-item.recent-contact-item--selected:not(#ll):not(#ll)::before {
   inset: 2px 0 !important;
   border-radius: 12px !important;
+  opacity: var(--ll-selected-strength, 1);
   background:
     linear-gradient(180deg, rgba(var(--ll-specular), 0.1), rgba(var(--ll-specular), 0) 55%),
     var(--ll-selected, var(--ll-brand)) !important;
@@ -294,18 +294,18 @@ body .recent-contact .recent-contact-item--selected:not(#ll) .contact-name__text
 }
 body .recent-contact .recent-contact-item--selected:not(#ll) .item__summary,
 body .recent-contact .recent-contact-item--selected:not(#ll) .item__summary * {
-  color: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 84%, var(--ll-selected, var(--ll-brand))) !important;
+  color: var(--ll-selection-summary-fg, var(--ll-on-selected, var(--ll-on-brand))) !important;
   opacity: 1 !important;
 }
 body .recent-contact .recent-contact-item--selected:not(#ll) .secondary-info,
 body .recent-contact .recent-contact-item--selected:not(#ll) .secondary-info * {
-  color: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 76%, var(--ll-selected, var(--ll-brand))) !important;
+  color: var(--ll-selection-meta-fg, var(--ll-on-selected, var(--ll-on-brand))) !important;
 }
 /* 徽标反色 */
 body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll),
 body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) * {
-  background: var(--ll-on-selected, var(--ll-on-brand)) !important;
-  color: var(--ll-selected, var(--ll-brand)) !important;
+  background: var(--ll-selection-badge-bg, var(--ll-selected, var(--ll-brand))) !important;
+  color: var(--ll-selection-badge-fg, var(--ll-on-selected, var(--ll-on-brand))) !important;
   box-shadow: none !important;
 }
 body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) * {
@@ -314,12 +314,34 @@ body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#l
 /* 免打扰图标 */
 body .recent-contact .recent-contact-item--selected:not(#ll) .no-disturb-icon,
 body .recent-contact .recent-contact-item--selected:not(#ll) .no-disturb-icon * {
-  color: color-mix(in srgb, var(--ll-on-selected, var(--ll-on-brand)) 76%, var(--ll-selected, var(--ll-brand))) !important;
+  color: var(--ll-selection-meta-fg, var(--ll-on-selected, var(--ll-on-brand))) !important;
   fill: currentColor !important;
 }
-/* 头像外圈一道 onPrimary 细描边，和实底分开 */
+/* 会话头像保持原图轮廓，选中态由整行底色表达。 */
 body .recent-contact .recent-contact-item--selected:not(#ll) .item__avatar .avatar {
-  box-shadow: 0 0 0 2px rgba(var(--ll-on-selected-rgb, var(--ll-on-brand-rgb, 255, 255, 255)), 0.55) !important;
+  box-shadow: none !important;
+}
+
+/* 低浓度时底下是侧栏玻璃，使用其文字色；只减淡底色，不减淡文字。 */
+body[data-liuli-soft-selection] .recent-contact .recent-contact-item--selected:not(#ll):not(#ll):not(#ll) {
+  --ll-on-selected: var(--ll-selection-readable-fg, var(--ll-selection-glass-fg, #ebe0e1));
+  --ll-on-selected-rgb: var(--ll-selection-readable-fg-rgb, var(--ll-selection-glass-fg-rgb, 235, 224, 225));
+}
+
+/* 数量徽标的光晕超出16px摘要行；为光效留余量，文字仍由子节点省略。
+ * 外层会话行与列表继续裁切，避免长摘要或滚动内容越界。 */
+body .recent-contact-item .item__summary:has(.q-badge-num),
+body .recent-contact-item .item__info:has(.q-badge-num) {
+  overflow: clip !important;
+  overflow-clip-margin: 8px;
+  min-width: 0 !important;
+}
+body .recent-contact-item .summary-main {
+  min-width: 0 !important;
+}
+body .recent-contact-item .q-badge-num {
+  border-radius: 999px !important;
+  background-clip: border-box;
 }
 
 /* ── 会话列表的滚动条不再压在内容上（2026-11-01）──

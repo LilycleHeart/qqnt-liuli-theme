@@ -1,0 +1,132 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { chromium } = require(process.argv[2] || 'playwright');
+const root = path.resolve(__dirname, '..');
+const out = path.resolve(process.argv[4] || path.join(root, '../../output/playwright/custom-color-design-20261113'));
+const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const source = require('./patch-custom-color-live.cjs').source;
+const index = read('renderer/index.js');
+const paletteSource = index.slice(index.indexOf('  const SURFACE_TONES ='), index.indexOf('  let paletteGeneration ='));
+const markup = `<!doctype html><style>${read('assets/panel.css')}body{background:#172318;color:#eee;font:13px sans-serif;padding:20px}#liuli-settings-dialog{max-width:620px}.liuli-section__body{padding:16px}.chat-msg-area{height:40px}</style>
+<body><div id="liuli-settings-dialog"><div class="liuli-tabpage"><details class="liuli-section" data-section="颜色来源" open><summary>颜色来源</summary><div class="liuli-section__body"><div data-liuli-setting="colorSource" id="original-row">原生取色来源</div><div data-liuli-color-custom id="original-custom"><input value="#4bf11e" type="color"></div><div class="liuli-info" id="original-info">原先信息</div></div></details><details class="liuli-section" data-section="颜色角色" open><summary>颜色角色</summary><div class="liuli-section__body" id="original-roles"><button id="original-role">原角色入口</button></div></details></div></div><div class="chat-msg-area"></div><div class="recent-contact"></div></body>`;
+(async () => {
+  fs.mkdirSync(out, { recursive: true });
+  const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { executablePath: process.argv[3] } : {}) });
+  const report = { scope: 'Development compatibility bridge in isolated Chromium; no QQ or real configuration writes', checks: [] };
+  try {
+    const page = await browser.newPage({ viewport: { width: 800, height: 900 } });
+    await page.route('http://liuli.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
+    await page.goto('http://liuli.test/');
+    page.setDefaultTimeout(5000);
+    await page.addScriptTag({ content: read('assets/mcu.js') });
+    await page.addScriptTag({ content: read('renderer/color-roles.js') });
+    await page.evaluate(paletteSource => {
+      const oldRoles = document.querySelector('#original-roles');
+      window.originalRoles = oldRoles;
+      window.originalCustom = document.querySelector('#original-custom');
+      window.nativeClicks = 0;
+      document.querySelector('#original-role').addEventListener('click', () => window.nativeClicks++);
+      window.__liuliSettingsCache = { colorSource: 'custom', customColor: '#4bf11e', blur: 10, chatStyle: 'classic', bubbleMaxWidth: 40, unrelated: 'preserve me' };
+      let previousSettings = window.__liuliSettingsCache;
+      window.paletteRuns = 0;
+      localStorage.setItem('liuli-dsh-settings', JSON.stringify(window.__liuliSettingsCache));
+      const originalSetItem = Storage.prototype.setItem;
+      window.storageWrites = [];
+      Storage.prototype.setItem = function (key, value) { window.storageWrites.push({ key, value }); return originalSetItem.call(this, key, value); };
+      const { roleVars, accentPalette, loadRoles } = window.LiuliRoles;
+      const repaint = new Function('roleVars', 'accentPalette', 'loadRoles', paletteSource + `const mcu=window.LiuliMCU,settings=JSON.parse(localStorage.getItem('liuli-dsh-settings'));const seed=settings.colorSource==='custom'?settings.customColor:'#aa7733';const theme=mcu.themeFromSourceColor(mcu.argbFromHex(seed));const roles=loadRoles();for(const[k,v]of Object.entries({...deriveVars(mcu,theme,true,roles),...roleVars(mcu,theme,true,roles)}))if(v===null)document.body.style.removeProperty(k);else document.body.style.setProperty(k,v);document.body.dataset.liuliSource=seed;`);
+      window.repaint = () => repaint(roleVars, accentPalette, loadRoles);
+      window.addEventListener('storage', event => { if (event.key === 'liuli-dsh-settings') {
+        const next = JSON.parse(event.newValue);
+        const paletteChanged = previousSettings.colorSource !== next.colorSource || previousSettings.customColor !== next.customColor;
+        previousSettings = { ...next };
+        window.__liuliSettingsCache = previousSettings;
+        if (paletteChanged) { window.paletteRuns++; window.repaint(); }
+      } });
+      window.repaint();
+    }, paletteSource);
+    const initialRaw = await page.evaluate(() => localStorage.getItem('liuli-dsh-settings'));
+    await page.evaluate(source);
+    assert.equal(await page.evaluate(() => window.storageWrites.length), 0);
+    assert.equal(await page.locator('.liuli-palette-card').count(), 1);
+    assert.equal(await page.locator('.liuli-palette-role').count(), 8);
+    assert(await page.evaluate(() => document.querySelector('#original-roles') === window.originalRoles));
+    assert.equal(await page.evaluate(() => localStorage.getItem('liuli-dsh-settings')), initialRaw);
+    report.checks.push('Initial installation replaces only source-section children, preserves role DOM and writes no configuration.');
+    await page.evaluate(source);
+    assert.equal(await page.locator('.liuli-palette-card').count(), 1);
+    assert.equal(await page.locator('#liuli-custom-color-compat-style').count(), 1);
+    assert.equal(await page.evaluate(() => window.storageWrites.length), 0);
+    report.checks.push('Reinstallation disposes the previous bridge and keeps one card/style without configuration writes.');
+    await page.evaluate(() => {
+      const latest = JSON.parse(localStorage.getItem('liuli-dsh-settings'));
+      latest.blur = 23; latest.chatStyle = 'tim'; latest.userChangedMeanwhile = true;
+      localStorage.setItem('liuli-dsh-settings', JSON.stringify(latest));
+      window.storageWrites.length = 0;
+    });
+    await page.getByRole('textbox', { name: '基础颜色十六进制值' }).fill('#9865ef');
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const edited = await page.evaluate(() => ({ config: JSON.parse(localStorage.getItem('liuli-dsh-settings')), writes: window.storageWrites.length, seed: document.body.dataset.liuliSource, source: document.querySelector('.liuli-palette-heading__source').textContent, hex: document.querySelector('.liuli-palette-role code').textContent, background: getComputedStyle(document.querySelector('.liuli-palette-role__sample')).backgroundColor }));
+    assert.equal(edited.config.blur, 23);
+    assert.equal(edited.config.chatStyle, 'tim');
+    assert.equal(edited.config.userChangedMeanwhile, true);
+    assert.equal(edited.config.unrelated, 'preserve me');
+    assert.equal(edited.config.customColor, '#9865ef');
+    assert.equal(edited.writes, 1);
+    assert.equal(edited.seed, '#9865ef');
+    assert.equal(await page.evaluate(() => window.paletteRuns), 1, 'Old index must detect a changed seed before its cache is replaced');
+    assert(edited.source.includes('#9865EF'));
+    assert.notEqual(edited.hex, '#3CE403');
+    report.edited = edited;
+    report.checks.push('Editing merges only the changed color field with the latest storage and lets the existing storage listener run MCU, then refreshes role HEX.');
+    await page.getByRole('textbox', { name: '基础颜色十六进制值' }).fill('#zz0000');
+    assert.equal(await page.evaluate(() => window.storageWrites.length), 1);
+    assert.equal(await page.getByRole('textbox', { name: '基础颜色十六进制值' }).getAttribute('aria-invalid'), 'true');
+    await page.locator('#original-role').click();
+    assert.equal(await page.evaluate(() => window.nativeClicks), 1);
+    report.checks.push('Invalid HEX does not save; existing role entry and its listener remain active.');
+    await page.getByRole('textbox', { name: '基础颜色十六进制值' }).fill('#9865ef');
+    assert.equal(await page.locator('.liuli-palette-card input[type=color]').count(), 0);
+    const ring = await page.getByRole('slider', { name: '色相', exact: true }).boundingBox();
+    const center = { x: ring.x + ring.width / 2, y: ring.y + ring.height / 2 };
+    const continuous = [];
+    await page.mouse.move(center.x, ring.y + 8);
+    await page.mouse.down();
+    for (const angle of [0, 70, 140, 210, 280]) {
+      const radians = (angle - 90) * Math.PI / 180;
+      await page.mouse.move(center.x + Math.cos(radians) * 90, center.y + Math.sin(radians) * 90, { steps: 3 });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      continuous.push(await page.evaluate(() => ({ seed: JSON.parse(localStorage.getItem('liuli-dsh-settings')).customColor, brand: getComputedStyle(document.querySelector('.liuli-palette-role__sample')).backgroundColor, runs: window.paletteRuns })));
+    }
+    await page.mouse.up();
+    assert(new Set(continuous.map(x => x.brand)).size >= 4, JSON.stringify(continuous));
+    assert(continuous.at(-1).runs > continuous[0].runs);
+    report.continuousHue = continuous;
+    report.checks.push('Continuous hue dragging triggers the real old-index previous/next difference gate and MCU recomputation across distinct role colors.');
+    await page.evaluate(() => window.__liuliCustomColorCompatibility.dispose());
+    assert.equal(await page.locator('.liuli-palette-card').count(), 0);
+    assert.equal(await page.locator('#liuli-custom-color-compat-style').count(), 0);
+    assert(await page.evaluate(() => document.querySelector('#original-custom') === window.originalCustom));
+    assert(await page.evaluate(() => document.querySelector('#original-roles') === window.originalRoles));
+    const afterDisposeWrites = await page.evaluate(() => window.storageWrites.length);
+    await page.evaluate(() => { document.body.style.setProperty('--ll-brand', '#ff0000'); document.querySelector('.chat-msg-area').append(document.createElement('div')); });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => window.storageWrites.length), afterDisposeWrites);
+    report.checks.push('Disposal restores original source nodes and stops observers/listeners without touching role controls or settings.');
+    await page.evaluate(source);
+    await page.evaluate(() => {
+      const copy = document.createElement('div');
+      copy.id = 'liuli-embedded';
+      copy.innerHTML = '<details class="liuli-section" open><summary>颜色来源</summary><div class="liuli-section__body"><div data-liuli-setting="colorSource">来源</div><div data-liuli-color-custom></div><div class="liuli-info">信息</div></div></details>';
+      document.body.appendChild(copy);
+    });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('.liuli-palette-card').count(), 2);
+    report.checks.push('A newly added embedded settings panel receives the editor through scoped discovery.');
+    await page.screenshot({ path: path.join(out, 'compat-source-card.png'), fullPage: true });
+    report.passed = true;
+  } catch (error) { report.error = error.stack; process.exitCode = 1; }
+  finally { await browser.close(); fs.writeFileSync(path.join(out, 'compat-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify({ out, passed: report.passed, error: report.error })); }
+})();

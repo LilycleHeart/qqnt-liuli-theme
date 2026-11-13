@@ -1,0 +1,99 @@
+/* 时间集中到滚动提示，消息流不再重复显示原生分隔条；保留节点供无记录时取值。 */
+.chat-msg-area .message__timestamp,
+.chat-msg-area .message-container .only-time,
+.chat-msg-area .message-container .send-time {
+  display: none !important;
+}
+.liuli-scroll-time {
+  position: fixed;
+  z-index: 90;
+  max-width: calc(100vw - 32px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--ll-on-glass);
+  background: var(--ll-popup-bg);
+  box-shadow: var(--ll-shadow-float, 0 2px 10px rgba(0, 0, 0, .12));
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transform: translate(-50%, -6px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.liuli-time-value {
+  display: flex;
+  justify-content: center;
+  min-height: 18px;
+  text-align: center;
+}
+.liuli-time-char {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  height: 18px;
+  perspective: 100px;
+  white-space: pre;
+}
+.liuli-time-flip {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.liuli-time-char.is-flipping > .liuli-time-char-value {
+  visibility: hidden;
+}
+.liuli-time-half {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+  background: var(--ll-popup-bg);
+  backface-visibility: hidden;
+}
+.liuli-time-half > span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  line-height: 18px;
+  text-align: center;
+}
+.liuli-time-half.is-top {
+  top: 0;
+  transform-origin: center bottom;
+}
+.liuli-time-half.is-top > span {
+  top: 0;
+}
+.liuli-time-half.is-bottom {
+  bottom: 0;
+  transform-origin: center top;
+}
+.liuli-time-half.is-bottom > span {
+  bottom: 0;
+}
+.liuli-time-half.is-front {
+  z-index: 1;
+}
+.liuli-time-half.is-front.is-bottom {
+  z-index: 2;
+}
+.liuli-scroll-time.is-active {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .liuli-scroll-time {
+    transition: none;
+    transform: translate(-50%, 0);
+  }
+  .liuli-time-char.is-flipping > .liuli-time-char-value {
+    visibility: visible;
+  }
+  .liuli-time-flip {
+    display: none;
+  }
+}

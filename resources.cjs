@@ -4,16 +4,22 @@ const path = require('node:path');
 const SCRIPTS = [
   'renderer/host.js',
   'renderer/qq.js',
+  'renderer/message-overscan.js',
+  'renderer/scroll-time.js',
+  'renderer/voice-layout.js',
   'assets/mcu.js',
   'renderer/color-roles.js',
   'renderer/layout-custom.js',
   'renderer/ark-external.js',
   'renderer/diag.js',
   'renderer/motion.js',
+  'renderer/switch-motion-guard.js',
+  'renderer/side-pane-motion.js',
   // 置顶会话分组（#55）：必须排在 index.js 之前，index 启动时就会调
   // window.__liuliPinGroups.apply。
   'renderer/pin-groups.js',
   'renderer/video-wallpaper.js',
+  'renderer/background-performance.js',
   'renderer/index.js'
 ];
 const roots = new Map();

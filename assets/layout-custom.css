@@ -110,6 +110,7 @@ body .q-context-menu.aio-right-click-menu.liuli-menu-sorted > .q-context-menu-se
   margin: 6px 0 4px;
 }
 .liuli-lo-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -117,6 +118,68 @@ body .q-context-menu.aio-right-click-menu.liuli-menu-sorted > .q-context-menu-se
   padding: 0 4px 0 12px;
   border-radius: 8px;
   background: rgba(var(--ll-on-glass-rgb), 0.05);
+}
+.liuli-lo-row[draggable='true'] {
+  cursor: grab;
+  user-select: none;
+}
+.liuli-lo-row.is-dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.liuli-lo-row.is-drop-before::before,
+.liuli-lo-row.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ll-brand);
+  pointer-events: none;
+}
+.liuli-lo-row.is-drop-before::before { top: -2px; }
+.liuli-lo-row.is-drop-after::after { bottom: -2px; }
+.liuli-lo-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  color: var(--ll-on-glass-2);
+}
+.liuli-lo-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+.liuli-lo-icon:not(.has-icon)::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.35;
+}
+.liuli-lo-row.is-off .liuli-lo-icon { opacity: 0.45; }
+.liuli-lo-btn.liuli-lo-grip {
+  cursor: grab;
+  flex: 0 0 26px;
+  touch-action: none;
+}
+.liuli-lo-grip svg { width: 18px; height: 18px; }
+.liuli-lo-grip:focus-visible {
+  outline: 2px solid var(--ll-brand);
+  outline-offset: 1px;
+}
+.liuli-lo-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .liuli-lo-row.is-off .liuli-lo-name {
   opacity: 0.45;
@@ -194,7 +257,7 @@ body .q-context-menu.aio-right-click-menu.liuli-menu-sorted > .q-context-menu-se
  * 两个 :not(#ll)（ID 级特异性）+ !important，才能压过 layout.css 里
  * body[data-liuli-scope="main"][data-liuli-r-nav] … 那几条 !important。
  * ════════════════════════════════════════════════════════════ */
-body[data-liuli-nav-pin][data-liuli-scope='main']
+body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll) {
@@ -214,18 +277,18 @@ body[data-liuli-nav-pin][data-liuli-scope='main']
   --ll-material-opacity: inherit !important;
 }
 /* 左边缘那条 14px 宽的感应区（layout.css:284）在固定模式没有意义，还会伸出卡片外 */
-body[data-liuli-nav-pin][data-liuli-scope='main']
+body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll)::before {
   content: none !important;
 }
 /* 悬停 / 聚焦不再滑出、不再加投影、不再换模糊（layout.css:279-283、323-328、543-554） */
-body[data-liuli-nav-pin][data-liuli-scope='main']
+body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll):hover,
-body[data-liuli-nav-pin][data-liuli-scope='main']
+body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll):has(:focus-visible) {
@@ -238,7 +301,7 @@ body[data-liuli-nav-pin][data-liuli-scope='main']
 
 /* 会话列表跟着右移：layout.css:315 把 margin-left 压成 0（导航原本浮在它上面），
  * 固定后要退回「导航卡 + 8px + 会话列表卡」的排版，宽度同步让出这 8px。 */
-body[data-liuli-nav-pin][data-liuli-scope='main']
+body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
   .two-col-layout__aside
   > .recent-contact:not(#ll) {
   margin-left: var(--ll-dock-gap) !important;

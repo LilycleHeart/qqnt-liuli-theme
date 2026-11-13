@@ -173,6 +173,7 @@
   letter-spacing: 0.15px !important;
 }
 
+@scope (body:not([data-liuli-chat-style='classic'])) {
 /* 消息正文：可读优先 */
 .message .text-element,
 .message .text-normal,
@@ -192,6 +193,8 @@
   letter-spacing: 0.2px !important;
   color: var(--ll-on-glass-2) !important;
 }
+
+} /* 消息外观仅应用于主题气泡 */
 
 /* 输入区：只设字号字重，绝不设 line-height / letter-spacing。
  * ProseMirror 靠这两个值计算光标坐标与文字位置，
@@ -218,4 +221,14 @@
   font-weight: 500 !important;
   letter-spacing: 0.3px !important;
   font-variant-numeric: tabular-nums !important;
+}
+
+/* QQ 的普通群等级标签可同时含 LV 与头衔两个 span；头衔开关只隐藏
+ * 后者，不把等级一并当作群主/管理员身份。独立开关始终保留昵称。 */
+body[data-liuli-hide-message-titles] .message-container .user-name .user-label,
+body[data-liuli-hide-message-titles] .message-container .user-name .group-member-label.q-tag--grey > span:not(.level) {
+  display: none !important;
+}
+body[data-liuli-hide-message-identity] .message-container .user-name .group-member-label:is(.q-tag--orange, .q-tag--blue) {
+  display: none !important;
 }

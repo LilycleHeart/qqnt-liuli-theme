@@ -18,11 +18,18 @@
   box-shadow: none !important;
   opacity: 0 !important;
 }
-/* 悬停时给一点点提示，避免用户找不到拖拽位置 */
+/* 悬停/拖动时也不画整条色带；保留原节点尺寸、cursor 与鼠标事件。 */
 .resize-handler:hover,
 [class*='resize-handler']:hover {
-  opacity: 1 !important;
-  background: rgba(var(--ll-brand-rgb), 0.25) !important;
+  opacity: 0 !important;
+  background: transparent !important;
+}
+.resize-handler > div,
+.resize-handler::before,
+.resize-handler::after {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* 2. 玻璃层之间不留缝：缝隙会漏出壁纸，形成"假分割线" */
