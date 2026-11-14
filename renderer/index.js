@@ -644,7 +644,7 @@
     for (const key of ['showMessageTitles', 'showMessageIdentity', 'truncateMessageNames']) {
       cfg[key] = cfg[key] !== false;
     }
-    for (const [key, min, max] of [['messageFontSize', 12, 24], ['nameFontSize', 10, 18], ['titleFontSize', 9, 14], ['bubbleScale', 80, 140], ['bubbleMaxWidth', 40, 100], ['selectedStrength', 15, 100]]) {
+    for (const [key, min, max] of [['messageFontSize', 12, 24], ['nameFontSize', 10, 14], ['titleFontSize', 9, 14], ['bubbleScale', 80, 140], ['bubbleMaxWidth', 40, 100], ['selectedStrength', 15, 100]]) {
       const n = Number(cfg[key]);
       cfg[key] = Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : DEFAULT_SETTINGS[key];
     }
@@ -1499,7 +1499,178 @@
       }
     } catch (e) {}
   }
+  // Keep QQ's original avatar node and let CSS sticky follow compositor scrolling.
+  var liuliAvatarScrollSync = null;
+  function createAvatarScrollSync() {
+    let area = null, scroller = null, observed = new Set(), pendingGeometry = false, geometryRevision = 0;
+    const sizes = new WeakMap(), nodeIds = new WeakMap();
+    let nextNodeId = 0;
+    const nodeId = node => { if(!nodeIds.has(node))nodeIds.set(node,++nextNodeId);return nodeIds.get(node) };
+    const states = new Map(), lists = new Set();
+    const stats = { refreshes:0, writes:0, scrollEvents:0, cleared:0, measuredGroups:0, cachedGroups:0 };
+    const style = document.createElement('style');
+    style.id = 'liuli-avatar-scroll-sync';
+    style.textContent = `
+      .chat-msg-area .ml-list[data-liuli-sticky-list] { overflow: clip !important; }
+      .chat-msg-area .message-container[data-liuli-sticky-host] { position: relative !important; }
+      .chat-msg-area .message-container[data-liuli-sticky-host]::after {
+        content:''; grid-area:avatar; width:var(--ll-avatar-column-width,32px); height:0;
+        visibility:hidden; pointer-events:none;
+      }
+      .chat-msg-area .message-container[data-liuli-sticky-host] > .avatar-span[data-liuli-sticky] {
+        position:absolute!important; grid-column:avatar!important; grid-row:auto!important;
+        top:var(--ll-avatar-track-top)!important; left:0!important;
+        width:var(--ll-avatar-track-width)!important; height:var(--ll-avatar-track-height)!important;
+        right:auto!important; bottom:auto!important; margin:0!important; padding:0!important;
+        min-height:0!important; max-height:none!important;
+        display:flex!important; flex-direction:column!important; justify-content:flex-end!important;
+        align-self:auto!important; transform:none!important; will-change:auto!important;
+        overflow:visible!important; pointer-events:none!important;
+      }
+      .chat-msg-area .avatar-span[data-liuli-sticky] > .message-container__avatar {
+        position:sticky!important; bottom:4px!important; top:auto!important;
+        flex:none!important; margin-top:auto!important; pointer-events:auto!important;
+      }
+      .chat-msg-area .message-container[data-liuli-sticky-host]:is(.message-container--self,.message-container--align-right,:has(.msg-content-container.container--self)) > .avatar-span[data-liuli-sticky] {
+        left:auto!important; right:0!important;
+      }
+      .chat-msg-area .message-container--selection-mod .avatar-span[data-liuli-sticky] > .message-container__avatar {
+        pointer-events:none!important;
+      }`;
+    document.head.append(style);
+    const animationWatches = new WeakSet();
+    const resize = new ResizeObserver(entries => {
+      pendingGeometry=false;
+      for(const entry of entries){
+        const box=entry.borderBoxSize?.[0],width=box?.inlineSize??entry.contentRect.width,height=box?.blockSize??entry.contentRect.height;
+        const old=sizes.get(entry.target);
+        if(old&&(Math.abs(old.width-width)>.05||Math.abs(old.height-height)>.05))geometryRevision++;
+        sizes.set(entry.target,{width,height});
+      }
+      if (!document.hidden) measure();
+    });
+    const mutation = new MutationObserver(records => {
+      if (!records.length) return;
+      // Internal content changes can move a bubble without resizing its row.
+      // A virtual window change is handled by each group's complete row key.
+      if(document.hidden || records.some(r=>r.type==='childList'&&r.target.closest?.('.message-container')))geometryRevision++;
+      if (document.hidden) return;
+      // New/recycled rows and changed group boundaries must acquire their
+      // track before paint. Ordinary size changes use delivered ResizeObserver
+      // layout, and virtual projection/decoration styles need no measurement.
+      refresh(false);
+      if(area?.isConnected&&scroller?.isConnected)measure();
+    });
+    function reset(avatar, state) {
+      avatar.removeAttribute('data-liuli-sticky');
+      for (const name of ['top','width','height']) avatar.style.removeProperty('--ll-avatar-track-'+name);
+      state.mc.removeAttribute('data-liuli-sticky-host');
+      state.mc.style.removeProperty('--ll-avatar-column-width');
+      states.delete(avatar); stats.cleared++;
+    }
+    function clear() {
+      mutation.disconnect(); resize.disconnect(); observed.clear();
+      for (const [avatar,state] of states) reset(avatar,state);
+      for (const list of lists) list.removeAttribute('data-liuli-sticky-list');
+      lists.clear(); area = scroller = null; pendingGeometry=false;
+    }
+    function refresh(invalidate = true) {
+      // Explicit theme layout/settings/load passes may change only an inset
+      // (for example a sender row); ResizeObserver cannot see that movement.
+      if(invalidate)geometryRevision++;
+      if (llModeCfg.avatarPosition === 'top' || !['tg','tim'].includes(llModeCfg.chatStyle)) {
+        clear();
+        for (const avatar of document.querySelectorAll('.chat-msg-area .avatar-span[data-liuli-ty]')) {
+          delete avatar.dataset.liuliTy; avatar.style.transform = '';
+        }
+        return;
+      }
+      const next = document.querySelector('.chat-msg-area');
+      const nextScroller = next?.querySelector('#ml-root');
+      if (next !== area || nextScroller !== scroller) {
+        clear(); area = next; scroller = nextScroller;
+        if (!area || !scroller) return;
+        mutation.observe(area,{subtree:true,childList:true,attributes:true,
+          attributeFilter:['id','data-liuli-g','data-liuli-avatar-g']});
+      }
+      if (!area || !scroller) return;
+      // Re-observing requests one callback after browser layout, even when the
+      // group changed without a size change. New group structure is also
+      // measured before paint; pure scroll does not request this work.
+      if(!pendingGeometry){pendingGeometry=true;resize.unobserve(area);resize.observe(area)}
+    }
+    function measure() {
+      stats.refreshes++;
+      if(!area?.isConnected||!scroller?.isConnected){refresh();return}
+      const key = llModeCfg.chatStyle === 'tim' ? 'liuliAvatarG' : 'liuliG';
+      const writes = [], live = new Set(), geometry = new Set([area,scroller]);
+      let firstBubble = null, firstId = null, memberKeys = [];
+      for (const mc of area.querySelectorAll('.message-container')) {
+        const g=mc.dataset[key], bubble=mc.querySelector(':scope > .message-content__wrapper')||mc.querySelector('.msg-content-container');
+        if (!bubble) continue;
+        geometry.add(bubble);
+        for(const animation of bubble.getAnimations())if(!animationWatches.has(animation)){
+          animationWatches.add(animation);
+          const finished=()=>{if(area&&bubble.isConnected){geometryRevision++;scheduleStick()}};
+          animation.finished.then(finished,finished);
+        }
+        const row=mc.closest('.ml-item'); if(row)geometry.add(row);
+        if(g==='first'||g==='single'||firstBubble===null){firstBubble=bubble;firstId=row?.id;memberKeys=[]}
+        memberKeys.push((row?.id||'')+':'+nodeId(mc)+':'+nodeId(bubble)+':'+g);
+        if (!['first','last','single'].includes(g)) continue;
+        if(g!=='last'&&g!=='single')continue;
+        const avatar=mc.querySelector(':scope > .avatar-span'), child=avatar?.querySelector(':scope > .message-container__avatar');
+        if(!avatar||!child){firstBubble=null;continue}
+        const identity=[row?.id,firstId,g,key,...memberKeys].join(':'),previous=states.get(avatar);
+        geometry.add(child);live.add(avatar);
+        if(previous&&previous.identity===identity&&previous.revision===geometryRevision&&
+          previous.firstBubble===firstBubble&&previous.bubble===bubble&&previous.child===child&&previous.mc===mc){
+          writes.push(previous);stats.cachedGroups++;firstBubble=null;continue;
+        }
+        const br=bubble.getBoundingClientRect(),fr=firstBubble===bubble?br:firstBubble.getBoundingClientRect();
+        if(br.height<1||fr.height<1){live.delete(avatar);firstBubble=null;continue}
+        const cr=mc.getBoundingClientRect(), ar=child.getBoundingClientRect();
+        const height=Math.max(ar.height,br.bottom-fr.top),top=br.bottom-height-cr.top;
+        sizes.set(bubble,{width:br.width,height:br.height});sizes.set(firstBubble,{width:fr.width,height:fr.height});
+        writes.push({avatar,mc,child,top,left:ar.left-cr.left,width:ar.width,height,
+          identity,firstBubble,bubble,revision:geometryRevision});
+        stats.measuredGroups++;firstBubble=null;
+      }
+      for(const [avatar,state]of states)if(!live.has(avatar))reset(avatar,state);
+      for(const w of writes){
+        const previous=states.get(w.avatar);
+        if(previous && previous.mc !== w.mc){previous.mc.removeAttribute('data-liuli-sticky-host');previous.mc.style.removeProperty('--ll-avatar-column-width')}
+        if(w.avatar.hasAttribute('data-liuli-ty')){delete w.avatar.dataset.liuliTy;w.avatar.style.transform=''}
+        if(!w.mc.hasAttribute('data-liuli-sticky-host'))w.mc.setAttribute('data-liuli-sticky-host','');
+        if(!w.avatar.hasAttribute('data-liuli-sticky'))w.avatar.setAttribute('data-liuli-sticky','');
+        if(!previous||Math.abs(previous.width-w.width)>.05)w.mc.style.setProperty('--ll-avatar-column-width',w.width+'px');
+        for(const name of ['top','width','height'])if(!previous||Math.abs(previous[name]-w[name])>.05){
+          w.avatar.style.setProperty('--ll-avatar-track-'+name,w[name]+'px');stats.writes++;
+        }
+        states.set(w.avatar,w);
+        const list=w.mc.closest('.ml-list');if(list&&!lists.has(list)){list.setAttribute('data-liuli-sticky-list','');lists.add(list)}
+      }
+      for(const list of lists)if(!list.isConnected){list.removeAttribute('data-liuli-sticky-list');lists.delete(list)}
+      for(const e of observed)if(!geometry.has(e))resize.unobserve(e);
+      for(const e of geometry)if(!observed.has(e))resize.observe(e);
+      observed=geometry;mutation.takeRecords();
+    }
+    return {refresh,dispose(){clear();style.remove()},stats,
+      handles(t){if(scroller&&t===scroller){stats.scrollEvents++;return true}return false},
+      debug(){return [...states.values()].map(s=>({id:s.identity,top:s.top,height:s.height,left:s.left}))}};
+  }
   function stickAvatars() {
+    try {
+      if(!liuliAvatarScrollSync){liuliAvatarScrollSync=createAvatarScrollSync();window.__liuliAvatarSticky=liuliAvatarScrollSync}
+      liuliAvatarScrollSync.refresh();
+    } catch(error) {
+      console.warn('[liuli] sticky avatar synchronization failed',error);
+      liuliAvatarScrollSync?.dispose();liuliAvatarScrollSync=null;
+      stickAvatarsLegacy();
+    }
+  }
+
+  function stickAvatarsLegacy() {
     try {
       // Top avatars and native layout never need viewport geometry. Clear only
       // offsets left by a previous bottom layout, before any layout read.
@@ -1568,7 +1739,7 @@
   function scheduleStick() {
     if (liuliStickRaf || document.hidden) return;
     if (llModeCfg.avatarPosition === 'top' || !['tg', 'tim'].includes(llModeCfg.chatStyle)) {
-      if (document.querySelector('.chat-msg-area .avatar-span[data-liuli-ty]')) stickAvatars();
+      if (liuliAvatarScrollSync || document.querySelector('.chat-msg-area .avatar-span[data-liuli-ty]')) stickAvatars();
       return;
     }
     liuliStickRaf = requestAnimationFrame(function () {
@@ -1584,7 +1755,7 @@
       function (e) {
         var t = e.target;
         if (t && t.closest && !t.closest('.chat-msg-area')) return;
-        scheduleStick();
+        if (!liuliAvatarScrollSync?.handles(t)) scheduleStick();
       },
       {
         capture: true,
@@ -5689,7 +5860,7 @@
     }
     for (const [key, text, min, max] of [
       ['messageFontSize', '消息正文', 12, 24],
-      ['nameFontSize', '发送者昵称', 10, 18],
+      ['nameFontSize', '发送者昵称', 10, 14],
       ['titleFontSize', '群头衔与身份标签', 9, 14]
     ]) {
       const field = document.createElement('div');

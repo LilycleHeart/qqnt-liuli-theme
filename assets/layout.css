@@ -1061,8 +1061,50 @@ body[data-liuli-av] .liuli-top-hint,
 body[data-liuli-av] #liuli-input-overlay {
   display: none !important;
 }
-/* 迷你窗（#/mini-fishing）同样整块还原（#52）：QQ 原生的透明小窗，
- * 铺壁纸/材质会把本应透出桌面的区域盖成实底。 */
+/* 迷你窗保持透明窗口宿主，只给内部内容卡片应用主题材质。 */
+body[window-name="MiniFishingWindow"] .mini-fishing-shell {
+  background-color: var(--ll-surface-low, #1d1b16) !important;
+  border: 1px solid rgba(var(--ll-specular, 255, 255, 255), 0.14) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--ll-shadow-float, 0 8px 24px rgba(0, 0, 0, 0.3)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-shell__titlebar,
+body[window-name="MiniFishingWindow"] .mini-fishing-shell__body {
+  background: transparent !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-window-controls__button:not(:disabled) {
+  color: var(--ll-on-glass-2, #cec6b4) !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-window-controls__button:hover:not(:disabled) {
+  background-color: rgba(var(--ll-brand-rgb, 120, 170, 255), 0.16) !important;
+  color: var(--ll-brand, #78aaff) !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-window-controls__button--close:hover {
+  background-color: rgba(var(--ll-danger-rgb, 255, 180, 171), 0.16) !important;
+  color: var(--ll-danger, #ffb4ab) !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-empty__drop-zone {
+  border-color: rgba(var(--ll-on-glass-rgb, 232, 226, 217), 0.28) !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-empty__divider-line {
+  background-color: rgba(var(--ll-on-glass-rgb, 232, 226, 217), 0.24) !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-empty__divider-text,
+body[window-name="MiniFishingWindow"] .mini-fishing-content-entry-card__label {
+  color: var(--ll-on-glass-2, #cec6b4) !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-content-entry-card {
+  border: 1px solid rgba(var(--ll-specular, 255, 255, 255), 0.08) !important;
+  background-color: rgba(var(--ll-acrylic-high, 63, 74, 92), 0.58) !important;
+  color: var(--ll-on-glass, #e8e2d9) !important;
+}
+body[window-name="MiniFishingWindow"] .mini-fishing-content-entry-card:hover,
+body[window-name="MiniFishingWindow"] .mini-fishing-content-entry-card:focus-visible {
+  border-color: rgba(var(--ll-brand-rgb, 120, 170, 255), 0.42) !important;
+  background-color: rgba(var(--ll-brand-rgb, 120, 170, 255), 0.16) !important;
+}
 body[data-hash^="#/mini-fishing"] #app {
   isolation: auto !important;
 }

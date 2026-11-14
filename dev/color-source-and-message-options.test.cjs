@@ -98,6 +98,35 @@ test('TIM sender placement normalizes, broadcasts and reflows independently of a
   assert.deepEqual(h.reflows, ['sender', 'group', 'stick']);
 });
 
+test('sender name typography is limited to 10-14px and remains capped by message text', () => {
+  const h = harness();
+  assert.equal(h.api.normalize({ nameFontSize: 9 }).nameFontSize, 10);
+  assert.equal(h.api.normalize({ nameFontSize: 18, messageFontSize: 20 }).nameFontSize, 14);
+  assert.equal(h.api.normalize({ nameFontSize: 14, messageFontSize: 12 }).nameFontSize, 12);
+  assert.equal(h.api.normalize({ titleFontSize: 14, nameFontSize: 12 }).titleFontSize, 12);
+
+  h.api.apply({ messageFontSize: 20, nameFontSize: 14, titleFontSize: 14 }, false);
+  assert.equal(h.styles.get('--ll-name-font-size'), '14px');
+  assert.equal(h.styles.get('--ll-title-font-size'), '14px');
+});
+
+test('sender name size slider exposes the same 10-14px range as settings normalization', () => {
+  const nodes = [];
+  const makeNode = tagName => {
+    const node = { tagName, style: { setProperty() {} }, dataset: {}, append() {}, appendChild() {}, addEventListener() {} };
+    nodes.push(node);
+    return node;
+  };
+  const context = { document: { createElement: makeNode } };
+  vm.createContext(context);
+  vm.runInContext(functionSource('buildMessageTypeControls') + ';globalThis.build=buildMessageTypeControls;', context);
+  context.build(makeNode('DIV'), { messageFontSize: 14, nameFontSize: 12, titleFontSize: 10 });
+
+  const nameSlider = nodes.filter(node => node.type === 'range')[1];
+  assert.equal(Number(nameSlider.min), 10);
+  assert.equal(Number(nameSlider.max), 14);
+});
+
 test('TIM enables both layout controls; TG retains its avatar control; classic disables both without hiding saved choices', () => {
   const rows = new Map(['avatarPosition', 'timSenderPosition', 'pinColor'].map(key => {
     const row = { hidden: true, attrs: {}, disabledClass: false, buttons: [{ disabled: false }, { disabled: false }] };
@@ -402,12 +431,14 @@ function groupingHarness(specs) {
   });
   area.querySelectorAll = selector => selector === '.message-container' ? rows :
     rows.map(row => row.avatar).filter(avatar => avatar.dataset.liuliTy !== undefined);
-  const context = { llModeCfg: { chatStyle: 'tim', avatarPosition: 'bottom' }, window: { LiuliQQ: { messageRecord: row => row.record } },
+  const context = { llModeCfg: { chatStyle: 'tim', avatarPosition: 'bottom' }, console: { warn() {} },
+    window: { LiuliQQ: { messageRecord: row => row.record } },
     getComputedStyle: node => ({ display: node.display }),
     document: { querySelectorAll: selector => selector === '.chat-msg-area .message-container' ? rows :
       selector === '.chat-msg-area .avatar-span[data-liuli-ty]' ? area.querySelectorAll('.avatar-span[data-liuli-ty]') : [area] } };
   vm.createContext(context);
-  vm.runInContext(functionSource('groupMessages') + '\n' + functionSource('stickAvatars') +
+  vm.runInContext('let liuliAvatarScrollSync = null;\n' + functionSource('groupMessages') + '\n' +
+    functionSource('stickAvatars') + '\n' + functionSource('stickAvatarsLegacy') +
     ';globalThis.group=groupMessages;globalThis.stick=stickAvatars;', context);
   return { context, rows, group: context.group, stick: context.stick };
 }

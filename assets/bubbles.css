@@ -710,10 +710,10 @@
  * "0px 989px 0px 226px" 把卡片推到最右，头像却留在左边（孤立头像）。
  * 改为：不是自己的行一律按「对方」靠左排。
  * ════════════════════════════════════════════════════════════ */
-.message-container:not(.message-container--self):not(:has(.container--self)) {
+.message-container:not(.message-container--self):not(.message-container--align-right):not(:has(.container--self)) {
   grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-.message-container:not(.message-container--self):not(:has(.container--self))
+.message-container:not(.message-container--self):not(.message-container--align-right):not(:has(.container--self))
   > .message-content__wrapper {
   justify-self: start !important;
 }
@@ -746,7 +746,9 @@
 :scope .message-container:has(.msg-content-container.container--others):not(#ll) {
   grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-:scope .message-container:has(.msg-content-container.container--self):not(#ll) {
+/* Native file/forward cards may have no .msg-content-container. Reserve the
+ * same avatar column even when QQ hides a repeated avatar in those rows. */
+:scope .message-container:is(.message-container--self, .message-container--align-right, :has(.msg-content-container.container--self)):not(#ll) {
   grid-template-columns: 0px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 
@@ -891,10 +893,10 @@
  * 选中的行加一层主色淡底，一眼看出选了哪些。
  * ════════════════════════════════════════════════════════════ */
 :scope .message-container:has(.msg-content-container.container--others):has(.msg-picker):not(#ll),
-:scope .message-container:not(.message-container--self):not(:has(.container--self)):has(.msg-picker):not(#ll) {
+:scope .message-container:not(.message-container--self):not(.message-container--align-right):not(:has(.container--self)):has(.msg-picker):not(#ll) {
   grid-template-columns: 28px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-:scope .message-container:has(.msg-content-container.container--self):has(.msg-picker):not(#ll) {
+:scope .message-container:is(.message-container--self, .message-container--align-right, :has(.msg-content-container.container--self)):has(.msg-picker):not(#ll) {
   grid-template-columns: 28px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 .message-container .msg-picker {
@@ -1006,7 +1008,7 @@ body .message-container .msg-content-container > .user-name .q-tag {
 :scope[data-liuli-chat-style='tim'] .message-container:has(.container--others):not(#ll) {
   grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-:scope[data-liuli-chat-style='tim'] .message-container:has(.container--self):not(#ll) {
+:scope[data-liuli-chat-style='tim'] .message-container:is(.message-container--self, .message-container--align-right, :has(.container--self)):not(#ll) {
   grid-template-columns: 0px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 :scope[data-liuli-chat-style='tim'] .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face):not(.container--personalization):not(#ll) {
@@ -1335,7 +1337,8 @@ body[data-liuli-limit-bubbles] .chat-msg-area .market-face-element img {
   display: block !important;
   width: 100% !important;
   height: 100% !important;
-  object-fit: contain !important;
+  /* Keep QQ's native object-fit: decoded images and thumbnail frames may
+   * have different ratios, even when the frame is below the width limit. */
 }
 /* 语音按原生波形条数和宽度设置计算首选宽度，播放按钮与时长固定。
  * 自己消息的原生 auto 列会按内容收缩，因此给语音单独使用可伸缩内容列。 */

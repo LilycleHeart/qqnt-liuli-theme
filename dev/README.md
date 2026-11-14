@@ -33,6 +33,8 @@ node dev/message-overscan.test.cjs '<依赖目录>/node_modules/@vue/reactivity'
 node dev/forward-card-roles-browser.cjs playwright 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' ./out/forward-cards
 ```
 
+`image-max-width-browser.cjs` 使用脱敏图片检查最大宽度设置：低于上限时实际图片像素保持一致，超过上限时预览框等比缩小并保留 QQ 原生填充方式；覆盖 TG/TIM/原版、自发与他发消息及文本换行。可按上述三个位置参数指定模块、浏览器和输出目录，第四个参数可选传入历史 `bubbles.css` 验证失败基线。
+
 `message-spacing-browser.cjs`、`same-name-switch-browser.cjs`、`same-name-switch-compat-browser.cjs` 和 `self-link-emphasis-browser.cjs` 支持 `LIULI_PLAYWRIGHT_PATH` 环境变量；显式位置参数优先。除兼容脚本 `same-name-switch-compat-browser.cjs` 外，这组脚本还支持 `LIULI_BROWSER_PATH`，未指定浏览器时保留 Windows Edge 默认路径。其他脚本应通过位置参数传值。
 
 ## 历史基线与兼容诊断
