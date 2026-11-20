@@ -18,8 +18,10 @@ const css = styleNames.filter(file => fs.existsSync(path.join(root, 'assets', fi
 const native = read('dev/fixtures/qq-native-message-layout.css');
 const setup = `body{margin:0!important;font:14px sans-serif;--avatar_size_2:32px;--font_size_1:12px;--line_height_1:16px;--font_size_2:14px;--line_height_2:20px;--font_size_3:14px;--font_size_main_2:14px;--line_height_main_2:22px;--ll-acrylic:50,44,29;--ll-on-glass:#eee;--ll-brand:#eec252;--ll-brand-rgb:238,194,82;--ll-message-font-size:14px;--ll-name-font-size:14px;--ll-title-font-size:10px;--ll-bubble-scale:1}.chat-msg-area{width:720px}.avatar-native{width:32px;height:32px;background:#999}.text-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`;
 const runtime = `(()=>{
+  const FILES=${JSON.stringify(styleNames)};
   let llModeCfg={chatStyle:'tim',avatarPosition:'top',timSenderPosition:'outside'};
-  const messages=new WeakMap(),messageSequenceOwners=new WeakMap();
+  let recordReads=0;
+  const messages=new WeakMap(),messageSequenceOwners=new WeakMap(),messageSequenceCaches=new WeakMap();
   ${['visitComponents', 'messageRecord', 'messagePeer', 'loadedMessageSequence'].map(name => helper(qq, name)).join('\n')}
   ${helper(index, 'groupMessages')}
   const area=document.querySelector('.chat-msg-area'),list=document.querySelector('.chat-msg-area__vlist'),inner=document.querySelector('.ml-list');
@@ -33,8 +35,24 @@ const runtime = `(()=>{
     const message=row.querySelector('.message');message._vnode={component:{props:{msgRecord:record},vnode:{el:message},isUnmounted:false}};
     return row;
   });
-  window.LiuliQQ={messageRecord,loadedMessageSequence};
+  window.LiuliQQ={messageRecord(element){recordReads++;return messageRecord(element);},loadedMessageSequence};
   window.mount=(from,to)=>{inner.replaceChildren(...nativeRows.slice(from,to));groupMessages();};
+  window.incrementalUpdate=index=>{recordReads=0;records[index].senderUid='changed-'+index;groupMessages([nativeRows[index]]);const result={recordReads,groups:nativeRows.slice(index-1,index+2).map(row=>row.querySelector('.message-container').dataset.liuliG)};records[index].senderUid='s';groupMessages([nativeRows[index]]);return result;};
+  window.slideWindow=()=>{
+    nativeRows[0].remove();inner.append(nativeRows[6]);recordReads=0;groupMessages([nativeRows[6]]);
+    return {recordReads,groups:[1,5,6].map(i=>nativeRows[i].querySelector('.message-container').dataset.liuliG)};
+  };
+  window.recycleRow=index=>{
+    const row=nativeRows[index],message=row.querySelector('.message'),mc=row.querySelector('.message-container');
+    const component=message._vnode.component;
+    const previous=component.props.msgRecord;
+    row.id='recycled';component.props.msgRecord={...previous,msgId:row.id,senderUid:'another-sender'};
+    recordReads=0;groupMessages([nativeRows[index+1]]);
+    return {recordReads,groups:nativeRows.slice(index-1,index+2).map(node=>node.querySelector('.message-container').dataset.liuliG),
+      sameContainer:mc===row.querySelector('.message-container')};
+  };
+  window.insertBarrier=index=>{const row=document.createElement('div');row.className='ml-item';row.innerHTML='<div class="message"><div class="message-container"></div></div>';nativeRows[index].before(row);groupMessages([row]);return row.isConnected;};
+  window.removeBarrier=()=>{const row=document.querySelector('.ml-item:not([id])'),previous=row.previousElementSibling,next=row.nextElementSibling;row.remove();groupMessages([previous,next]);return [nativeRows[2].querySelector('.message-container').dataset.liuliG,nativeRows[3].querySelector('.message-container').dataset.liuliG];};
   window.measure=id=>{const row=document.getElementById(String(id)),mc=row.querySelector('.message-container');return {height:row.getBoundingClientRect().height,group:mc.dataset.liuliG,avatarGroup:mc.dataset.liuliAvatarG,nameDisplay:getComputedStyle(mc.querySelector('.user-name')).display,original:nativeRows[Number(id)]===row};};
   window.configure=(mode,placement)=>{llModeCfg.chatStyle=mode;llModeCfg.timSenderPosition=placement;document.body.dataset.liuliChatStyle=mode;document.body.dataset.liuliTimSenderPosition=placement;
     for(const row of nativeRows){const name=row.querySelector('.user-name'),mc=row.querySelector('.message-container'),bubble=row.querySelector('.msg-content-container');if(mode==='tg'||placement==='inside')bubble.prepend(name);else mc.insertBefore(name,mc.querySelector('.message-content__wrapper'));}
@@ -70,6 +88,21 @@ const runtime = `(()=>{
       }
       report.cases.push({ mode, placement, samples });
     }
+    await page.evaluate(() => { window.configure('tg','inside');window.mount(0,8); });
+    const incremental = await page.evaluate(() => window.incrementalUpdate(3));
+    assert.deepEqual(incremental.groups,['last','single','first']);
+    assert.equal(incremental.recordReads, 1, 'A local sender update reread unrelated messages');
+    report.cases.push({ incrementalGrouping: incremental });
+    await page.evaluate(() => window.mount(0,6));
+    const slide = await page.evaluate(() => window.slideWindow());
+    assert.deepEqual(slide, { recordReads: 1, groups: ['mid','mid','mid'] });
+    report.cases.push({ virtualWindowSlide: slide });
+    await page.evaluate(() => { window.configure('tim','outside');window.mount(0,8); });
+    const barrier = await page.evaluate(() => window.insertBarrier(3));
+    assert.equal(await page.evaluate(() => window.measure(2).group), 'last');
+    assert.equal(await page.evaluate(() => window.measure(3).group), 'first');
+    assert.equal(barrier, true);
+    assert.deepEqual(await page.evaluate(() => window.removeBarrier()), ['mid','mid']);
     await page.evaluate(() => window.configure('tim', 'outside'));
     for (const barrier of ['delete', 'system', 'unknown', 'peer']) {
       await page.evaluate(barrier => { window.setSource(barrier);window.mount(3, 7); }, barrier);
@@ -79,6 +112,10 @@ const runtime = `(()=>{
       report.cases.push({ barrier, ...sample });
     }
     assert(await page.evaluate(() => window.nativeUnchanged()), 'Native geometry cache was mutated');
+    await page.evaluate(() => { window.setSource('normal');window.mount(0,8); });
+    const recycled = await page.evaluate(() => window.recycleRow(3));
+    assert.deepEqual(recycled, { recordReads: 2, groups: ['last','single','first'], sameContainer: true });
+    report.cases.push({ recycledRow: recycled });
     assert.deepEqual(errors, []);
     await page.screenshot({ path: path.join(output, 'boundary.png') });
     report.passed = true;

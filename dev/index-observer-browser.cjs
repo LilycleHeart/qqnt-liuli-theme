@@ -9,6 +9,8 @@ const root = path.resolve(__dirname, '..');
 const output = path.resolve(process.argv[4] || path.join(root, '../../output/playwright/index-scroll-audit-20261113'));
 fs.mkdirSync(output, { recursive: true });
 const source = fs.readFileSync(path.join(root, 'renderer/index.js'), 'utf8');
+const filesDeclaration = source.slice(source.indexOf('  const FILES = ['), source.indexOf('  const STYLE_ID'));
+assert(filesDeclaration.startsWith('  const FILES = ['), 'Missing renderer stylesheet inventory');
 function cut(start, end) {
   const a = source.indexOf(start), b = source.indexOf(end, a);
   assert(a >= 0 && b > a, start);
@@ -16,7 +18,7 @@ function cut(start, end) {
 }
 const snippets = [
   cut('  const GLASS = [', '  async function loadText('),
-  cut('  function groupMessages() {', '  function stickAvatars() {'),
+  cut('  function groupMessages(', '  function scheduleStick('),
   cut('  function llRecentSpeakers() {', '  /* #32.1b'),
   cut('  var llGM = ', '  var llMsgSeen = '),
   cut('  function llMsgId(el) {', '  let llEnterPeer = '),
@@ -33,6 +35,7 @@ const fixture = `<!doctype html><style>body{color:rgb(33,34,35);--ll-on-glass-2:
     page.on('pageerror', error => errors.push(error.message));
     await page.setContent(fixture);
     await page.addScriptTag({ content: `(() => {
+      ${filesDeclaration}
       const c = window.counts = {};
       const count = (key, n=1) => c[key]=(c[key]||0)+n;
       const gcs = window.getComputedStyle;
@@ -63,9 +66,9 @@ const fixture = `<!doctype html><style>body{color:rgb(33,34,35);--ll-on-glass-2:
       window.__liuliVoiceLayout={refresh:()=>count('voiceRefresh')};
       window.LiuliQQ={messageRecord: element=>{count('messageRecord');const row=element.closest('.ml-item');return {chatType:2,peerUid:'fixture',senderUid:row?.dataset.sender||row?.id,msgTime:1000};}};
       ${snippets}
-      for(const [name, original] of [['normalize',normalizeColors],['group',groupMessages],['members',llGroupMembersPass],['motion',llMotionPass]]) {
+      for(const [name, original] of [['repair',fixContrast],['group',groupMessages],['members',llGroupMembersPass],['motion',llMotionPass]]) {
         const wrapped = (...args) => {count(name);return original(...args);};
-        if(name==='normalize') normalizeColors=wrapped;
+        if(name==='repair') fixContrast=wrapped;
         if(name==='group') groupMessages=wrapped;
         if(name==='members') llGroupMembersPass=wrapped;
         if(name==='motion') llMotionPass=wrapped;
@@ -94,29 +97,38 @@ const fixture = `<!doctype html><style>body{color:rgb(33,34,35);--ll-on-glass-2:
     }
     await testCase('virtual presentation class', () => page.evaluate(() => document.querySelector('#message-inner').classList.add('native-scroll-active')), counts => assert.deepEqual(counts, {}));
     await testCase('actual leaf layout style stays local', () => page.evaluate(() => document.querySelector('.text-element').style.transform='translateY(2px)'), counts => {
-      assert.equal(counts.normalize,1);assert.equal(counts.getComputedStyle,1);assert(!counts.group&&!counts.members&&!counts.motion&&!counts.voiceRefresh);
+      assert.equal(counts.repair,1);assert.equal(counts.getComputedStyle,1);assert(!counts.group&&!counts.members&&!counts.motion&&!counts.voiceRefresh);
     });
     await testCase('nongeometry color remains normalized', () => page.evaluate(() => document.querySelector('.text-element').style.color='rgb(128,128,128)'), async counts => {
-      assert.equal(counts.normalize,1);assert(!counts.group&&!counts.members);
+      assert.equal(counts.repair,1);assert(!counts.group&&!counts.members);
       assert.equal(await page.$eval('.text-element', element => element.style.color), 'var(--ll-on-glass-2)');
     });
+    await testCase('avatar scroll transform does not schedule a message/color flush', () => page.evaluate(() => {
+      document.querySelector('.avatar-span').style.transform='translateY(-8px)';
+    }), counts => assert.deepEqual(counts, {}));
     await testCase('message text update retains full content pass', () => page.evaluate(() => document.querySelector('.text-element').firstChild.data+=' edited'), counts => {
-      assert.equal(counts.group,1);assert.equal(counts.voiceRefresh,1);assert.equal(counts.markdown,1);assert(!counts.members);assert(!counts.syncBubbleWidth);
+      assert.equal(counts.group,1);assert(counts.messageRecord<=5,'A message text update reread records outside the changed row and neighbors: '+JSON.stringify(counts));assert.equal(counts.voiceRefresh,1);assert.equal(counts.markdown,1);assert(!counts.members);assert(!counts.syncBubbleWidth);
     });
     await testCase('virtual message row identity reuse', () => page.evaluate(() => document.querySelector('.ml-item').id='1001'), counts => {
       assert.equal(counts.group,1);assert(!counts.members);
     });
-    await testCase('new message grouping and sender processing before first paint', () => page.evaluate(async html => {
-      document.querySelector('.ml-item:last-child').dataset.sender='same';
+    await testCase('new message layout is deferred to the animation frame', () => page.evaluate(async html => {
+      const previous = document.querySelector('.ml-item:last-child');
+      previous.dataset.sender='same';
+      previous.querySelector('.avatar-span').setAttribute('aria-label','same');
       document.querySelector('#message-inner').insertAdjacentHTML('beforeend',html);
       document.querySelector('.ml-item:last-child').dataset.sender='same';
-      await Promise.resolve();
+      await new Promise(resolve=>queueMicrotask(()=>queueMicrotask(resolve)));
       window.beforePaintCounts={...window.counts};
     }, message(61)), async counts => {
-      assert.equal(counts.group,1);assert.equal(counts.moveSenderIntoBubble,1);assert(!counts.members);
+      assert.equal(counts.group,1);assert.equal(counts.moveSenderIntoBubble,2);assert(!counts.members);
+      assert(counts.messageRecord<=5,'A newly mounted row reread records outside its affected neighborhood');
       assert(!counts.syncBubbleWidth);
       const early=await page.evaluate(()=>window.beforePaintCounts);
-      assert.equal(early.group,1);assert.equal(early.moveSenderIntoBubble,1);assert(!early.markdown);
+      assert(!early.group,'Message grouping must wait for the scheduled animation frame');
+      assert(!early.moveSenderIntoBubble,'Sender layout must wait for the scheduled animation frame');
+      assert(!early.syncPictureRatios,'Picture sizing must wait for the scheduled animation frame');
+      assert(!early.markdown);
       assert.deepEqual(await page.$$eval('#message-inner > .ml-item:nth-last-child(-n+2) .message-container', nodes => nodes.map(node=>node.dataset.liuliG)), ['first','last']);
     });
     await testCase('message speakers update indexed member rows', () => page.evaluate(() => document.querySelector('.ml-item:last-child .avatar-span').setAttribute('aria-label','name100')), async counts => {
@@ -172,7 +184,7 @@ const fixture = `<!doctype html><style>body{color:rgb(33,34,35);--ll-on-glass-2:
       assert.equal(counts.group,1);assert.equal(counts.markdown,1);assert(!counts.members);
     });
     await testCase('scope refresh retains colors and member rebuild', () => page.evaluate(() => window.dispatchEvent(new Event('liuli-scope'))), counts => {
-      assert.equal(counts.normalize,1);assert.equal(counts.group,1);assert.equal(counts.members,1);
+      assert.equal(counts.repair,1);assert.equal(counts.group,1);assert.equal(counts.members,1);
     });
     await testCase('scroll time glyphs are excluded', () => page.evaluate(() => {
       const pill=document.createElement('div');pill.id='liuli-scroll-time';pill.innerHTML='<span>12:00</span>';
@@ -195,13 +207,15 @@ const fixture = `<!doctype html><style>body{color:rgb(33,34,35);--ll-on-glass-2:
       assert.deepEqual(await page.evaluate(()=>({mutation:activeObservers.mutation.size,resize:activeObservers.resize.size})),{mutation:1,resize:1});
     });
     assert.deepEqual(errors,[]);
-    const early=await browser.newPage();
-    await early.setContent('<div class="chat-msg-area"><span class="avatar-span" data-liuli-ty="-20" style="transform:translateY(-20px)"></span><div class="pic-element" style="width:300px;height:200px"></div></div>');
-    function helper(name) { const start=source.indexOf('  function '+name+'('),end=source.indexOf('\n  }',start);return source.slice(start,end+4); }
-    await early.addScriptTag({content:`(()=>{const llModeCfg={chatStyle:'tim',avatarPosition:'top',bubbleMaxWidth:40};let liuliStickRaf=0;window.geometryReads=0;window.scheduled=0;Element.prototype.getBoundingClientRect=function(){geometryReads++;throw Error('Unexpected geometry read')};Object.defineProperty(HTMLElement.prototype,'clientWidth',{configurable:true,get(){geometryReads++;throw Error('Unexpected width read')}});window.requestAnimationFrame=()=>{scheduled++;return 1};${['stickAvatars','scheduleStick','syncPictureRatios'].map(helper).join('\n')}window.topStick=()=>{stickAvatars();scheduleStick();};window.classicStick=()=>{llModeCfg.chatStyle='classic';llModeCfg.avatarPosition='bottom';stickAvatars();scheduleStick();};window.ratio=()=>syncPictureRatios(document.querySelector('.chat-msg-area'));})();`});
-    await early.evaluate(()=>{topStick();classicStick();ratio();});
-    assert.deepEqual(await early.evaluate(()=>({geometry:geometryReads,scheduled,offset:document.querySelector('.avatar-span').style.transform,ratio:document.querySelector('.pic-element').style.getPropertyValue('--ll-picture-ratio')})),{geometry:0,scheduled:0,offset:'',ratio:'1.5'});
-    report.cases.push({name:'Top/classic avatar cleanup and new picture ratio need no geometry reads or animation frames'});
+    const early = await browser.newPage();
+    await early.setContent('<div class="chat-msg-area"><div class="pic-element" style="width:300px;height:200px"></div></div>');
+    const ratioSource = cut('  function syncPictureRatios(', '\n  }') + '\n  }';
+    await early.addScriptTag({ content: `(()=>{const llModeCfg = { bubbleMaxWidth: 40 };${ratioSource}
+      Element.prototype.getBoundingClientRect = () => { throw Error('Unexpected geometry read'); };
+      syncPictureRatios(document.querySelector('.chat-msg-area'));
+    })();` });
+    assert.equal(await early.locator('.pic-element').evaluate(el => el.style.getPropertyValue('--ll-picture-ratio')), '1.5');
+    report.cases.push({ name: 'New picture ratio needs no geometry reads' });
     await early.close();
     report.passed=true;
   } catch(error) {report.error=error.stack;process.exitCode=1;}

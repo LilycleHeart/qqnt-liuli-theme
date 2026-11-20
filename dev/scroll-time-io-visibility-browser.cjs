@@ -11,7 +11,7 @@ fs.mkdirSync(output, { recursive: true });
 const before = fs.readFileSync(path.join(evidence, 'scroll-time-io-visibility.js.before'), 'utf8');
 const source = fs.readFileSync(path.join(root, 'renderer/scroll-time.js'), 'utf8');
 const timestamps = [1700000000, 1700003600];
-const fixture = `<!doctype html><style>body{margin:0}.chat-msg-area{width:400px;height:240px}.q-scroll-view{height:240px;overflow:auto}.message{height:100px}.hidden{visibility:hidden}</style><div class="chat-msg-area"><div class="chat-msg-area__vlist"><div class="q-scroll-view"><div class="message" data-time="${timestamps[0]}"><div class="msg-content-container">First</div></div><div class="message" id="bottom" data-time="${timestamps[1]}" style="opacity:0"><div class="msg-content-container">Bottom</div></div></div></div></div>`;
+const fixture = `<!doctype html><style>body{margin:0}.chat-msg-area{width:400px;height:240px}.q-scroll-view{height:240px;overflow:auto}.message{height:100px}.hidden{visibility:hidden}</style><div class="chat-msg-area"><div class="chat-msg-area__vlist"><div class="q-scroll-view"><div class="message" data-time="${timestamps[0]}"><span class="avatar-span"></span><div class="msg-content-container">First</div></div><div class="message" id="bottom" data-time="${timestamps[1]}" style="opacity:0"><div class="msg-content-container">Bottom</div></div></div></div></div>`;
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { executablePath: process.argv[3] } : {}) });
@@ -23,9 +23,11 @@ const fixture = `<!doctype html><style>body{margin:0}.chat-msg-area{width:400px;
       await page.setContent(fixture);
       await page.evaluate(() => {
         window.deliveries = [];
+        window.intersectionThresholds = [];
         const IO = IntersectionObserver;
         window.IntersectionObserver = class extends IO {
           constructor(callback, options) {
+            intersectionThresholds.push(options.threshold);
             super(entries => { deliveries.push(entries.map(entry => ({ id: entry.target.id,
               opacity: getComputedStyle(entry.target).opacity, intersecting: entry.isIntersecting }))); callback(entries); }, options);
           }
@@ -34,6 +36,7 @@ const fixture = `<!doctype html><style>body{margin:0}.chat-msg-area{width:400px;
         window.scroll = () => document.querySelector('.q-scroll-view').dispatchEvent(new Event('scroll'));
       });
       await page.addScriptTag({ content: script });
+      await page.evaluate(() => window.LiuliScrollTime?.setEnabled(true));
       await page.waitForFunction(() => deliveries.some(batch => batch.some(entry => entry.id === 'bottom' && entry.opacity === '0')));
       await page.evaluate(() => { document.querySelector('#bottom').style.opacity = '1'; scroll(); });
       await page.waitForFunction(() => !!document.querySelector('#liuli-scroll-time')?.dataset.time);
@@ -42,6 +45,12 @@ const fixture = `<!doctype html><style>body{margin:0}.chat-msg-area{width:400px;
       report[mode] = { actual, deliveries: await page.evaluate(() => deliveries) };
       if (mode === 'before') report.cases.push('Negative control caches the initially transparent bottom row as invisible and incorrectly selects the preceding time');
       else {
+        assert.deepEqual(await page.evaluate(() => intersectionThresholds.at(-1)), [0, 0.001]);
+        await page.evaluate(() => { deliveries.length = 0; document.querySelector('.avatar-span').style.transform = 'translateY(-8px)'; });
+        await page.waitForTimeout(50);
+        assert.equal(await page.evaluate(() => deliveries.length), 0,
+          'Avatar transform changes must not reobserve message rows');
+        report.cases.push('Avatar transform changes cause no row re-observation, and IO uses only visibility-relevant thresholds');
         report.cases.push('An opacity-zero first IO snapshot still selects the true bottom message after its entry becomes visible');
         await page.evaluate(() => { document.querySelector('#bottom').style.visibility = 'hidden'; scroll(); });
         await page.waitForFunction(expected => document.querySelector('#liuli-scroll-time')?.dataset.time === expected, formatDate(new Date(timestamps[0] * 1000)));
@@ -75,6 +84,7 @@ const fixture = `<!doctype html><style>body{margin:0}.chat-msg-area{width:400px;
       window.LiuliQQ = { messageRecord: row => row ? { msgTime: row.dataset.time, chatType: 2, peerUid: 'one' } : null };
     });
     await animated.addScriptTag({ content: source });
+    await animated.evaluate(() => window.LiuliScrollTime?.setEnabled(true));
     await animated.waitForFunction(() => bottomDeliveries > 0);
     await animated.waitForTimeout(350);
     await animated.evaluate(() => document.querySelector('.q-scroll-view').dispatchEvent(new Event('scroll')));

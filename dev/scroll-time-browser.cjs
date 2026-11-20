@@ -7,7 +7,7 @@ const { chromium } = require(process.argv[2] || 'playwright');
 const { formatDate } = require('../renderer/scroll-time.js');
 const script = fs.readFileSync(path.join(__dirname, '../renderer/scroll-time.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '../assets/scroll-time.css'), 'utf8');
-const artifactDir = path.resolve(__dirname, '../../../output/playwright/scroll-time');
+const artifactDir = path.resolve(process.argv[4] || path.join(__dirname, '../../../output/playwright/scroll-time'));
 fs.mkdirSync(artifactDir, { recursive: true });
 
 (async () => {
@@ -39,23 +39,48 @@ fs.mkdirSync(artifactDir, { recursive: true });
       } };
     });
     await page.addScriptTag({ content: script });
-    await page.waitForFunction(() => !!window.__liuliScrollTime);
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await page.locator('#liuli-scroll-time').count(), 0);
+    assert.equal(await page.evaluate(() => typeof window.__liuliScrollTime), 'undefined', 'Default-off must not install an observer');
     const scroll = value => page.evaluate(top => { const scroller = document.querySelector('.q-scroll-view'); scroller.scrollTop = top; scroller.dispatchEvent(new Event('scroll')); }, value);
     const label = '#liuli-scroll-time';
-    await scroll(50);
+    await scroll(25);
+    await page.waitForTimeout(420);
+    assert.equal(await page.locator(label).count(), 0);
+    assert.equal(await page.evaluate(() => window.readCount), 0);
+    await page.evaluate(() => window.LiuliScrollTime.setEnabled(true));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const initialReads = await page.evaluate(() => window.readCount);
+    const duringBurst = await page.evaluate(async () => {
+      const scroller = document.querySelector('.q-scroll-view');
+      const samples = [];
+      for (let i = 1; i <= 10; i++) {
+        scroller.scrollTop = i * 5;
+        scroller.dispatchEvent(new Event('scroll'));
+        await new Promise(resolve => setTimeout(resolve, 35));
+        samples.push({ reads: window.readCount, hasPill: !!document.querySelector('#liuli-scroll-time') });
+      }
+      return samples;
+    });
+    assert(duringBurst.every(sample => sample.reads === initialReads && !sample.hasPill),
+      'A continuous burst longer than the settle window must not read or display any timestamp');
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => window.readCount), initialReads, 'No read 235 ms after the final scroll');
     await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.classList.contains('is-active'));
+    assert.equal(await page.evaluate(() => window.readCount), initialReads + 1, 'One timestamp read after the burst');
     assert.equal(await page.locator(label).textContent(), formatDate(new Date(timestamps[2] * 1000)));
     assert.equal(await page.locator(label).evaluate(el => getComputedStyle(el).pointerEvents), 'none');
     await scroll(200);
+    assert.equal(await page.locator(label).textContent(), formatDate(new Date(timestamps[2] * 1000)), 'Hold the previous label while scrolling');
     await page.waitForFunction(expected => document.querySelector('#liuli-scroll-time')?.textContent === expected, formatDate(new Date(timestamps[4] * 1000)));
     await page.screenshot({ path: path.join(artifactDir, 'active-cross-day.png') });
     // Vue virtual rows can change their record without replacing the DOM node.
+    const beforeReuse = await page.evaluate(() => window.readCount);
     const reusedTime = timestamps[4] - 86400;
     await page.evaluate(time => { const row = document.querySelector('[data-row="4"]'); row.dataset.time = time; row.id = 'reused'; }, reusedTime);
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.readCount), beforeReuse, 'Row churn alone must not resample a settled scroll');
+    await scroll(201);
     await page.waitForFunction(expected => document.querySelector('#liuli-scroll-time')?.textContent === expected, formatDate(new Date(reusedTime * 1000)));
-    await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.textContent === '', { timeout: 3000 });
+    await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.textContent === '', null, { timeout: 3000 });
     const reads = await page.evaluate(() => window.readCount);
     await page.waitForTimeout(150);
     assert.equal(await page.evaluate(() => window.readCount), reads);
@@ -63,12 +88,19 @@ fs.mkdirSync(artifactDir, { recursive: true });
     // A chat selection immediately removes the outgoing chat's text.
     await scroll(100);
     await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.classList.contains('is-active'));
-    await page.locator('.recent-contact').dispatchEvent('pointerdown');
+    const beforeSwitch = await page.evaluate(() => {
+      const scroller = document.querySelector('.q-scroll-view');
+      scroller.dispatchEvent(new Event('scroll'));
+      document.querySelector('.recent-contact').dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      return window.readCount;
+    });
     assert.equal(await page.locator(label).textContent(), '');
+    await page.waitForTimeout(420);
+    assert.equal(await page.evaluate(() => window.readCount), beforeSwitch, 'Switch cancels a pending scroll update');
     // A same-DOM keyboard/programmatic peer change is rejected on first sample.
     await page.evaluate(() => document.querySelectorAll('.message:not(.old)').forEach(row => row.dataset.peer = 'two'));
     await scroll(150);
-    await page.waitForTimeout(80);
+    await page.waitForFunction(previous => window.readCount > previous, beforeSwitch);
     assert.equal(await page.locator(label).textContent(), '');
     await scroll(160);
     await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.classList.contains('is-active'));
@@ -82,7 +114,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.textContent === '2025年11月11日 23:16');
     const native = page.locator('[data-row="4"] .message__timestamp');
     assert.equal(await native.count(), 1);
-    assert.equal(await native.evaluate(el => getComputedStyle(el).display), 'none');
+    assert.equal(await native.evaluate(el => getComputedStyle(el).visibility), 'hidden');
+    assert(await native.evaluate(el => el.getBoundingClientRect().height > 0), 'Hidden native timestamps retain their virtual-list height');
     assert.equal(await native.locator('.babble').textContent(), '2025年11月11日 23:16');
     assert.equal(await page.locator(label).getAttribute('aria-hidden'), 'false');
     await page.screenshot({ path: path.join(artifactDir, 'native-hidden-fallback.png') });
@@ -94,21 +127,29 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForTimeout(50);
     await scroll(220);
     await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.classList.contains('is-active'));
-    // Reinjection disposes the old controller and overlay, with one new listener.
+    // Reinjection disposes the old controller and overlay.
     await page.addScriptTag({ content: script });
+    await page.evaluate(() => window.LiuliScrollTime.setEnabled(true));
     assert.equal(await page.locator(label).count(), 0);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await scroll(230);
     await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.classList.contains('is-active'));
     assert.equal(await page.locator(label).count(), 1);
-    await page.evaluate(() => window.__liuliScrollTime.dispose());
     await scroll(240);
-    await page.waitForTimeout(50);
+    const readsBeforeDisable = await page.evaluate(() => {
+      window.LiuliScrollTime.setEnabled(false);
+      return window.readCount;
+    });
+    assert.equal(await native.evaluate(el => getComputedStyle(el).visibility), 'visible');
+    await scroll(260);
+    await page.waitForTimeout(420);
+    assert.equal(await page.evaluate(() => window.readCount), readsBeforeDisable);
     assert.equal(await page.locator(label).count(), 0);
     assert.equal(await page.evaluate(() => typeof window.__liuliScrollTime), 'undefined');
-    console.log('PASS local Edge: bottom visible row, old virtual rows excluded, live reused msgTime, cross-day, idle/no polling, chat switch, native timestamp hidden with readable fallback, reduced motion, hidden/reinject/dispose');
-    const report = { passed: true, checks: ['bottom-visible-row', 'exclude-old-virtual-rows', 'reused-msgTime',
-      'cross-day-date', 'scroll-idle', 'no-idle-polling', 'chat-switch', 'native-timestamp-hidden',
+    console.log('PASS local Chromium: zero reads during scroll, one read on settle, virtual row reuse, chat switch cancellation, native fallback, idle, reduced motion, hidden/reinject/dispose');
+    const report = { passed: true, checks: ['no-reads-during-scroll-burst', 'one-read-on-settle', 'hold-label-while-scrolling',
+      'cancel-pending-refresh-on-chat-switch', 'bottom-visible-row', 'exclude-old-virtual-rows', 'reused-msgTime',
+      'cross-day-date', 'scroll-idle', 'no-idle-polling', 'chat-switch', 'native-timestamp-height-preserved',
       'native-fallback-readable', 'reduced-motion', 'hidden-cleanup', 'reinjection', 'dispose'],
       sha256: Object.fromEntries(['renderer/scroll-time.js', 'assets/scroll-time.css'].map(file => [file,
         require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', file))).digest('hex')])) };

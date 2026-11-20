@@ -4,8 +4,8 @@ const path = require('node:path');
 const SCRIPTS = [
   'renderer/host.js',
   'renderer/qq.js',
-  'renderer/message-overscan.js',
   'renderer/scroll-time.js',
+  'renderer/avatar-compact.js',
   'renderer/voice-layout.js',
   'assets/mcu.js',
   'renderer/color-roles.js',

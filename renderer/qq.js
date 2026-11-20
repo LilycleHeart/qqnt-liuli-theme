@@ -2,6 +2,7 @@
   window.__liuliSidebarShortcuts?.dispose();
   const messages = new WeakMap();
   const messageSequenceOwners = new WeakMap();
+  const messageSequenceCaches = new WeakMap();
   let profileStore;
 
   // QQ's production Vue roots expose vnodes, but not LiteLoader's __VUE__ field.
@@ -70,7 +71,12 @@
       if (!owner) return null;
       messageSequenceOwners.set(list, owner);
     }
-    const entries = arrayOf(owner).map(item => {
+    const source = arrayOf(owner);
+    const cached = messageSequenceCaches.get(list);
+    if (cached && cached.owner === owner && cached.source === source &&
+        cached.length === source.length && cached.first === source[0] && cached.last === source[source.length - 1])
+      return cached.sequence;
+    const entries = source.map(item => {
       const id = item?.msgId == null ? String(item?.id || '') : String(item.msgId);
       const record = item?.data;
       // Keep malformed/system placeholders in position as barriers. Filtering
@@ -82,7 +88,7 @@
       const id = entries[i].id;
       if (id) indices.set(id, indices.has(id) ? -1 : i);
     }
-    return { entries, neighbors(record) {
+    const sequence = { entries, neighbors(record) {
       const id = record?.msgId == null ? '' : String(record.msgId);
       const index = indices.get(id);
       if (index == null || index < 0) return null;
@@ -92,6 +98,9 @@
         String(current.senderUid || current.senderUin || '') !== String(record.senderUid || record.senderUin || '')))) return null;
       return { previous: entries[index - 1]?.record || null, next: entries[index + 1]?.record || null };
     } };
+    messageSequenceCaches.set(list, { owner, source, length: source.length,
+      first: source[0], last: source[source.length - 1], sequence });
+    return sequence;
   }
 
   function selfUid() {

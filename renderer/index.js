@@ -42,6 +42,7 @@
     'lists.css',
     'motion.css',
     'scroll-time.css',
+    'avatar-compact.css',
     'markdown.css',
     'layout-custom.css',
     'integration.css',
@@ -405,9 +406,6 @@
       return true;
     });
   }
-  function normalizeColors(root = document.body) {
-    messageColorRepair().repair([root]);
-  }
   const DIM_COLORS = new Set(['rgb(128, 128, 128)', 'rgb(102, 102, 102)', 'rgb(153, 153, 153)']);
   const TEXT_SELECTORS = [
     '.text-ellipsis',
@@ -616,6 +614,7 @@
     pinColor: false,
     pinCollapsed: false,
     hideImageNames: false,
+    scrollTime: false,
     hideEmptyLogo: true,
     chatStyle: 'tg',
     avatarPosition: 'bottom',
@@ -638,6 +637,7 @@
     const cfg = Object.assign({}, DEFAULT_SETTINGS, raw || {});
     cfg.chatStyle = ['tg', 'classic', 'tim'].includes(cfg.chatStyle) ? cfg.chatStyle : 'tg';
     cfg.avatarPosition = cfg.avatarPosition === 'top' ? 'top' : 'bottom';
+    cfg.scrollTime = cfg.scrollTime === true;
     cfg.timSenderPosition = cfg.timSenderPosition === 'inside' ? 'inside' : 'outside';
     cfg.colorSource = cfg.colorSource === 'custom' ? 'custom' : 'wallpaper';
     cfg.customColor = llNormalizeColorSeed(cfg.customColor) || DEFAULT_SOURCE;
@@ -836,7 +836,7 @@
     llModeCfg = llNormalizeSettings(cfg);
     const paletteChanged = previous.colorSource !== llModeCfg.colorSource ||
       previous.customColor !== llModeCfg.customColor;
-    const reflowMessages = !llSettingsApplied || ['chatStyle', 'avatarPosition', 'timSenderPosition', 'hideImageNames']
+    const reflowMessages = !llSettingsApplied || ['chatStyle', 'avatarPosition', 'timSenderPosition', 'hideImageNames', 'scrollTime']
       .some(key => previous[key] !== llModeCfg[key]);
     llSettingsApplied = true;
     window.__liuliSettingsCache = llModeCfg;
@@ -852,6 +852,7 @@
     b.dataset.liuliChatStyle = llModeCfg.chatStyle;
     b.dataset.liuliAvatarPosition = llModeCfg.avatarPosition;
     b.dataset.liuliTimSenderPosition = llModeCfg.timSenderPosition;
+    window.LiuliScrollTime?.setEnabled(llModeCfg.scrollTime);
     b.style.setProperty('--ll-message-font-size', llModeCfg.messageFontSize + 'px');
     b.style.setProperty('--ll-name-font-size', llModeCfg.nameFontSize + 'px');
     b.style.setProperty('--ll-title-font-size', llModeCfg.titleFontSize + 'px');
@@ -865,7 +866,10 @@
     if (reflowMessages) {
       moveSenderIntoBubble(document);
       groupMessages();
-      scheduleStick();
+    }
+    if (reflowMessages || ['messageFontSize', 'nameFontSize', 'titleFontSize', 'bubbleScale', 'bubbleMaxWidth',
+      'showMessageTitles', 'showMessageIdentity', 'truncateMessageNames'].some(key => previous[key] !== llModeCfg[key])) {
+      scheduleStick(true);
     }
     if (broadcast !== false && !llSuppressBroadcast) {
       try {
@@ -1334,22 +1338,27 @@
       }
     } catch (e) {}
   }
-  function groupMessages() {
+  function groupMessages(roots) {
     try {
       var list = document.querySelectorAll('.chat-msg-area .message-container');
       if (list.length === 0) return;
-      var records = new WeakMap();
+      // Reuse row classification, not adjacency: virtual windows and native
+      // history boundaries can change even when most mounted rows do not.
+      const rowCache = groupMessages.rowCache ??= new WeakMap();
+      const dirty = new Set();
+      const mode = llModeCfg.chatStyle;
+      for (const root of roots || []) {
+        const container = root.closest?.('.message-container');
+        if (container) dirty.add(container);
+        else for (const row of root.querySelectorAll('.message-container')) dirty.add(row);
+      }
+      const rows = new WeakMap();
       var sequences = new Map();
       var visibleRecords = new Map();
       function recordOf(mc) {
-        if (records.has(mc)) return records.get(mc);
-        var record = null;
-        try { record = window.LiuliQQ?.messageRecord(mc) || null; } catch (e) {}
-        records.set(mc, record);
-        return record;
+        return rows.get(mc)?.record || null;
       }
-      function keyOf(mc) {
-        var record = recordOf(mc);
+      function keyOf(mc, record) {
         var sender = record && (record.senderUid || record.senderUin);
         if (sender) return [record.chatType, record.peerUid || record.peerUin, sender].join(':');
         var av = mc.querySelector(':scope > .avatar-span');
@@ -1369,10 +1378,10 @@
         // Never skip hidden system/revoke rows or virtual-list placeholders.
         if (!row.matches('.ml-item')) return false;
         var stamps = row.querySelectorAll('.message__timestamp');
-        // scroll-time.css hides native timestamps. An explicit visible inline
-        // override remains a boundary; normal grouping never forces a layout
-        // just to reread our own stylesheet's display:none.
-        if (stamps.length !== 1 || (stamps[0].style?.display && stamps[0].style.display !== 'none')) return false;
+        // A native divider is a boundary unless the time prompt hides it.
+        // Avoid a computed-style read for each adjacency check.
+        if (!llModeCfg.scrollTime || (typeof FILES !== 'undefined' && !FILES.includes('scroll-time.css')) || stamps.length !== 1 ||
+            (stamps[0].style?.display && stamps[0].style.display !== 'none')) return false;
         function onlyTimestamp(node) {
           if (node === stamps[0] || node.nodeType === 8) return true;
           if (node.nodeType === 3) return !node.textContent.trim();
@@ -1396,16 +1405,14 @@
         }
         return true;
       }
-      var keys = [];
-      var groupable = [];
-      var timTextRows = [];
-      for (var i = 0; i < list.length; i++) {
-        keys.push(keyOf(list[i]));
+      function classifyRow(mc, area, wrapper) {
+        let record = null;
+        try { record = window.LiuliQQ?.messageRecord(mc) || null; } catch (e) {}
         // TIM connects text corners only. Native media/voice/card shapes stay
         // independent; avatar/sender groups are resolved separately below.
         var timText = false;
-        if (llModeCfg.chatStyle === 'tim') {
-          var bubble = list[i].querySelector('.msg-content-container');
+        if (mode === 'tim') {
+          var bubble = mc.querySelector('.msg-content-container');
           var content = bubble && bubble.querySelector(':scope > .message-content');
           // Native inline QQ faces can be direct children of message-content,
           // with no text-element or textContent. They share text-bubble shape;
@@ -1416,25 +1423,37 @@
             !bubble.matches('.container--personalization, .ptt-message__container, .mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face, .ark-msg-content-container, [data-liuli-image-only], [data-liuli-video-only]') &&
             !content.querySelector('.ark-view-message, .forward-msg, .file-element, .pic-element, .market-face-element, .video-element, [class*="lottie"]');
         }
-        // CSS consumes the same eligibility result instead of independently
-        // guessing from .message-content, which QQ also uses for stickers.
-        timTextRows.push(!!timText);
-        groupable.push(llModeCfg.chatStyle === 'tg' || (llModeCfg.chatStyle === 'tim' && !!timText));
-        var area = list[i].closest('.chat-msg-area');
-        var record = recordOf(list[i]);
+        return { key: keyOf(mc, record), record, timText: !!timText, area, wrapper, rowId: wrapper?.id, mode };
+      }
+      var keys = [];
+      var groupable = [];
+      var timTextRows = [];
+      for (var i = 0; i < list.length; i++) {
+        const mc = list[i], area = mc.closest('.chat-msg-area'), wrapper = mc.closest('.ml-item');
+        let row = rowCache.get(mc);
+        if (!roots?.length || dirty.has(mc) || !row?.record || row.mode !== mode ||
+            row.area !== area || row.wrapper !== wrapper || row.rowId !== wrapper?.id) {
+          row = classifyRow(mc, area, wrapper);
+          rowCache.set(mc, row);
+        }
+        rows.set(mc, row);
+        keys.push(row.key);
+        timTextRows.push(row.timText);
+        groupable.push(mode === 'tg' || row.timText);
+        const record = row.record;
         if (!visibleRecords.has(area)) visibleRecords.set(area, new Map());
         if (record?.msgId != null) visibleRecords.get(area).set(String(record.msgId), i);
-        if (!sequences.has(area) && ['tg', 'tim'].includes(llModeCfg.chatStyle)) {
+        if (!sequences.has(area) && (mode === 'tg' || mode === 'tim')) {
           var sequence = null;
           try { sequence = window.LiuliQQ?.loadedMessageSequence?.(area) || null; } catch (e) {}
           sequences.set(area, sequence);
         }
       }
       function nativeBoundary(index, direction, shape) {
-        var mc = list[index], area = mc.closest('.chat-msg-area');
-        var sequence = sequences.get(area), current = recordOf(mc);
+        var mc = list[index], info = rows.get(mc), area = info.area;
+        var sequence = sequences.get(area), current = info.record;
         if (!sequence || !current) return false;
-        var row = mc.closest('.ml-item');
+        var row = info.wrapper;
         if (!row) return false;
         var sibling = direction === 'previous' ? row.previousElementSibling : row.nextElementSibling;
         while (sibling && hiddenTimestampRow(sibling))
@@ -1499,278 +1518,8 @@
       }
     } catch (e) {}
   }
-  // Keep QQ's original avatar node and let CSS sticky follow compositor scrolling.
-  var liuliAvatarScrollSync = null;
-  function createAvatarScrollSync() {
-    let area = null, scroller = null, observed = new Set(), pendingGeometry = false, geometryRevision = 0;
-    const sizes = new WeakMap(), nodeIds = new WeakMap();
-    let nextNodeId = 0;
-    const nodeId = node => { if(!nodeIds.has(node))nodeIds.set(node,++nextNodeId);return nodeIds.get(node) };
-    const states = new Map(), lists = new Set();
-    const stats = { refreshes:0, writes:0, scrollEvents:0, cleared:0, measuredGroups:0, cachedGroups:0 };
-    const style = document.createElement('style');
-    style.id = 'liuli-avatar-scroll-sync';
-    style.textContent = `
-      .chat-msg-area .ml-list[data-liuli-sticky-list] { overflow: clip !important; }
-      .chat-msg-area .message-container[data-liuli-sticky-host] { position: relative !important; }
-      .chat-msg-area .message-container[data-liuli-sticky-host]::after {
-        content:''; grid-area:avatar; width:var(--ll-avatar-column-width,32px); height:0;
-        visibility:hidden; pointer-events:none;
-      }
-      .chat-msg-area .message-container[data-liuli-sticky-host] > .avatar-span[data-liuli-sticky] {
-        position:absolute!important; grid-column:avatar!important; grid-row:auto!important;
-        top:var(--ll-avatar-track-top)!important; left:0!important;
-        width:var(--ll-avatar-track-width)!important; height:var(--ll-avatar-track-height)!important;
-        right:auto!important; bottom:auto!important; margin:0!important; padding:0!important;
-        min-height:0!important; max-height:none!important;
-        display:flex!important; flex-direction:column!important; justify-content:flex-end!important;
-        align-self:auto!important; transform:none!important; will-change:auto!important;
-        overflow:visible!important; pointer-events:none!important;
-      }
-      .chat-msg-area .avatar-span[data-liuli-sticky] > .message-container__avatar {
-        position:sticky!important; bottom:4px!important; top:auto!important;
-        flex:none!important; margin-top:auto!important; pointer-events:auto!important;
-      }
-      .chat-msg-area .message-container[data-liuli-sticky-host]:is(.message-container--self,.message-container--align-right,:has(.msg-content-container.container--self)) > .avatar-span[data-liuli-sticky] {
-        left:auto!important; right:0!important;
-      }
-      .chat-msg-area .message-container--selection-mod .avatar-span[data-liuli-sticky] > .message-container__avatar {
-        pointer-events:none!important;
-      }`;
-    document.head.append(style);
-    const animationWatches = new WeakSet();
-    const resize = new ResizeObserver(entries => {
-      pendingGeometry=false;
-      for(const entry of entries){
-        const box=entry.borderBoxSize?.[0],width=box?.inlineSize??entry.contentRect.width,height=box?.blockSize??entry.contentRect.height;
-        const old=sizes.get(entry.target);
-        if(old&&(Math.abs(old.width-width)>.05||Math.abs(old.height-height)>.05))geometryRevision++;
-        sizes.set(entry.target,{width,height});
-      }
-      if (!document.hidden) measure();
-    });
-    const mutation = new MutationObserver(records => {
-      if (!records.length) return;
-      // Internal content changes can move a bubble without resizing its row.
-      // A virtual window change is handled by each group's complete row key.
-      if(document.hidden || records.some(r=>r.type==='childList'&&r.target.closest?.('.message-container')))geometryRevision++;
-      if (document.hidden) return;
-      // New/recycled rows and changed group boundaries must acquire their
-      // track before paint. Ordinary size changes use delivered ResizeObserver
-      // layout, and virtual projection/decoration styles need no measurement.
-      refresh(false);
-      if(area?.isConnected&&scroller?.isConnected)measure();
-    });
-    function reset(avatar, state) {
-      avatar.removeAttribute('data-liuli-sticky');
-      for (const name of ['top','width','height']) avatar.style.removeProperty('--ll-avatar-track-'+name);
-      state.mc.removeAttribute('data-liuli-sticky-host');
-      state.mc.style.removeProperty('--ll-avatar-column-width');
-      states.delete(avatar); stats.cleared++;
-    }
-    function clear() {
-      mutation.disconnect(); resize.disconnect(); observed.clear();
-      for (const [avatar,state] of states) reset(avatar,state);
-      for (const list of lists) list.removeAttribute('data-liuli-sticky-list');
-      lists.clear(); area = scroller = null; pendingGeometry=false;
-    }
-    function refresh(invalidate = true) {
-      // Explicit theme layout/settings/load passes may change only an inset
-      // (for example a sender row); ResizeObserver cannot see that movement.
-      if(invalidate)geometryRevision++;
-      if (llModeCfg.avatarPosition === 'top' || !['tg','tim'].includes(llModeCfg.chatStyle)) {
-        clear();
-        for (const avatar of document.querySelectorAll('.chat-msg-area .avatar-span[data-liuli-ty]')) {
-          delete avatar.dataset.liuliTy; avatar.style.transform = '';
-        }
-        return;
-      }
-      const next = document.querySelector('.chat-msg-area');
-      const nextScroller = next?.querySelector('#ml-root');
-      if (next !== area || nextScroller !== scroller) {
-        clear(); area = next; scroller = nextScroller;
-        if (!area || !scroller) return;
-        mutation.observe(area,{subtree:true,childList:true,attributes:true,
-          attributeFilter:['id','data-liuli-g','data-liuli-avatar-g']});
-      }
-      if (!area || !scroller) return;
-      // Re-observing requests one callback after browser layout, even when the
-      // group changed without a size change. New group structure is also
-      // measured before paint; pure scroll does not request this work.
-      if(!pendingGeometry){pendingGeometry=true;resize.unobserve(area);resize.observe(area)}
-    }
-    function measure() {
-      stats.refreshes++;
-      if(!area?.isConnected||!scroller?.isConnected){refresh();return}
-      const key = llModeCfg.chatStyle === 'tim' ? 'liuliAvatarG' : 'liuliG';
-      const writes = [], live = new Set(), geometry = new Set([area,scroller]);
-      let firstBubble = null, firstId = null, memberKeys = [];
-      for (const mc of area.querySelectorAll('.message-container')) {
-        const g=mc.dataset[key], bubble=mc.querySelector(':scope > .message-content__wrapper')||mc.querySelector('.msg-content-container');
-        if (!bubble) continue;
-        geometry.add(bubble);
-        for(const animation of bubble.getAnimations())if(!animationWatches.has(animation)){
-          animationWatches.add(animation);
-          const finished=()=>{if(area&&bubble.isConnected){geometryRevision++;scheduleStick()}};
-          animation.finished.then(finished,finished);
-        }
-        const row=mc.closest('.ml-item'); if(row)geometry.add(row);
-        if(g==='first'||g==='single'||firstBubble===null){firstBubble=bubble;firstId=row?.id;memberKeys=[]}
-        memberKeys.push((row?.id||'')+':'+nodeId(mc)+':'+nodeId(bubble)+':'+g);
-        if (!['first','last','single'].includes(g)) continue;
-        if(g!=='last'&&g!=='single')continue;
-        const avatar=mc.querySelector(':scope > .avatar-span'), child=avatar?.querySelector(':scope > .message-container__avatar');
-        if(!avatar||!child){firstBubble=null;continue}
-        const identity=[row?.id,firstId,g,key,...memberKeys].join(':'),previous=states.get(avatar);
-        geometry.add(child);live.add(avatar);
-        if(previous&&previous.identity===identity&&previous.revision===geometryRevision&&
-          previous.firstBubble===firstBubble&&previous.bubble===bubble&&previous.child===child&&previous.mc===mc){
-          writes.push(previous);stats.cachedGroups++;firstBubble=null;continue;
-        }
-        const br=bubble.getBoundingClientRect(),fr=firstBubble===bubble?br:firstBubble.getBoundingClientRect();
-        if(br.height<1||fr.height<1){live.delete(avatar);firstBubble=null;continue}
-        const cr=mc.getBoundingClientRect(), ar=child.getBoundingClientRect();
-        const height=Math.max(ar.height,br.bottom-fr.top),top=br.bottom-height-cr.top;
-        sizes.set(bubble,{width:br.width,height:br.height});sizes.set(firstBubble,{width:fr.width,height:fr.height});
-        writes.push({avatar,mc,child,top,left:ar.left-cr.left,width:ar.width,height,
-          identity,firstBubble,bubble,revision:geometryRevision});
-        stats.measuredGroups++;firstBubble=null;
-      }
-      for(const [avatar,state]of states)if(!live.has(avatar))reset(avatar,state);
-      for(const w of writes){
-        const previous=states.get(w.avatar);
-        if(previous && previous.mc !== w.mc){previous.mc.removeAttribute('data-liuli-sticky-host');previous.mc.style.removeProperty('--ll-avatar-column-width')}
-        if(w.avatar.hasAttribute('data-liuli-ty')){delete w.avatar.dataset.liuliTy;w.avatar.style.transform=''}
-        if(!w.mc.hasAttribute('data-liuli-sticky-host'))w.mc.setAttribute('data-liuli-sticky-host','');
-        if(!w.avatar.hasAttribute('data-liuli-sticky'))w.avatar.setAttribute('data-liuli-sticky','');
-        if(!previous||Math.abs(previous.width-w.width)>.05)w.mc.style.setProperty('--ll-avatar-column-width',w.width+'px');
-        for(const name of ['top','width','height'])if(!previous||Math.abs(previous[name]-w[name])>.05){
-          w.avatar.style.setProperty('--ll-avatar-track-'+name,w[name]+'px');stats.writes++;
-        }
-        states.set(w.avatar,w);
-        const list=w.mc.closest('.ml-list');if(list&&!lists.has(list)){list.setAttribute('data-liuli-sticky-list','');lists.add(list)}
-      }
-      for(const list of lists)if(!list.isConnected){list.removeAttribute('data-liuli-sticky-list');lists.delete(list)}
-      for(const e of observed)if(!geometry.has(e))resize.unobserve(e);
-      for(const e of geometry)if(!observed.has(e))resize.observe(e);
-      observed=geometry;mutation.takeRecords();
-    }
-    return {refresh,dispose(){clear();style.remove()},stats,
-      handles(t){if(scroller&&t===scroller){stats.scrollEvents++;return true}return false},
-      debug(){return [...states.values()].map(s=>({id:s.identity,top:s.top,height:s.height,left:s.left}))}};
-  }
-  function stickAvatars() {
-    try {
-      if(!liuliAvatarScrollSync){liuliAvatarScrollSync=createAvatarScrollSync();window.__liuliAvatarSticky=liuliAvatarScrollSync}
-      liuliAvatarScrollSync.refresh();
-    } catch(error) {
-      console.warn('[liuli] sticky avatar synchronization failed',error);
-      liuliAvatarScrollSync?.dispose();liuliAvatarScrollSync=null;
-      stickAvatarsLegacy();
-    }
-  }
-
-  function stickAvatarsLegacy() {
-    try {
-      // Top avatars and native layout never need viewport geometry. Clear only
-      // offsets left by a previous bottom layout, before any layout read.
-      if (llModeCfg.avatarPosition === 'top' || !['tg', 'tim'].includes(llModeCfg.chatStyle)) {
-        for (const avatar of document.querySelectorAll('.chat-msg-area .avatar-span[data-liuli-ty]')) {
-          delete avatar.dataset.liuliTy;
-          if (avatar.style.transform) avatar.style.transform = '';
-        }
-        return;
-      }
-      var vp = [...document.querySelectorAll('.chat-msg-area__vlist, .chat-msg-area')].find(area => {
-        const rect = area.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      });
-      if (!vp) return;
-      var vr = vp.getBoundingClientRect();
-      var list = vp.querySelectorAll('.message-container');
-      var groupKey = llModeCfg.chatStyle === 'tim' ? 'liuliAvatarG' : 'liuliG';
-      const resetAvatar = avatar => {
-        delete avatar.dataset.liuliTy;
-        avatar.style.transform = '';
-      };
-      // 虚拟列表会复用行：以前是组尾的头像可能变成组首/中间行，旧偏移必须撤掉。
-      for (const avatar of vp.querySelectorAll('.avatar-span[data-liuli-ty]')) {
-        const owner = avatar.closest('.message-container');
-        if (!owner || !['last', 'single'].includes(owner.dataset[groupKey])) resetAvatar(avatar);
-      }
-      var groupTop = null;
-      var writes = [];
-      for (var i = 0; i < list.length; i++) {
-        var mc = list[i];
-        var g = mc.dataset[groupKey];
-        if (groupTop !== null && g !== 'first' && g !== 'last' && g !== 'single') continue;
-        var bubble =
-          mc.querySelector(':scope > .message-content__wrapper') ||
-          mc.querySelector('.msg-content-container');
-        if (!bubble) continue;
-        var br = bubble.getBoundingClientRect();
-        if (br.height < 1) continue;
-        if (g === 'first' || g === 'single' || groupTop === null) groupTop = br.top;
-        if (g !== 'last' && g !== 'single') continue;
-        var av = mc.querySelector(':scope > .avatar-span');
-        if (!av) continue;
-        var h = av.offsetHeight || 32;
-        var natBottom = br.bottom;
-        var natTop = natBottom - h;
-        var ty = 0;
-        if (natBottom > vr.bottom - 4) ty = vr.bottom - 4 - natBottom;
-        var minTy = groupTop - natTop;
-        if (ty < minTy) ty = minTy;
-        if (ty > 0) ty = 0;
-        writes.push([av, Math.round(ty)]);
-        groupTop = null;
-      }
-      for (var w = 0; w < writes.length; w++) {
-        var a = writes[w][0],
-          t = String(writes[w][1]);
-        if (a.dataset.liuliTy !== t) {
-          a.dataset.liuliTy = t;
-          a.style.transform = writes[w][1] ? 'translateY(' + t + 'px)' : '';
-        }
-      }
-    } catch (e) {}
-  }
-  var liuliStickRaf = 0;
-  function scheduleStick() {
-    if (liuliStickRaf || document.hidden) return;
-    if (llModeCfg.avatarPosition === 'top' || !['tg', 'tim'].includes(llModeCfg.chatStyle)) {
-      if (liuliAvatarScrollSync || document.querySelector('.chat-msg-area .avatar-span[data-liuli-ty]')) stickAvatars();
-      return;
-    }
-    liuliStickRaf = requestAnimationFrame(function () {
-      liuliStickRaf = 0;
-      stickAvatars();
-    });
-  }
-  function installAvatarStick() {
-    if (window.__liuliStickInstalled) return;
-    window.__liuliStickInstalled = true;
-    document.addEventListener(
-      'scroll',
-      function (e) {
-        var t = e.target;
-        if (t && t.closest && !t.closest('.chat-msg-area')) return;
-        if (!liuliAvatarScrollSync?.handles(t)) scheduleStick();
-      },
-      {
-        capture: true,
-        passive: true
-      }
-    );
-    window.addEventListener('resize', scheduleStick);
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        cancelAnimationFrame(liuliStickRaf);
-        liuliStickRaf = 0;
-      } else {
-        scheduleStick();
-      }
-    });
+  function scheduleStick(invalidate = false) {
+    window.__liuliAvatarCompactTrack?.refresh(invalidate);
   }
   var LL_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
   function llNorm(s) {
@@ -2159,10 +1908,10 @@
       syncPictureRatios(root);
       moveSenderIntoBubble(root);
     }
-    groupMessages();
+    groupMessages(roots);
   }
-  function liuliMessagePass(roots, layoutPrepared = false) {
-    if (!layoutPrepared) prepareMessageLayout(roots);
+  function liuliMessagePass(roots) {
+    prepareMessageLayout(roots);
     window.__liuliVoiceLayout?.refresh();
     for (const root of roots) {
       markQuoteRoots(root);
@@ -2193,10 +1942,7 @@
     return first;
   }
   function llChatKey() {
-    const peer = llMessagePeerKey();
-    if (peer) return 'p:' + peer;
-    const selected = Array.from(document.querySelectorAll('.recent-contact-item--selected[data-contact-id]'))
-      .find(item => !item.closest('.viewport-list__measure'));
+    const selected = document.querySelector('.recent-contact .recent-contact-item--selected[data-contact-id]');
     if (selected) return 'c:' + selected.getAttribute('data-contact-id');
     var t = document.querySelector('.aio .chat-header .panel-header__title');
     return t ? (t.textContent || '').replace(/\s+/g, ' ').trim() : '';
@@ -2307,15 +2053,15 @@
     llRiseIn(rows, 16);
   }
 
-  function llHandleAdded(records) {
-    window.__liuliRowEntryMotion?.added(records);
-  }
-
   function installRowEntryMotion() {
     window.__liuliRowEntryMotion?.dispose();
     let peer = '', highTime = 0, highSeq = null, disposed = false, activeArea = null;
     const seen = new Set(), scrolling = new WeakMap(), legacyEntries = new Map();
     const scopeOf = node => node?.closest?.('.chat-msg-area,.recent-contact');
+    const isScrolling = node => {
+      const scope = scopeOf(node) || node;
+      return (scrolling.get(scope) || 0) > performance.now();
+    };
     const recordOf = row => {
       try { return window.LiuliQQ?.messageRecord(row.querySelector('.message') || row) || null; } catch (_) { return null; }
     };
@@ -2389,19 +2135,33 @@
         for (const row of node.querySelectorAll('.ml-item[id]')) rows.add(row);
       }
       if (!rows.size) return;
+      if (activeArea?.isConnected && isScrolling(activeArea)) {
+        for (const row of rows) {
+          if (row.closest('.chat-msg-area') === activeArea && !row.closest('.viewport-list__measure')) remember(row, null);
+        }
+        return;
+      }
       for (const row of rows) {
         const area = row.closest('.chat-msg-area');
         if (row.closest('.viewport-list__measure') || (area !== activeArea &&
             ((activeArea?.isConnected && activeArea.getClientRects().length) || !area.getClientRects().length))) rows.delete(row);
       }
       if (!rows.size) return;
-      const nextPeer = [...rows].map(recordOf).map(keyOf).find(Boolean);
+      const recordsByRow = new Map();
+      let nextPeer = '';
+      for (const row of rows) {
+        const record = recordOf(row);
+        recordsByRow.set(row, record);
+        nextPeer = keyOf(record);
+        if (nextPeer) break;
+      }
       const area = [...rows][0].closest('.chat-msg-area');
       if (!nextPeer || nextPeer !== peer || area.hasAttribute('data-ll-switching')) { seed(area); return; }
       const fresh = [], now = Date.now() / 1000;
       for (const row of rows) {
         if (row.closest('.viewport-list__measure')) continue;
-        const record = recordOf(row), id = idOf(row, record), time = Number(record?.msgTime), seq = seqOf(record);
+        const record = recordsByRow.has(row) ? recordsByRow.get(row) : recordOf(row);
+        const id = idOf(row, record), time = Number(record?.msgTime), seq = seqOf(record);
         const unseen = id && !seen.has(id);
         // DOM tail position and a larger random message ID are not evidence of
         // live delivery. Require a recent native timestamp and a forward seq.
@@ -2420,8 +2180,10 @@
       if (event.type === 'keydown' && (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key) ||
           event.target.closest('input,textarea,[contenteditable="true"]'))) return;
       if (event.type === 'pointerdown' && !event.target.closest('.v-scrollbar,.v-scrollbar-thumb,.v-scrollbar-track')) return;
-      scrolling.set(scope, performance.now() + 240);
-      cancelScope(scope);
+      const now = performance.now();
+      const alreadyScrolling = (scrolling.get(scope) || 0) > now;
+      scrolling.set(scope, now + 240);
+      if (!alreadyScrolling) cancelScope(scope);
     }
     function onScroll(event) {
       const scope = scopeOf(event.target);
@@ -2435,6 +2197,10 @@
             cancelRow(row);
             if (row.matches('.ml-item') && row.closest('.chat-msg-area') === activeArea &&
                 !row.closest('.viewport-list__measure')) {
+              if (isScrolling(activeArea)) {
+                remember(row, null);
+                continue;
+              }
               const record = recordOf(row);
               if (keyOf(record) === peer) remember(row, record);
             }
@@ -2452,7 +2218,7 @@
     document.addEventListener('scroll', onScroll, { capture: true, passive: true });
     const api = {
       added, refresh: seed, cancel: cancelScope, trackLegacyEntry,
-      isScrolling(node) { return (scrolling.get(scopeOf(node)) || 0) > performance.now(); },
+      isScrolling,
       dispose() {
         if (disposed) return;
         disposed = true; observer.disconnect();
@@ -2995,6 +2761,7 @@
     const roots = new Set();
     const work = new Set();
     const addedMessages = new Set();
+    const messageRoots = new Set();
     const themeUi =
       '#liuli-settings-dialog, #liuli-settings-entry, #liuli-input-overlay, #liuli-toast, #liuli-scroll-time, .liuli-top-hint, #liuli-nav-handle, #liuli-ctl-shield, .liuli-pin-heading, .liuli-pin-surface, #liuli-video-layer, .liuli-pane-transition, .liuli-pane-prepared';
     const structure =
@@ -3004,8 +2771,6 @@
     let needsRefresh = false;
     let measured = [];
     let disposed = false;
-    let messageLayoutDirty = false;
-    let messageLayoutPrepared = false;
     const virtualScopes = '.chat-msg-area, .recent-contact, .group-member';
     const contentRows = '.ml-item, .message, .message-container, .group-user, .recent-contact-item';
     const layoutProperties = /^(?:transform|translate|rotate|scale|transform-origin|position|inset(?:-(?:block|inline)(?:-(?:start|end))?)?|top|right|bottom|left|(?:min-|max-)?(?:width|height|inline-size|block-size)|(?:margin|padding)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|flex(?:-(?:basis|grow|shrink|direction|wrap))?|(?:row-|column-)?gap|align-(?:items|self|content)|justify-(?:items|self|content)|order|will-change|contain|content-visibility|overflow(?:-[xy])?)$/;
@@ -3047,7 +2812,7 @@
       roots.clear();
       work.clear();
       addedMessages.clear();
-      messageLayoutDirty = messageLayoutPrepared = false;
+      messageRoots.clear();
     }
     function schedule() {
       if (disposed) return;
@@ -3062,7 +2827,6 @@
         element.closest(selector) || (descendants && element.querySelector(selector));
       if (contentChanged && touches('.chat-msg-area, .topbar-profile')) {
         work.add('messages');
-        messageLayoutDirty = true;
       }
       if (contentChanged && touches('.group-member')) work.add('members');
       if (
@@ -3103,7 +2867,8 @@
           } else if (record.attributeName === 'style') {
             const properties = changedStyleProperties(record, target);
             if (!properties.length) continue;
-            if (isVirtualContainer(target) && properties.every(name => layoutProperties.test(name)))
+            if (properties.every(name => layoutProperties.test(name)) &&
+                (isVirtualContainer(target) || target.matches('.avatar-span')))
               continue;
             // Color/material overrides still inspect this changed subtree. An
             // inline style update alone does not change message grouping/content.
@@ -3126,22 +2891,30 @@
             roots.add(element);
             for (const message of elementsWithin(element, '.ml-item')) addedMessages.add(message);
           }
+          if (record.removedNodes.length && target.closest('.chat-msg-area')) {
+            if (target.closest('.ml-item, .message-container')) messageRoots.add(target);
+            for (const [sibling, direction] of [
+              [record.previousSibling, 'previousElementSibling'],
+              [record.nextSibling, 'nextElementSibling']
+            ]) {
+              const nodeDirection = direction === 'previousElementSibling' ? 'previousSibling' : 'nextSibling';
+              for (let current = sibling?.nodeType === Node.ELEMENT_NODE ? sibling : sibling?.[nodeDirection];
+                current; current = current[direction]) {
+                const row = current.matches('.ml-item') ? current : current.closest('.ml-item') ||
+                  (current.querySelector('.message-container') ? current : null);
+                if (!row) continue;
+                roots.add(row);
+                break;
+              }
+            }
+          }
         } else {
           if (record.type === 'characterData' || ['style', 'class', 'id'].includes(record.attributeName)) colors.invalidate(target);
           roots.add(target);
         }
         classify(target, false, contentChanged);
       }
-      if (messageLayoutDirty) {
-        messageLayoutDirty = false;
-        // Set row geometry before native ResizeObservers measure a newly
-        // mounted virtual window. Color and decoration work stays in rAF.
-        prepareMessageLayout(topLevelRoots([...roots].map(root => root.closest('.ml-item') || root)));
-        messageLayoutPrepared = true;
-        observer.takeRecords();
-      }
       if (childRecords.length) {
-        try { llHandleAdded(childRecords); } catch (e) {}
         try { llMembersArrived(childRecords); } catch (e) {}
       }
       if (roots.size || work.size) schedule();
@@ -3169,17 +2942,16 @@
       work.clear();
       const changed = topLevelRoots([...roots]);
       roots.clear();
+      const changedMessages = [...messageRoots];
+      messageRoots.clear();
       const added = [...addedMessages];
       addedMessages.clear();
-      const prepared = messageLayoutPrepared;
-      messageLayoutPrepared = false;
       try {
         // Touch only changed subtrees; discard our own synchronous DOM writes below.
         colors.batch(() => {
           for (const root of changed) {
             applyOverrides(root);
             fixContrast(root);
-            normalizeColors(root);
           }
         }, pending.has('structure'));
         if (pending.has('structure')) {
@@ -3199,7 +2971,7 @@
         }
         if (pending.has('messages')) {
           // A text or attribute mutation still needs its containing message processed.
-          liuliMessagePass(topLevelRoots(changed.map(root => root.closest('.ml-item') || root)), prepared);
+          liuliMessagePass(topLevelRoots([...changed, ...changedMessages].map(root => root.closest('.ml-item') || root)));
           llMotionPass(added);
         }
         if (pending.has('members')) llGroupMembersPass();
@@ -3250,15 +3022,10 @@
         schedule();
       }
     }
-    function onLoad(event) {
-      if (!disposed && event.target instanceof Element && event.target.closest('.chat-msg-area'))
-        scheduleStick();
-    }
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('liuli-scope', refreshPage);
     window.addEventListener('resize', onGeometry);
     window.addEventListener('storage', onStorage);
-    document.addEventListener('load', onLoad, true);
     const api = {
       refresh: refreshPage,
       dispose() {
@@ -3273,12 +3040,12 @@
         roots.clear();
         work.clear();
         addedMessages.clear();
+        messageRoots.clear();
         measured = [];
         document.removeEventListener('visibilitychange', onVisibility);
         window.removeEventListener('liuli-scope', refreshPage);
         window.removeEventListener('resize', onGeometry);
         window.removeEventListener('storage', onStorage);
-        document.removeEventListener('load', onLoad, true);
         if (refreshInputGeometry === onGeometry) refreshInputGeometry = () => {};
         if (window.__liuliPageObserver === api) delete window.__liuliPageObserver;
       }
@@ -5515,7 +5282,6 @@
       } catch (e) {
         console.warn('[theme] ark external failed:', e && e.message);
       }
-      installAvatarStick();
       installRowEntryMotion();
       installPageObserver();
       try {
@@ -5736,6 +5502,7 @@
     messageGroup.className = 'liuli-panel__group';
     messageGroup.textContent = '聊天消息';
     host.appendChild(messageGroup);
+    settingSwitch('滚动时间提示', 'scrollTime', settings.scrollTime === true);
     function choice(label, key, options) {
       const row = document.createElement('div');
       row.className = 'liuli-wp-fit liuli-mode-row';

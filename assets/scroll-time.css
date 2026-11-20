@@ -1,8 +1,6 @@
 /* 时间集中到滚动提示，消息流不再重复显示原生分隔条；保留节点供无记录时取值。 */
-.chat-msg-area .message__timestamp,
-.chat-msg-area .message-container .only-time,
-.chat-msg-area .message-container .send-time {
-  display: none !important;
+body[data-liuli-scroll-time] .chat-msg-area :is(.message__timestamp, .message-container .only-time, .message-container .send-time) {
+  visibility: hidden !important;
 }
 .liuli-scroll-time {
   position: fixed;

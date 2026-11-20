@@ -30,15 +30,21 @@ const markup = row('a') + '<div class="ml-item"><div class="message"><div class=
   row('b') + row('c') + row('voice', 'voice') + row('image', 'image') + row('d') + row('e') + row('unknown', 'empty', '');
 const shell = '<!doctype html><style>' + css + '\n' + setup + '</style><body data-liuli-scope="main" data-liuli-chat-style="tim" data-liuli-avatar-position="top" data-liuli-tim-sender-position="outside"><div class="chat-msg-area__vlist"><div class="chat-msg-area">' + markup + '</div></div></body>';
 function runtime(text) {
+  const legacyAvatar = text.includes('function stickAvatarsLegacy(') ? helper(text,'stickAvatarsLegacy') : 'function stickAvatarsLegacy() {}';
   return `(()=>{
+    const FILES=${JSON.stringify(cssFiles)};
     let llModeCfg={chatStyle:'tim',avatarPosition:'top',timSenderPosition:'outside'};
-    ${['elementsWithin','isImageOnlyContent','isVideoOnlyContent','moveSenderIntoBubble','groupMessages','stickAvatars'].map(name => helper(text, name)).join('\n')}
+    let liuliAvatarScrollSync=null;
+    const liuliShiftedAvatars=new Set();
+    function createAvatarScrollSync(){return {refresh(){stickAvatarsLegacy()}}}
+    ${['elementsWithin','isImageOnlyContent','isVideoOnlyContent','moveSenderIntoBubble','groupMessages','stickAvatars'].filter(name => text.includes('function ' + name + '(')).map(name => helper(text, name)).join('\n')}
+    ${legacyAvatar}
     const rows=[...document.querySelectorAll('.message-container')];
     const records=new WeakMap(rows.map((row,i)=>[row,{msgId:row.closest('.ml-item').id,chatType:2,peerUid:'p',senderUid:row.dataset.sender,msgTime:1000+i*600,showTimestamp:i===1,msgType:2,elements:[{elementType:1,textElement:{content:'text'}}]}]));
     window.LiuliQQ={messageRecord:row=>records.get(row)};
     window.nativeNames=rows.map(row=>row.querySelector('.user-name'));
     window.addNativeRow=()=>{const original=document.querySelector('#c'),row=original.cloneNode(true),mc=row.querySelector('.message-container');row.id='new-native-row';records.set(mc,{...records.get(original.querySelector('.message-container')),msgId:'new-native-row',msgTime:9000});document.querySelector('.chat-msg-area').insertBefore(row,document.querySelector('#voice'));};
-    window.configure=cfg=>{Object.assign(llModeCfg,cfg);window.__liuliSettingsCache={...llModeCfg};Object.assign(document.body.dataset,{liuliChatStyle:llModeCfg.chatStyle,liuliAvatarPosition:llModeCfg.avatarPosition,liuliTimSenderPosition:llModeCfg.timSenderPosition});moveSenderIntoBubble(document);groupMessages();stickAvatars();};
+    window.configure=cfg=>{Object.assign(llModeCfg,cfg);window.__liuliSettingsCache={...llModeCfg};Object.assign(document.body.dataset,{liuliChatStyle:llModeCfg.chatStyle,liuliAvatarPosition:llModeCfg.avatarPosition,liuliTimSenderPosition:llModeCfg.timSenderPosition});moveSenderIntoBubble(document);groupMessages();if(typeof stickAvatars==='function')stickAvatars();};
     window.repeatGroups=()=>{const observer=new MutationObserver(()=>{});observer.observe(document.querySelector('.chat-msg-area'),{subtree:true,attributes:true,attributeFilter:['data-liuli-g','data-liuli-avatar-g','data-liuli-tim-text','data-liuli-named']});for(let i=0;i<20;i++){moveSenderIntoBubble(document);groupMessages();}const count=observer.takeRecords().length;observer.disconnect();return count;};
     window.configure(llModeCfg);
   })();`;

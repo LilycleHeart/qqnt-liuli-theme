@@ -618,22 +618,22 @@
   transform: scaleX(-1) !important;
 }
 
-/* ── 组内间距：组内 2px，组间 10px ──
- * 原生语音的 container 直接位于 message 下，不经过 message-native。 */
-.ml-item .message:has(> .message-native > .message-container[data-liuli-g], > .message-container[data-liuli-g]) {
+/* Set the base spacing on mount, before the group pass marks a recycled row. */
+.ml-item .message:has(> .message-native > .message-container[data-liuli-g], > .message-container[data-liuli-g]),
+.chat-msg-area .ml-item .message:has(> .message-native > .message-container > .message-content__wrapper, > .message-container > .message-content__wrapper) {
   padding-bottom: 0 !important;
 }
-.message-container[data-liuli-g] {
+.message-container:is([data-liuli-g], .chat-msg-area .ml-item .message > .message-container:has(> .message-content__wrapper), .chat-msg-area .ml-item .message > .message-native > .message-container:has(> .message-content__wrapper)) {
   padding-top: 1px !important;
   padding-bottom: 1px !important;
   min-height: 0 !important;
 }
-.message-container[data-liuli-g] > .message-content__wrapper {
+.message-container:is([data-liuli-g], .chat-msg-area .ml-item .message > .message-container, .chat-msg-area .ml-item .message > .message-native > .message-container) > .message-content__wrapper {
   min-height: 0 !important;
 }
 /* QQ 的空扩展插槽仍有 4px 下边距，会撑开已隐藏的 nickname 网格行。
  * 插槽有内容时保留原生间距，不影响扩展信息和真实名称。 */
-.message-container[data-liuli-g] > .message-extra-top:empty {
+.message-container:is([data-liuli-g], .chat-msg-area .ml-item .message > .message-container:has(> .message-content__wrapper), .chat-msg-area .ml-item .message > .message-native > .message-container:has(> .message-content__wrapper)) > .message-extra-top:empty {
   margin-bottom: 0 !important;
 }
 .message-container[data-liuli-g='first'],

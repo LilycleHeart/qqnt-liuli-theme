@@ -22,7 +22,7 @@ function harness(records, asRef = true) {
   area._vnode = { children: [{ component: owner }] };
   const context = { console };
   vm.createContext(context);
-  vm.runInContext('const messageSequenceOwners=new WeakMap();\n' + ['visitComponents', 'messagePeer', 'loadedMessageSequence'].map(helper).join('\n') + '\nglobalThis.read=loadedMessageSequence;', context);
+  vm.runInContext('const messageSequenceOwners=new WeakMap();const messageSequenceCaches=new WeakMap();\n' + ['visitComponents', 'messagePeer', 'loadedMessageSequence'].map(helper).join('\n') + '\nglobalThis.read=loadedMessageSequence;', context);
   return { area, list, owner, state, read: () => context.read(area) };
 }
 test('reads complete exposed msgs through _vnode without debugger mapping or native calls', () => {
@@ -54,6 +54,29 @@ test('takes a fresh source snapshot after deletion, replacement and reordering',
   assert.equal(h.read().neighbors(records[1]).previous, records[2]);
   h.state.value = [entry(records[2])];
   assert.equal(h.read().neighbors(records[1]), null);
+});
+test('reuses the full-history index during scrolling and rebuilds after in-place edge loads', () => {
+  const records = ['a', 'b', 'c'].map(id => record(id));
+  const h = harness(records);
+  const source = h.state.value, nativeMap = source.map.bind(source);
+  let scans = 0;
+  source.map = (...args) => { scans++; return nativeMap(...args); };
+  const first = h.read();
+  assert.equal(h.read(), first, 'Unchanged history should reuse the sequence snapshot');
+  assert.equal(scans, 1, 'Unchanged history should be indexed once');
+  const older = record('older');
+  source.unshift(entry(older));
+  const prepended = h.read();
+  assert.notEqual(prepended, first);
+  assert.equal(prepended.neighbors(records[0]).previous, older);
+  assert.equal(scans, 2, 'A prepended history page should rebuild the index once');
+  const newer = record('newer');
+  source.push(entry(newer));
+  const appended = h.read();
+  assert.equal(appended.neighbors(records[2]).next, newer);
+  assert.equal(scans, 3, 'An appended history page should rebuild the index once');
+  h.state.value = [entry(records[0]), entry(records[1])];
+  assert.equal(h.read().entries.length, 2, 'A replaced source array should invalidate the cache');
 });
 test('keeps malformed entries as adjacency barriers and rejects duplicate IDs', () => {
   const records = ['a', 'b', 'c'].map(id => record(id));

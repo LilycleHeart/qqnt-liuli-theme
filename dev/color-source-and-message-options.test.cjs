@@ -92,7 +92,8 @@ test('TIM sender placement normalizes, broadcasts and reflows independently of a
   assert.equal(JSON.parse(h.writes.at(-1).value).timSenderPosition, 'inside');
   h.reflows.length = 0;
   h.api.apply({ ...h.api.current(), bubbleScale: 120 }, false);
-  assert.deepEqual(h.reflows, []);
+  assert.deepEqual(h.reflows, ['stick']);
+  h.reflows.length = 0;
   h.api.apply({ ...h.api.current(), timSenderPosition: 'outside' }, false);
   assert.equal(h.context.document.body.dataset.liuliTimSenderPosition, 'outside');
   assert.deepEqual(h.reflows, ['sender', 'group', 'stick']);
@@ -394,8 +395,8 @@ test('TIM inside moves the native sender node and restores its original sibling 
   assert.equal(clicks, 2, 'Native sender event was replaced or cloned');
 });
 
-function groupingHarness(specs) {
-  const area = { getBoundingClientRect: () => ({ width: 600, height: 100, top: 0, bottom: 100 }) };
+function groupingHarness(specs, styleFiles = ['scroll-time.css']) {
+  const area = { scrollTop: 0, getBoundingClientRect: () => ({ width: 600, height: 100, top: 0, bottom: 100 }) };
   const rows = specs.map((spec, index) => {
     const attrs = new Set();
     const ml = { nextElementSibling: null };
@@ -431,16 +432,14 @@ function groupingHarness(specs) {
   });
   area.querySelectorAll = selector => selector === '.message-container' ? rows :
     rows.map(row => row.avatar).filter(avatar => avatar.dataset.liuliTy !== undefined);
-  const context = { llModeCfg: { chatStyle: 'tim', avatarPosition: 'bottom' }, console: { warn() {} },
+  const context = { FILES: styleFiles, llModeCfg: { chatStyle: 'tim', avatarPosition: 'bottom', scrollTime: true }, console: { warn() {} },
     window: { LiuliQQ: { messageRecord: row => row.record } },
     getComputedStyle: node => ({ display: node.display }),
-    document: { querySelectorAll: selector => selector === '.chat-msg-area .message-container' ? rows :
+    document: { querySelector: () => null, querySelectorAll: selector => selector === '.chat-msg-area .message-container' ? rows :
       selector === '.chat-msg-area .avatar-span[data-liuli-ty]' ? area.querySelectorAll('.avatar-span[data-liuli-ty]') : [area] } };
   vm.createContext(context);
-  vm.runInContext('let liuliAvatarScrollSync = null;\n' + functionSource('groupMessages') + '\n' +
-    functionSource('stickAvatars') + '\n' + functionSource('stickAvatarsLegacy') +
-    ';globalThis.group=groupMessages;globalThis.stick=stickAvatars;', context);
-  return { context, rows, group: context.group, stick: context.stick };
+  vm.runInContext(functionSource('groupMessages') + ';globalThis.group=groupMessages;', context);
+  return { context, rows, group: context.group };
 }
 
 test('native loaded neighbors keep virtual edge groups stable and reflect real deletion immediately', () => {
@@ -540,6 +539,13 @@ test('TG and TIM group consecutive senders across hidden time presentation while
   }
 });
 
+test('native time rows remain grouping boundaries when scroll-time styles are not loaded', () => {
+  const h = groupingHarness([{ sender: 'a', separatorAfter: 'hidden-time' }, { sender: 'a' }], []);
+  h.group();
+  assert.deepEqual(h.rows.map(row => row.dataset.liuliG), ['single', 'single']);
+  assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['single', 'single']);
+});
+
 test('TIM inline-face-only messages retain text shapes and grouping; empty, unknown and media content remain excluded', () => {
   const h = groupingHarness([{ sender: 'a' }, { sender: 'a', inlineFace: true }, { sender: 'a' },
     { sender: 'a', empty: true }, { sender: 'a', unknown: true },
@@ -553,15 +559,16 @@ test('TIM inline-face-only messages retain text shapes and grouping; empty, unkn
     ['first', ...Array(h.rows.length - 2).fill('mid'), 'last'], 'Shape classification must not split sender/avatar groups');
 });
 
-test('TIM bottom avatars stick by avatar groups; top placement and recycled middle avatars clear old transforms', () => {
-  const h = groupingHarness([{ sender: 'a' }, { sender: 'a', media: 'voice' }, { sender: 'a', media: 'file' }]);
+test('scroll timestamp prompt is opt-in, and disabled native separators split groups', () => {
+  const { api } = harness();
+  assert.equal(api.normalize({}).scrollTime, false);
+  assert.equal(api.normalize({ scrollTime: 'true' }).scrollTime, false);
+  assert.equal(api.normalize({ scrollTime: true }).scrollTime, true);
+  const h = groupingHarness([{ sender: 'a', separatorAfter: 'hidden-time' }, { sender: 'a' }]);
+  h.context.llModeCfg.scrollTime = false;
   h.group();
-  h.rows[1].avatar.dataset.liuliTy = '-10'; h.rows[1].avatar.style.transform = 'translateY(-10px)';
-  h.stick();
-  assert.equal(h.rows[1].avatar.dataset.liuliTy, undefined, 'A recycled middle row kept its old terminal offset');
-  assert.equal(h.rows[1].avatar.style.transform, '');
-  assert.equal(h.rows[2].avatar.dataset.liuliTy, '-64');
-  assert.equal(h.rows[2].avatar.style.transform, 'translateY(-64px)');
-  h.context.llModeCfg.avatarPosition = 'top'; h.stick();
-  assert(h.rows.every(row => row.avatar.dataset.liuliTy === undefined && row.avatar.style.transform === ''));
+  assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['single', 'single']);
+  h.context.llModeCfg.scrollTime = true;
+  h.group();
+  assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['first', 'last']);
 });

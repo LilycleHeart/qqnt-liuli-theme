@@ -14,6 +14,7 @@ function helper(name, text = source) {
   assert(start >= 0 && end > start, name);
   return text.slice(start, end + 4);
 }
+const chatKeySource = helper('llChatKey');
 const motion = fs.readFileSync(path.join(root, 'renderer/motion.js'), 'utf8');
 const background = fs.readFileSync(path.join(root, 'renderer/background-performance.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'assets/markdown.css'), 'utf8');
@@ -23,10 +24,13 @@ const fixture = () => `<!doctype html><style>${css}\n.chat-msg-area{height:200px
 const setup = `window.testHidden=false;window.testFocus=true;Object.defineProperty(document,'hidden',{configurable:true,get:()=>window.testHidden});Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>window.testFocus});window.LiuliQQ={messageRecord:element=>{const message=element?.closest('.message');const row=message?.closest('.ml-item');return row?{chatType:2,peerUid:row.dataset.peer,msgId:row.id,msgTime:row.dataset.time,msgSeq:row.dataset.seq}:null;}};`;
 const readProbe = `(()=>{
   window.entryReads={};window.countEntryReads=false;
-  const hit=(element,key)=>{if(window.countEntryReads&&element.matches?.('.ml-item,.ml-root,.recent-contact-item'))window.entryReads[key]=(window.entryReads[key]||0)+1;};
+  window.entryRecordReads=0;
+  const hit=(element,key)=>{if(window.countEntryReads&&element.matches?.('.ml-item,.ml-root,.chat-msg-area,.recent-contact-item'))window.entryReads[key]=(window.entryReads[key]||0)+1;};
   for(const key of ['getBoundingClientRect','getClientRects','getAnimations']){const original=Element.prototype[key];Element.prototype[key]=function(...args){hit(this,key);return Reflect.apply(original,this,args);};}
+  const originalQuerySelectorAll=Element.prototype.querySelectorAll;Element.prototype.querySelectorAll=function(selector,...args){if(selector==='.ml-item.ll-enter')hit(this,'querySelectorAll');return Reflect.apply(originalQuerySelectorAll,this,[selector,...args]);};
+  const originalMessageRecord=LiuliQQ.messageRecord;LiuliQQ.messageRecord=(...args)=>{if(window.countEntryReads)window.entryRecordReads++;return originalMessageRecord(...args);};
   for(const [prototype,key] of [[HTMLElement.prototype,'offsetWidth'],[Element.prototype,'scrollHeight'],[Element.prototype,'clientHeight']]){const descriptor=Object.getOwnPropertyDescriptor(prototype,key);Object.defineProperty(prototype,key,{...descriptor,get(){hit(this,key);return descriptor.get.call(this);}});}
-  window.startEntryReads=()=>{window.entryReads={};window.countEntryReads=true;};window.stopEntryReads=()=>{window.countEntryReads=false;return window.entryReads;};
+  window.startEntryReads=()=>{window.entryReads={};window.entryRecordReads=0;window.countEntryReads=true;};window.stopEntryReads=()=>{window.countEntryReads=false;const result={...window.entryReads};if(window.entryRecordReads)result.messageRecord=window.entryRecordReads;return result;};
 })();`;
 const runtime = `(()=>{const motion=LiuliMotion,LL_ENTER_MAX=14;${helper('llAnimateEnter')} ${helper('installRowEntryMotion')}window.coldEnter=llAnimateEnter;installRowEntryMotion();})();`;
 const legacy = `(()=>{const motion=LiuliMotion,LL_EASE='ease';let llEnterPeer='peer',llEnterUntil=0;const LL_ENTER_MAX=14;const llMsgSeen={chat:'peer',max:10n};const llChatKey=()=> 'peer',llCurrentPeer=()=> 'peer';${['llMsgId','llMotionPass','llAnimateEnter','llHandleAdded'].map(n=>helper(n,before)).join('\n')}window.oldEntry=(records)=>{llHandleAdded(records);requestAnimationFrame(()=>llMotionPass([...document.querySelectorAll('.ml-item')]));};new MutationObserver(records=>window.oldEntry(records)).observe(document.querySelector('.ml-root'),{childList:true});window.coldEnter=llAnimateEnter;})();`;
@@ -49,6 +53,18 @@ async function settled(page) { await page.evaluate(() => new Promise(resolve => 
     assert.equal(report.negativeControl.oldHistoryEntered, 1, 'Pre-fix history-tail mistake was not reproduced');
     report.cases.push('Unpatched legacy negative control incorrectly animates old history at DOM tail');
     await control.close();
+    const chatKeyPage = await browser.newPage();
+    await chatKeyPage.setContent(fixture());
+    await chatKeyPage.addScriptTag({ content: setup });
+    await chatKeyPage.addScriptTag({ content: `(()=>{window.chatKeyRecordReads=0;const original=LiuliQQ.messageRecord;LiuliQQ.messageRecord=(...args)=>{window.chatKeyRecordReads++;return original(...args)};${chatKeySource}window.testChatKey=llChatKey;})();` });
+    await chatKeyPage.evaluate(() => document.querySelector('.recent-contact-item').classList.add('recent-contact-item--selected'));
+    assert.equal(await chatKeyPage.evaluate(() => testChatKey()), 'c:a');
+    assert.equal(await chatKeyPage.evaluate(() => chatKeyRecordReads), 0, 'A stable chat-key check should not scan message records');
+    await chatKeyPage.evaluate(() => document.querySelector('.recent-contact-item--selected').classList.remove('recent-contact-item--selected'));
+    assert.equal(await chatKeyPage.evaluate(() => testChatKey()), 'peer');
+    assert.equal(await chatKeyPage.evaluate(() => chatKeyRecordReads), 0, 'The header fallback should not scan message records');
+    report.cases.push('Chat-key checks use the selected contact or header without scanning mounted messages');
+    await chatKeyPage.close();
     for (const mode of ['production', 'legacy-compatibility']) {
       const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
       const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -88,11 +104,15 @@ async function settled(page) { await page.evaluate(() => new Promise(resolve => 
       await page.evaluate(() => startEntryReads());
       await append(row(9999, now() - 600, 11));
       const historyReads = await page.evaluate(() => stopEntryReads());
-      assert.deepEqual(historyReads, {}, mode + ' still reads row/tail layout for historical insertion');
+      const { messageRecord: historyRecordReads = 0, ...historyLayoutReads } = historyReads;
+      assert.deepEqual(historyLayoutReads, {}, mode + ' still reads row/tail layout for historical insertion');
+      assert.equal(historyRecordReads, 1, mode + ' should reuse its first row metadata for history insertion');
       assert.equal(await entering(), 0, mode + ' animated history just because it was the DOM tail');
-      report.cases.push(mode + ': first observer turn of old-time history performs no rect, width, scroll extent or animation queries');
-      await page.evaluate(() => document.querySelector('.ml-root').dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120 })));
+      report.cases.push(mode + ': old-time history performs one metadata lookup and no rect, width, scroll extent or animation queries');
+      await page.evaluate(() => { document.querySelector('.ml-root').dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120 })); startEntryReads(); });
       await append(row(10000, now(), 12)); assert.equal(await entering(), 0, mode + ' animated while user scrolling');
+      const scrollingInsertReads=await page.evaluate(()=>stopEntryReads());
+      if(mode==='production')assert.equal(scrollingInsertReads.messageRecord||0,0,'Virtual rows mounted during user scroll should not inspect message records');
       await page.waitForTimeout(270);
       await page.evaluate(() => { document.querySelector('.ml-root').scrollTop = -100; });
       await append(row(10001, now(), 13)); assert.equal(await entering(), 0, mode + ' animated away from reversed live tail');
@@ -132,6 +152,13 @@ async function settled(page) { await page.evaluate(() => new Promise(resolve => 
       await contact.evaluate(node => {for(let i=0;i<16;i++)node.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:100}));});
       assert.equal((await page.evaluate(() => stopEntryReads())).getAnimations || 0, 0, mode + ' queries idle contact animations on each scroll');
       report.cases.push(mode + ': repeated wheel events do not query idle row animations');
+      if(mode==='production'){
+        await page.evaluate(()=>startEntryReads());
+        await page.locator('.ml-root').evaluate(node=>{for(let i=0;i<16;i++)node.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:100}));});
+        const chatScrollReads=await page.evaluate(()=>stopEntryReads());
+        assert.equal(chatScrollReads.querySelectorAll||0,1,'The chat-wide entry scan should run only when a scroll burst begins');
+        report.cases.push('Repeated chat wheel events cancel entries only once per scroll burst');
+      }
       await page.evaluate(() => {const area=document.querySelector('.chat-msg-area');area.setAttribute('data-ll-switching','');window.coldEnter([...area.querySelectorAll('.ml-item')].slice(-2));});
       await settled(page); assert(await entering() > 0, mode + ' blocked the cold switch cascade');
       const cascade = await page.locator('.ml-item.ll-enter').evaluateAll(rows=>rows.map(row=>{

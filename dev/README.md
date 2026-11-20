@@ -4,16 +4,10 @@
 
 ## Node 单元测试
 
-在仓库根目录运行，无需 Playwright。`message-overscan.test.cjs` 需要 Vue 3.5 的 `@vue/reactivity`，其余用例仅需 Node 内置模块。下面的命令假设该依赖可被 Node 解析：
+在仓库根目录运行，无需 Playwright，全部用例仅需 Node 内置模块：
 
 ```powershell
-node --test dev/color-source-and-message-options.test.cjs dev/message-overscan.test.cjs dev/qq-loaded-message-sequence.test.cjs dev/scroll-time.test.cjs dev/standalone-profile.test.cjs
-```
-
-若 Vue 安装在独立目录，可单独传入模块路径：
-
-```powershell
-node dev/message-overscan.test.cjs '<依赖目录>/node_modules/@vue/reactivity'
+node --test dev/color-source-and-message-options.test.cjs dev/qq-loaded-message-sequence.test.cjs dev/scroll-time.test.cjs dev/standalone-profile.test.cjs
 ```
 
 ## 浏览器验证

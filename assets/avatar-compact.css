@@ -1,0 +1,65 @@
+/* Keep the native avatar column and use CSS sticky within its compact track. */
+@property --ll-compact-track-height {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+body[data-liuli-avatar-position='bottom']:is([data-liuli-chat-style='tim'], [data-liuli-chat-style='tg']) .chat-msg-area #ml-root .ml-list {
+  overflow: clip !important;
+}
+
+/* Reserve space before group assignment, even if the avatar is hidden in this row. */
+body[data-liuli-avatar-position='bottom']:is([data-liuli-chat-style='tim'], [data-liuli-chat-style='tg']) .chat-msg-area #ml-root .ml-item .message-container:has(> .avatar-span > .message-container__avatar) {
+  box-sizing: border-box;
+  min-block-size: 34px !important;
+  align-content: end !important;
+}
+
+body[data-liuli-avatar-position='bottom'][data-liuli-chat-style='tim'] .chat-msg-area #ml-root .message-container:is([data-liuli-avatar-g='single'], [data-liuli-avatar-g='last']),
+body[data-liuli-avatar-position='bottom'][data-liuli-chat-style='tg'] .chat-msg-area #ml-root .message-container:is([data-liuli-g='single'], [data-liuli-g='last']) {
+  & > .avatar-span {
+    grid-column: avatar !important;
+    grid-row: content !important;
+    align-self: stretch !important;
+    contain: size !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+    transform: none !important;
+    will-change: auto !important;
+    pointer-events: none !important;
+
+    > .message-container__avatar {
+      position: sticky !important;
+      top: auto !important;
+      bottom: 4px !important;
+      flex: none !important;
+      pointer-events: auto !important;
+    }
+  }
+
+  &.message-container--selection-mod > .avatar-span > .message-container__avatar {
+    pointer-events: none !important;
+  }
+}
+
+body[data-liuli-avatar-position='bottom'][data-liuli-chat-style='tim'] .chat-msg-area #ml-root .message-container[data-liuli-avatar-g='last'][data-ll-compact-host],
+body[data-liuli-avatar-position='bottom'][data-liuli-chat-style='tg'] .chat-msg-area #ml-root .message-container[data-liuli-g='last'][data-ll-compact-host] {
+  position: relative !important;
+
+  & > .avatar-span {
+    position: absolute !important;
+    inset-inline: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    width: auto !important;
+    height: var(--ll-compact-track-height) !important;
+    overflow: visible !important;
+  }
+}

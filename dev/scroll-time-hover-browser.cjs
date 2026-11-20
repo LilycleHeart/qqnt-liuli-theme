@@ -18,6 +18,7 @@ fs.mkdirSync(output, { recursive: true });
     await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'assets/scroll-time.css'), 'utf8') });
     await page.evaluate(() => { window.LiuliQQ = { messageRecord: row => ({ msgTime: row.dataset.time, chatType: 2, peerUid: 'one' }) }; });
     await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'renderer/scroll-time.js'), 'utf8') });
+    await page.evaluate(() => window.LiuliScrollTime?.setEnabled(true));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const active = () => page.evaluate(() => !!document.querySelector('#liuli-scroll-time')?.classList.contains('is-active'));
     await page.locator('[data-row="0"] .msg-content-container').hover();

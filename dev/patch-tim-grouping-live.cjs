@@ -113,8 +113,8 @@ function installTimGroupingCompatibility() {
 }
 function generate(root = path.resolve(__dirname, '..')) {
   const source = fs.readFileSync(path.join(root, 'renderer/index.js'), 'utf8');
-  const start = source.indexOf('  function groupMessages()');
-  const end = source.indexOf('  function stickAvatars()', start);
+  const start = source.indexOf('  function groupMessages(');
+  const end = source.indexOf('  function scheduleStick(', start);
   if (start < 0 || end < 0) throw Error('Missing production groupMessages');
   return '(' + installTimGroupingCompatibility.toString()
     .replace('/* GROUP_WRITE_GUARD */', require('./tim-grouping-write-guard.cjs').toString())

@@ -1,6 +1,7 @@
 (() => {
   const ID = 'liuli-scroll-time';
   const KEY = '__liuliScrollTime';
+  const SCROLL_SETTLE_MS = 350;
   const IDLE_MS = 900;
   const FADE_MS = 180;
   const FLIP_MS = 180;
@@ -79,11 +80,17 @@
     let resizeObserver = null;
     let rows = new Set();
     const visible = new Set();
+    let visibleOrdered = [];
+    const visibleOrderedSet = new Set();
     const rowGeometry = new Map();
+    const visibilityDirty = new Set();
+    const pendingRows = new Set();
+    let rowsInitialized = false;
     let geometryDirty = true;
     let viewportBox = null;
     let frame = 0;
     let discoveryFrame = 0;
+    let settleTimer = 0;
     let idleTimer = 0;
     let clearTimer = 0;
     let active = false;
@@ -181,6 +188,67 @@
       element.classList.add('is-flipping');
       flipTimer = win.setTimeout(stopFlip, changed * duration);
     }
+    function compareRows(a, b) {
+      const position = a.compareDocumentPosition(b);
+      if (position & win.Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (position & win.Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    }
+    function setOrderedVisible(row, isVisible) {
+      const previous = visibleOrderedSet.has(row);
+      if (previous === isVisible) return;
+      if (!isVisible) {
+        visibleOrderedSet.delete(row);
+        const index = visibleOrdered.indexOf(row);
+        if (index >= 0) visibleOrdered.splice(index, 1);
+        return;
+      }
+      let low = 0, high = visibleOrdered.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (compareRows(row, visibleOrdered[middle]) < 0) high = middle;
+        else low = middle + 1;
+      }
+      visibleOrdered.splice(low, 0, row);
+      visibleOrderedSet.add(row);
+    }
+    function messagesWithin(node) {
+      if (node?.nodeType !== 1) return [];
+      const result = node.matches('.message') ? [node] : [];
+      result.push(...(node.querySelectorAll?.('.message') || []));
+      return result;
+    }
+    const previousStyle = doc.createElement('i').style;
+    function styleChangesVisibility(record) {
+      if (record.attributeName !== 'style') return false;
+      previousStyle.cssText = record.oldValue || '';
+      return ['display', 'visibility'].some(property =>
+        previousStyle.getPropertyValue(property) !== record.target.style.getPropertyValue(property) ||
+        previousStyle.getPropertyPriority(property) !== record.target.style.getPropertyPriority(property)
+      );
+    }
+    function addRow(row) {
+      if (rows.has(row)) return;
+      rows.add(row);
+      if (intersection) {
+        visibilityDirty.add(row);
+        intersection.observe(row);
+      }
+      if (!intersection) {
+        const rect = row.getBoundingClientRect();
+        const isRowVisible = isVisible(row, rect);
+        rowGeometry.set(row, { rect, visible: isRowVisible });
+        if (isRowVisible) visible.add(row);
+      }
+    }
+    function removeRow(row) {
+      intersection?.unobserve(row);
+      rows.delete(row);
+      visibilityDirty.delete(row);
+      visible.delete(row);
+      setOrderedVisible(row, false);
+      rowGeometry.delete(row);
+    }
     function ensurePill() {
       if (pill) return pill;
       pill = doc.createElement('div');
@@ -201,7 +269,10 @@
         win.clearTimeout(hoverTimer);
       }
       win.clearTimeout(leaveTimer);
+      leaveTimer = 0;
       stopFlip();
+      win.clearTimeout(settleTimer);
+      settleTimer = 0;
       win.clearTimeout(idleTimer);
       win.clearTimeout(clearTimer);
       if (frame) win.cancelAnimationFrame(frame);
@@ -222,28 +293,19 @@
       else clearTimer = win.setTimeout(clear, FADE_MS);
     }
     function syncRows(box = viewport()) {
-      rowsDirty = false;
       if (!scroller) return;
-      const next = new Set(scroller.querySelectorAll('.message'));
-      for (const row of rows) {
-        if (next.has(row)) continue;
-        intersection?.unobserve(row);
-        visible.delete(row);
-        rowGeometry.delete(row);
-      }
-      for (const row of next) {
-        if (rows.has(row)) continue;
-        intersection?.observe(row);
-        // IO delivers layout snapshots after the native virtual list has laid
-        // out. Reading each newly mounted row here forced another layout in
-        // the middle of QQ's scroll/range update.
-        if (!intersection) {
-          const rect = row.getBoundingClientRect();
-          rowGeometry.set(row, { rect, visible: isVisible(row, rect) });
-          visible.add(row);
+      if (!rowsInitialized) {
+        for (const row of scroller.querySelectorAll('.message')) addRow(row);
+        rowsInitialized = true;
+      } else if (rowsDirty) {
+        for (const row of pendingRows) {
+          if (row.isConnected && scroller.contains(row)) addRow(row);
+          else removeRow(row);
         }
+        visibleOrdered.sort(compareRows);
       }
-      rows = next;
+      pendingRows.clear();
+      rowsDirty = false;
     }
     function viewport(measuredArea) {
       const parent = measuredArea || area.getBoundingClientRect();
@@ -251,7 +313,7 @@
       return { left: Math.max(0, box.left, parent.left), right: Math.min(win.innerWidth, box.right, parent.right),
         top: Math.max(0, box.top, parent.top), bottom: Math.min(win.innerHeight, box.bottom, parent.bottom) };
     }
-    function update() {
+    function update(settledScroll = false) {
       frame = 0;
       if (!active || disposed) return;
       if (!area?.isConnected || !scroller?.isConnected || doc.hidden || area.hasAttribute('data-ll-switching')) {
@@ -266,35 +328,26 @@
         geometryDirty = false;
       }
       const box = viewportBox;
+      // Newly mounted rows may not have delivered their first IO entry.
+      const useSnapshot = !intersection || (settledScroll && rowsDirty);
       if (rowsDirty) syncRows(box);
-      if (!intersection) {
-        // Older engines without IO still inspect only mounted virtual rows,
-        // and only while a scroll is active.
-        for (const row of rows) visible.add(row);
-      }
-      const entries = [];
       if (hoveredRow && (!scroller.contains(hoveredRow) ||
           (intersection ? rowGeometry.get(hoveredRow)?.visible === false : !isVisible(hoveredRow)))) hoveredRow = null;
-      if (!hoveredRow && !scrolling) { hide(); return; }
-      // Only intersecting mounted rows are measured during active scrolling.
-      // Read the record anew each time because QQ reuses virtual row components.
-      for (const row of hoveredRow ? [] : visible) {
-        if (!rows.has(row) || !scroller.contains(row)) continue;
-        const snapshot = rowGeometry.get(row);
-        if (intersection) {
-          if (!snapshot) continue;
-          entries.push({ row, rect: snapshot.rect, visible: snapshot.visible });
-        } else {
+      if (!hoveredRow && !settledScroll) { hide(); return; }
+      const entries = [];
+      if (useSnapshot && !hoveredRow) {
+        for (const row of rows) {
+          if (!scroller.contains(row)) continue;
           const rect = row.getBoundingClientRect();
-          entries.push({ row, rect, visible: isVisible(row, rect) });
+          if (rect.bottom <= box.top || rect.top >= box.bottom || rect.right <= box.left || rect.left >= box.right) continue;
+          entries.push({ row, rect, visible: isVisible(row, rect, !!intersection) });
         }
       }
       // QQ keeps message DOM order in visual chronology even though its scroll
       // container is column-reverse. IO tells us which rows intersect; the last
       // of those in DOM order is the bottom message. It needs no scrollTop or
       // rect read between the native layout and its next paint.
-      const bottom = intersection ? [...rows].filter(row => visible.has(row) &&
-        rowGeometry.get(row)?.visible).at(-1) : bottomVisible(entries, box)?.row;
+      const bottom = useSnapshot ? bottomVisible(entries, box)?.row : visibleOrdered.at(-1);
       const selected = hoveredRow || bottom;
       if (!selected) { hide(true); return; }
       const record = recordOf(selected);
@@ -309,7 +362,7 @@
       const label = date ? formatDate(date) : nativeTime(selected);
       if (!label) { hide(true); return; }
       const element = ensurePill();
-      setLabel(label, element.classList.contains('is-active'));
+      setLabel(label, !settledScroll && element.classList.contains('is-active'));
       const left = (box.left + box.right) / 2 + 'px', top = box.top + 10 + 'px';
       if (element.style.left !== left) element.style.left = left;
       if (element.style.top !== top) element.style.top = top;
@@ -317,25 +370,30 @@
       element.setAttribute('aria-hidden', 'false');
     }
     function schedule() {
-      if (active && !frame) frame = win.requestAnimationFrame(update);
+      if (active && hoveredRow && !scrolling && !frame) frame = win.requestAnimationFrame(() => update());
     }
     function onScroll() {
-      // Scroll events can arrive several times before one paint. Keep this
-      // passive listener free of layout reads; update validates geometry once.
       if (disposed || doc.hidden || !area?.isConnected || area.hasAttribute('data-ll-switching')) { hide(true); return; }
-      hoveredRow = null;
-      pendingHoverRow = null;
-      win.clearTimeout(hoverTimer);
-      win.clearTimeout(leaveTimer);
-      scrolling = true;
-      active = true;
-      win.clearTimeout(clearTimer);
-      win.clearTimeout(idleTimer);
-      idleTimer = win.setTimeout(() => {
-        scrolling = false;
-        if (!hoveredRow) hide();
-      }, IDLE_MS);
-      schedule();
+      if (!scrolling) {
+        hoveredRow = pendingHoverRow = null;
+        win.clearTimeout(hoverTimer);
+        win.clearTimeout(leaveTimer);
+        leaveTimer = 0;
+        win.clearTimeout(clearTimer);
+        win.clearTimeout(idleTimer);
+        scrolling = active = true;
+      }
+      if (frame) win.cancelAnimationFrame(frame);
+      frame = 0;
+      win.clearTimeout(settleTimer);
+      settleTimer = win.setTimeout(() => {
+        settleTimer = 0;
+        frame = win.requestAnimationFrame(() => {
+          scrolling = false;
+          update(true);
+          if (active) idleTimer = win.setTimeout(() => { if (!hoveredRow) hide(); }, IDLE_MS);
+        });
+      }, SCROLL_SETTLE_MS);
     }
     function hoveredMessage(target) {
       const bubble = target?.closest?.(BUBBLE);
@@ -343,7 +401,7 @@
       return row && area?.contains(bubble) && scroller?.contains(row) ? row : null;
     }
     function setHover(row) {
-      if (row === pendingHoverRow) return;
+      if (scrolling || row === pendingHoverRow) return;
       pendingHoverRow = row;
       win.clearTimeout(hoverTimer);
       if (row && row === hoveredRow) {
@@ -355,8 +413,7 @@
         leaveTimer = win.setTimeout(() => {
           leaveTimer = 0;
           hoveredRow = null;
-          if (!scrolling) hide(false, !!pendingHoverRow);
-          else schedule();
+          hide(false, !!pendingHoverRow);
         }, LEAVE_MS);
       }
       if (!row) return;
@@ -391,7 +448,12 @@
       intersection = localObserver = resizeObserver = null;
       rows.clear();
       visible.clear();
+      visibleOrdered = [];
+      visibleOrderedSet.clear();
       rowGeometry.clear();
+      visibilityDirty.clear();
+      pendingRows.clear();
+      rowsInitialized = false;
       geometryDirty = true;
       viewportBox = null;
       area = scroller = null;
@@ -416,18 +478,34 @@
       if (typeof win.IntersectionObserver === 'function') {
         intersection = new win.IntersectionObserver(entries => {
           for (const entry of entries) {
+            if (!rows.has(entry.target)) {
+              visible.delete(entry.target);
+              rowGeometry.delete(entry.target);
+              setOrderedVisible(entry.target, false);
+              continue;
+            }
             const rect = entry.boundingClientRect;
+            const previous = rowGeometry.get(entry.target);
+            const shouldCheckVisibility = entry.isIntersecting &&
+              (!previous || visibilityDirty.has(entry.target));
+            if (shouldCheckVisibility) visibilityDirty.delete(entry.target);
+            const cssVisible = shouldCheckVisibility
+              ? isVisible(entry.target, rect, true)
+              : previous?.cssVisible ?? true;
+            const isRowVisible = entry.isIntersecting && cssVisible;
             rowGeometry.set(entry.target, { rect: { top: rect.top, bottom: rect.bottom,
               left: rect.left, right: rect.right, width: rect.width, height: rect.height },
               // A delayed message entry can be at opacity zero in the first
               // IO delivery. Opacity later changing alone does not redeliver IO,
               // so it must not permanently disqualify an intersecting row.
-              visible: entry.isIntersecting && isVisible(entry.target, rect, true) });
+              visible: isRowVisible, cssVisible });
             if (entry.isIntersecting && entry.intersectionRatio > 0) visible.add(entry.target);
             else visible.delete(entry.target);
+            setOrderedVisible(entry.target, entry.isIntersecting && entry.intersectionRatio > 0 &&
+              isRowVisible);
           }
           schedule();
-        }, { root: scroller, threshold: [0, 0.001, 0.25, 0.5, 0.75, 1] });
+        }, { root: scroller, threshold: [0, 0.001] });
       }
       const box = viewport();
       viewportBox = box;
@@ -437,28 +515,62 @@
         visible: true })), box);
       peer = peerKey(recordOf(initial?.row));
       localObserver = new win.MutationObserver(records => {
-        if (records.some(record => record.type === 'attributes' && record.target === area &&
-            ['class', 'style'].includes(record.attributeName))) geometryDirty = true;
-        if (records.some(record => record.type === 'childList' &&
-          [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1 &&
-            (node.matches('.message') || node.querySelector('.message'))))) rowsDirty = true;
+        let shouldUpdate = false;
+        const visibilityChanged = new Set();
+        for (const record of records) {
+          if (record.type === 'attributes') {
+            const target = record.target;
+            if (target === area && record.attributeName === 'data-ll-switching') {
+              if (area.hasAttribute('data-ll-switching')) hide(true);
+              shouldUpdate = true;
+              continue;
+            }
+            if ((target === area || target === scroller) && ['class', 'style'].includes(record.attributeName)) {
+              geometryDirty = true;
+              shouldUpdate = true;
+              if (record.attributeName === 'class' || styleChangesVisibility(record)) {
+                for (const row of rows) visibilityChanged.add(row);
+              }
+              continue;
+            }
+            const wrapper = target.matches?.('.ml-item') ? target : target.closest?.('.ml-item');
+            const row = target.matches?.('.message') ? target : wrapper?.querySelector('.message');
+            if (row && rows.has(row) && (target === row || target === wrapper) && record.attributeName === 'id') {
+              shouldUpdate = true;
+              continue;
+            }
+            if (row && rows.has(row) && (target === row || target === wrapper) &&
+                (record.attributeName === 'class' || styleChangesVisibility(record))) {
+              visibilityChanged.add(row);
+              shouldUpdate = true;
+            }
+            continue;
+          }
+          if (record.type === 'childList') {
+            for (const node of [...record.addedNodes, ...record.removedNodes]) {
+              const affected = messagesWithin(node);
+              if (!affected.length) continue;
+              rowsDirty = true;
+              shouldUpdate = true;
+              for (const row of affected) pendingRows.add(row);
+            }
+          } else if (record.type === 'characterData' && record.target.parentElement?.closest('.message')) {
+            shouldUpdate = true;
+          }
+        }
         if (intersection) {
-          // CSS visibility changes keep the same intersection ratio. Ask IO
-          // for a fresh delivered snapshot of affected rows rather than read
-          // their computed style or geometry in a scroll callback.
-          const changed = [...new Set(records.filter(record => record.type === 'attributes' &&
-            ['class', 'style'].includes(record.attributeName)).map(record => record.target))];
-          if (changed.length) for (const row of rows) if (changed.some(target => target === row || target.contains(row))) {
-              intersection.unobserve(row);
-              intersection.observe(row);
+          // Descendant transforms and colors do not change row eligibility.
+          for (const row of visibilityChanged) {
+            visibilityDirty.add(row);
+            intersection.unobserve(row);
+            intersection.observe(row);
           }
         }
         if (!scroller?.isConnected) scheduleDiscovery();
-        if (area?.hasAttribute('data-ll-switching')) hide(true);
-        if (active) schedule();
+        if (active && shouldUpdate) schedule();
       });
       localObserver.observe(area, { childList: true, subtree: true, attributes: true,
-        attributeFilter: ['class', 'style', 'id', 'data-ll-switching'], characterData: true });
+        attributeFilter: ['class', 'style', 'id', 'data-ll-switching'], attributeOldValue: true, characterData: true });
       if (typeof win.ResizeObserver === 'function') {
         resizeObserver = new win.ResizeObserver(entries => {
           geometryDirty = true;
@@ -511,7 +623,10 @@
       win.removeEventListener('pagehide', dispose);
       pill?.remove();
       pill = null;
-      if (win[KEY] === api) delete win[KEY];
+      if (win[KEY] === api) {
+        delete win[KEY];
+        doc.body?.removeAttribute('data-liuli-scroll-time');
+      }
     }
     const api = { refresh: scheduleDiscovery, dispose };
     doc.addEventListener('pointerdown', onSwitch, true);
@@ -530,5 +645,14 @@
     return;
   }
   window[KEY]?.dispose();
-  window[KEY] = install(window, document);
+  const setEnabled = enabled => {
+    if (enabled === true) {
+      document.body.toggleAttribute('data-liuli-scroll-time', true);
+      window[KEY] ??= install(window, document);
+    } else {
+      window[KEY]?.dispose();
+      document.body.removeAttribute('data-liuli-scroll-time');
+    }
+  };
+  window.LiuliScrollTime = { setEnabled };
 })();
