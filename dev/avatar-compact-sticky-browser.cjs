@@ -93,6 +93,27 @@ const { chromium } = require(process.argv[2] || 'playwright');
         assert.equal(row.bottomError, 0, JSON.stringify(row));
         assert.ok(row.insideRow, JSON.stringify(row));
       }
+      await page.evaluate(() => {
+        const list = document.querySelector('.ml-list');
+        const rows = Array.from({ length: 120 }, (_, i) =>
+          make('bulk-' + i, i % 2 === 0 ? 'first' : 'last', 40, { hide: i % 2 === 0 }));
+        list.replaceChildren(...rows);
+      });
+      await page.addScriptTag({ path: path.join(__dirname, '../renderer/avatar-compact.js') });
+      await page.waitForFunction(() => window.__liuliAvatarCompactTrack.tracks().size === 60);
+      await settle();
+      const baselineStats = await stats();
+      await page.evaluate(() => {
+        window.untouchedTrack = window.__liuliAvatarCompactTrack.tracks().get(document.querySelector('#bulk-119 .message-container'));
+        document.querySelector('#bulk-0').remove();
+      });
+      await page.waitForFunction(() => window.__liuliAvatarCompactTrack.tracks().size === 59);
+      await settle();
+      const after = await stats();
+      assert.equal(after.fullPasses, baselineStats.fullPasses, 'Removing one row rebuilt all avatar groups');
+      assert(after.rowsInspected - baselineStats.rowsInspected < 10, 'Removing one row scanned unrelated groups');
+      assert(await page.evaluate(() => window.untouchedTrack === window.__liuliAvatarCompactTrack.tracks().get(document.querySelector('#bulk-119 .message-container'))),
+        'Unrelated avatar track was replaced');
       assert.deepEqual(errors, []);
       await page.close();
     }

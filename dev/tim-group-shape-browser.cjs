@@ -130,14 +130,16 @@ const measure = () => [...document.querySelectorAll('[data-sample]')].map(sample
       const values = await page.evaluate(measure);
       for (const sample of values.filter(sample => /-(?:image|market-face|lottie)$/.test(sample.id))) {
         assert.equal(sample.padding, '0px', `${mode}/${scale} native media gained text padding`);
-        assert.equal(sample.background, 'rgba(0, 0, 0, 0)', `${mode}/${scale} native media gained a bubble surface`);
+        const expectedBackground = !sample.id.endsWith('-image') ? 'rgba(0, 0, 0, 0)' :
+          sample.id.startsWith('self-') ? 'rgb(240, 192, 67)' : 'rgba(50, 44, 29, 0.86)';
+        assert.equal(sample.background, expectedBackground, `${mode}/${scale} unexpected picture or sticker backing`);
         if (mode === 'tim') assert(!sample.radius.includes(999), 'Native media received TIM capsule corners');
         mediaSurfaces.push({ mode, scale, id: sample.id, padding: sample.padding, background: sample.background, radius: sample.radius });
       }
     }
     report.nativeMediaSurfaces = mediaSurfaces;
     await page.evaluate(() => { document.body.style.removeProperty('--ll-bubble-scale'); document.body.removeAttribute('data-liuli-scaled-bubbles'); });
-    report.checks.push('Native pure pictures, market faces and lottie keep transparent unpadded presentation across all3styles and80/100/140% sizes.');
+    report.checks.push('Unloaded pictures retain a sender-colored backing without padding; market faces and lottie remain transparent in all three styles at 80/100/140% sizes.');
     await page.evaluate(() => window.regroup('tg'));
     const tg = await page.evaluate(measure);
     assert.equal(tg.find(sample => sample.id === 'others-image').group, 'mid');

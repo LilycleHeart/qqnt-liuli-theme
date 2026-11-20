@@ -395,7 +395,7 @@ test('TIM inside moves the native sender node and restores its original sibling 
   assert.equal(clicks, 2, 'Native sender event was replaced or cloned');
 });
 
-function groupingHarness(specs, styleFiles = ['scroll-time.css']) {
+function groupingHarness(specs) {
   const area = { scrollTop: 0, getBoundingClientRect: () => ({ width: 600, height: 100, top: 0, bottom: 100 }) };
   const rows = specs.map((spec, index) => {
     const attrs = new Set();
@@ -432,7 +432,7 @@ function groupingHarness(specs, styleFiles = ['scroll-time.css']) {
   });
   area.querySelectorAll = selector => selector === '.message-container' ? rows :
     rows.map(row => row.avatar).filter(avatar => avatar.dataset.liuliTy !== undefined);
-  const context = { FILES: styleFiles, llModeCfg: { chatStyle: 'tim', avatarPosition: 'bottom', scrollTime: true }, console: { warn() {} },
+  const context = { llModeCfg: { chatStyle: 'tim', avatarPosition: 'bottom', scrollTime: true }, console: { warn() {} },
     window: { LiuliQQ: { messageRecord: row => row.record } },
     getComputedStyle: node => ({ display: node.display }),
     document: { querySelector: () => null, querySelectorAll: selector => selector === '.chat-msg-area .message-container' ? rows :
@@ -520,13 +520,13 @@ test('TIM avatar groups include media while text shapes remain isolated; TG and 
   assert(h.rows.every(row => row.dataset.liuliG === 'single'));
 });
 
-test('TG and TIM group consecutive senders across hidden time presentation while retaining real boundaries', () => {
+test('TG and TIM group consecutive senders while retaining native row boundaries', () => {
   for (const mode of ['tg', 'tim']) for (const [name, specs, expected] of [
     ['unknown', [{ sender: 'a' }, {}, { sender: 'a' }], ['single', '', 'single']],
     ['peer', [{ sender: 'a' }, { sender: 'a', peer: 'other' }], ['single', 'single']],
     ['system', [{ sender: 'a', separatorAfter: true }, { sender: 'a' }], ['single', 'single']],
     ['timestamp', [{ sender: 'a' }, { sender: 'a', showTimestamp: true }], ['first', 'last']],
-    ['hidden-time', [{ sender: 'a', separatorAfter: 'hidden-time' }, { sender: 'a' }], ['first', 'last']],
+    ['hidden-time', [{ sender: 'a', separatorAfter: 'hidden-time' }, { sender: 'a' }], ['single', 'single']],
     ['visible-time', [{ sender: 'a', separatorAfter: 'visible-time' }, { sender: 'a' }], ['single', 'single']],
     ['hidden-system', [{ sender: 'a', separatorAfter: 'hidden-system' }, { sender: 'a' }], ['single', 'single']],
     ['mixed-time-system', [{ sender: 'a', separatorAfter: 'mixed-time-system' }, { sender: 'a' }], ['single', 'single']],
@@ -537,13 +537,6 @@ test('TG and TIM group consecutive senders across hidden time presentation while
     const h = groupingHarness(specs); h.context.llModeCfg.chatStyle = mode; h.group();
     assert.deepEqual(h.rows.map(row => mode === 'tim' ? row.dataset.liuliAvatarG : row.dataset.liuliG), expected, mode + '/' + name);
   }
-});
-
-test('native time rows remain grouping boundaries when scroll-time styles are not loaded', () => {
-  const h = groupingHarness([{ sender: 'a', separatorAfter: 'hidden-time' }, { sender: 'a' }], []);
-  h.group();
-  assert.deepEqual(h.rows.map(row => row.dataset.liuliG), ['single', 'single']);
-  assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['single', 'single']);
 });
 
 test('TIM inline-face-only messages retain text shapes and grouping; empty, unknown and media content remain excluded', () => {
@@ -559,16 +552,16 @@ test('TIM inline-face-only messages retain text shapes and grouping; empty, unkn
     ['first', ...Array(h.rows.length - 2).fill('mid'), 'last'], 'Shape classification must not split sender/avatar groups');
 });
 
-test('scroll timestamp prompt is opt-in, and disabled native separators split groups', () => {
+test('scroll timestamp prompt is opt-in and does not change native grouping boundaries', () => {
   const { api } = harness();
   assert.equal(api.normalize({}).scrollTime, false);
   assert.equal(api.normalize({ scrollTime: 'true' }).scrollTime, false);
   assert.equal(api.normalize({ scrollTime: true }).scrollTime, true);
-  const h = groupingHarness([{ sender: 'a', separatorAfter: 'hidden-time' }, { sender: 'a' }]);
-  h.context.llModeCfg.scrollTime = false;
-  h.group();
-  assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['single', 'single']);
-  h.context.llModeCfg.scrollTime = true;
-  h.group();
-  assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['first', 'last']);
+  const h = groupingHarness([{ sender: 'a', separatorAfter: 'visible-time' }, { sender: 'a' }]);
+  for (const enabled of [false, true]) {
+    h.context.llModeCfg.scrollTime = enabled;
+    h.group();
+    assert.deepEqual(h.rows.map(row => row.dataset.liuliG), ['single', 'single']);
+    assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['single', 'single']);
+  }
 });

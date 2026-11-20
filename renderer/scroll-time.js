@@ -647,11 +647,10 @@
   window[KEY]?.dispose();
   const setEnabled = enabled => {
     if (enabled === true) {
-      document.body.toggleAttribute('data-liuli-scroll-time', true);
       window[KEY] ??= install(window, document);
+      document.body.toggleAttribute('data-liuli-scroll-time', true);
     } else {
       window[KEY]?.dispose();
-      document.body.removeAttribute('data-liuli-scroll-time');
     }
   };
   window.LiuliScrollTime = { setEnabled };

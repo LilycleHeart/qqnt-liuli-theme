@@ -1880,19 +1880,20 @@ body:not([data-liuli-input-layout="native"]) .chat-func-bar.liuli-expanded .bar-
 
 /* ── 多选底栏（#25，2026-11-10）──
  * 多选时 QQ 显示 .forward-ops（逐条转发 / 合并转发 / 删除 …）。它平时一直在 DOM 里，
- * 只是被 v-show 写了内联 display: none，所以「正在多选」= 它没有这条内联样式。
+ * 只是被 v-show 写了内联 display: none。页面观察器把这个状态同步到专用属性，
+ * 避免滚动条更新 [style] 时触发全窗重算。重复属性用来保留原选择器权重。
  * 只认和 .msg-input 同在一个输入区的那个（页面里还有一个隐藏的空输入区）。
  * :has() 不能嵌套，所以都用兄弟选择器写在一层 :has() 里。
  * 多选时编辑器 .msg-input 仍占 44px，主题浮在输入框上的按钮（#liuli-input-overlay）也还在，
  * 操作栏被挤到底、文字贴着卡片下沿。这里把两样收掉，上下各留 10px，操作栏居中。 */
-body:not([data-liuli-input-layout="native"]) .aio .chat-input-area > .msg-input:has(~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])),
-body:not([data-liuli-input-layout="native"]) .aio .chat-input-area > .chat-func-bar:has(~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) {
+body:not([data-liuli-input-layout="native"]) .aio .chat-input-area > .msg-input:has(~ .forward-ops[data-liuli-forward-visible][data-liuli-forward-visible]),
+body:not([data-liuli-input-layout="native"]) .aio .chat-input-area > .chat-func-bar:has(~ .forward-ops[data-liuli-forward-visible][data-liuli-forward-visible]) {
   display: none !important;
 }
-body:not([data-liuli-input-layout="native"]):has(.aio .chat-input-area > .msg-input ~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) #liuli-input-overlay {
+body:not([data-liuli-input-layout="native"]):has(.aio .chat-input-area > .msg-input ~ .forward-ops[data-liuli-forward-visible][data-liuli-forward-visible]) #liuli-input-overlay {
   display: none !important;
 }
-body:not([data-liuli-input-layout="native"]) .aio .chat-input-area:has(> .msg-input ~ .forward-ops:not([style*="display: none"]):not([style*="display:none"])) {
+body:not([data-liuli-input-layout="native"]) .aio .chat-input-area:has(> .msg-input ~ .forward-ops[data-liuli-forward-visible][data-liuli-forward-visible]) {
   justify-content: center !important;
   padding: 10px 0 !important;
 }

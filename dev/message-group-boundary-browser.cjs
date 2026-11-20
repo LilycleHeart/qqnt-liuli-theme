@@ -53,6 +53,28 @@ const runtime = `(()=>{
   };
   window.insertBarrier=index=>{const row=document.createElement('div');row.className='ml-item';row.innerHTML='<div class="message"><div class="message-container"></div></div>';nativeRows[index].before(row);groupMessages([row]);return row.isConnected;};
   window.removeBarrier=()=>{const row=document.querySelector('.ml-item:not([id])'),previous=row.previousElementSibling,next=row.nextElementSibling;row.remove();groupMessages([previous,next]);return [nativeRows[2].querySelector('.message-container').dataset.liuliG,nativeRows[3].querySelector('.message-container').dataset.liuliG];};
+  window.measureTimeDivider=()=>{
+    const divider=document.createElement('div');divider.className='ml-item';
+    divider.innerHTML='<div class="message"><div class="message__timestamp"><span class="babble">12:34</span></div></div>';
+    nativeRows[3].before(divider);
+    const groups=()=>[2,3].map(i=>{
+      const data=nativeRows[i].querySelector('.message-container').dataset;
+      return [data.liuliG,data.liuliAvatarG];
+    });
+    try {
+      return [false,true].map(scrollTime=>{
+        llModeCfg.scrollTime=scrollTime;
+        groupMessages([divider]);
+        const incremental=groups();
+        groupMessages();
+        return {incremental,full:groups()};
+      });
+    } finally {
+      llModeCfg.scrollTime=false;
+      divider.remove();
+      groupMessages();
+    }
+  };
   window.measure=id=>{const row=document.getElementById(String(id)),mc=row.querySelector('.message-container');return {height:row.getBoundingClientRect().height,group:mc.dataset.liuliG,avatarGroup:mc.dataset.liuliAvatarG,nameDisplay:getComputedStyle(mc.querySelector('.user-name')).display,original:nativeRows[Number(id)]===row};};
   window.configure=(mode,placement)=>{llModeCfg.chatStyle=mode;llModeCfg.timSenderPosition=placement;document.body.dataset.liuliChatStyle=mode;document.body.dataset.liuliTimSenderPosition=placement;
     for(const row of nativeRows){const name=row.querySelector('.user-name'),mc=row.querySelector('.message-container'),bubble=row.querySelector('.msg-content-container');if(mode==='tg'||placement==='inside')bubble.prepend(name);else mc.insertBefore(name,mc.querySelector('.message-content__wrapper'));}
@@ -65,6 +87,74 @@ const runtime = `(()=>{
     } else source.value=entries;
   };
   window.nativeUnchanged=()=>entries.every(entry=>entry.height===39&&entry.pos===39);
+  window.measureLocalGrouping=()=>{
+    const rows = Array.from({ length: 120 }, (_, i) => {
+      const row = nativeRows[0].cloneNode(true);
+      row.id = 'local-' + i;
+      return row;
+    });
+    inner.replaceChildren(...rows);
+    groupMessages();
+    let fullScans = 0, rowInspections = 0;
+    const query = document.querySelectorAll, closest = Element.prototype.closest;
+    document.querySelectorAll = function(selector) {
+      if (selector === '.chat-msg-area .message-container') fullScans++;
+      return query.call(this, selector);
+    };
+    Element.prototype.closest = function(selector) {
+      if (selector === '.ml-item' && this.matches('.message-container')) rowInspections++;
+      return closest.call(this, selector);
+    };
+    let local;
+    const snapshot = () => rows.map(row => {
+      const data = row.querySelector('.message-container').dataset;
+      return [data.liuliG, data.liuliAvatarG];
+    });
+    try {
+      const row = rows[60];
+      const avatar = row.querySelector('.avatar-span');
+      avatar.setAttribute('aria-label', 'changed');
+      groupMessages([row]);
+      local = snapshot();
+    } finally {
+      document.querySelectorAll = query;
+      Element.prototype.closest = closest;
+    }
+    groupMessages();
+    return { fullScans, rowInspections, parity: JSON.stringify(local) === JSON.stringify(snapshot()),
+      neighbors: local.slice(59, 62) };
+  };
+  window.measureUpwardMoves=()=>{
+    const make = i => {
+      const row = nativeRows[0].cloneNode(true);
+      row.id = 'scroll-' + i;
+      row.querySelector('.avatar-span').setAttribute('aria-label', 'sender-' + Math.floor(i / 3));
+      return row;
+    };
+    inner.replaceChildren(...Array.from({ length: 120 }, (_, i) => make(60 + i)));
+    const snapshot = () => Array.from(inner.children, row => {
+      const { liuliG, liuliAvatarG } = row.querySelector('.message-container').dataset;
+      return [row.id, liuliG, liuliAvatarG];
+    });
+    let fullScans = 0;
+    const query = document.querySelectorAll;
+    groupMessages();
+    for (let i = 59; i >= 48; i--) {
+      const row = make(i);
+      inner.lastElementChild.remove();
+      inner.prepend(row);
+      document.querySelectorAll = function(selector) {
+        if (selector === '.chat-msg-area .message-container') fullScans++;
+        return query.call(this, selector);
+      };
+      try { groupMessages([row, inner.lastElementChild]); }
+      finally { document.querySelectorAll = query; }
+      const incremental = JSON.stringify(snapshot());
+      groupMessages();
+      if (incremental !== JSON.stringify(snapshot())) return { fullScans, parity: false, index: i };
+    }
+    return { fullScans, parity: true };
+  };
 })();`;
 (async () => {
   fs.mkdirSync(output, { recursive: true });
@@ -103,6 +193,11 @@ const runtime = `(()=>{
     assert.equal(await page.evaluate(() => window.measure(3).group), 'first');
     assert.equal(barrier, true);
     assert.deepEqual(await page.evaluate(() => window.removeBarrier()), ['mid','mid']);
+    const timeDivider = await page.evaluate(() => window.measureTimeDivider());
+    const expectedGroups = [['last','last'],['first','first']];
+    assert.deepEqual(timeDivider, Array.from({ length:2 }, () => ({incremental:expectedGroups,full:expectedGroups})),
+      'The floating time setting must not group messages across a native time divider');
+    report.cases.push({ timeDivider });
     await page.evaluate(() => window.configure('tim', 'outside'));
     for (const barrier of ['delete', 'system', 'unknown', 'peer']) {
       await page.evaluate(barrier => { window.setSource(barrier);window.mount(3, 7); }, barrier);
@@ -116,6 +211,15 @@ const runtime = `(()=>{
     const recycled = await page.evaluate(() => window.recycleRow(3));
     assert.deepEqual(recycled, { recordReads: 2, groups: ['last','single','first'], sameContainer: true });
     report.cases.push({ recycledRow: recycled });
+    const local = await page.evaluate(() => window.measureLocalGrouping());
+    assert.equal(local.fullScans, 0, 'Local edit scanned the entire chat');
+    assert(local.rowInspections < 20, 'Local edit inspected too many rows');
+    assert.equal(local.parity, true, 'Local grouping disagrees with full rebuild');
+    assert.deepEqual(local.neighbors, [['last', 'last'], ['single', 'single'], ['first', 'first']]);
+    report.cases.push({ localGrouping: local });
+    const upwardMoves = await page.evaluate(() => window.measureUpwardMoves());
+    assert.deepEqual(upwardMoves, { fullScans: 0, parity: true });
+    report.cases.push({ upwardMoves });
     assert.deepEqual(errors, []);
     await page.screenshot({ path: path.join(output, 'boundary.png') });
     report.passed = true;

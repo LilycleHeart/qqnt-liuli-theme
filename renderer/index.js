@@ -372,6 +372,8 @@
     '.group-user',
     '.group-member-list'
   ];
+  const MATERIAL_TARGETS = [...GLASS.map(([selector]) => selector), ...CLEAR].join(',');
+  const CLEAR_TARGETS = CLEAR.join(',');
   const QQ_COLOR_MAP = {
     'rgba(255, 255, 255, 0.9)': 'var(--ll-on-glass)',
     'rgba(255, 255, 255, 0.8)': 'var(--ll-on-glass)',
@@ -565,24 +567,23 @@
   }
   function applyOverrides(root = document.body) {
     try {
-      for (const [sel, bg] of GLASS) {
-        elementsWithin(root, sel).forEach(el => {
-          if (el.dataset.liuliGlass) return;
-          el.dataset.liuliGlass = '1';
-          el.style.setProperty('background', bg, 'important');
-          el.style.setProperty('backdrop-filter', 'var(--ll-material-blur)', 'important');
-          el.style.setProperty('-webkit-backdrop-filter', 'var(--ll-material-blur)', 'important');
-          el.style.setProperty('border-radius', 'var(--ll-radius)', 'important');
-        });
-      }
-      for (const sel of CLEAR) {
-        elementsWithin(root, sel).forEach(el => {
-          if (el.dataset.liuliClear) return;
+      for (const el of elementsWithin(root, MATERIAL_TARGETS)) {
+        if (!el.dataset.liuliGlass) {
+          const glass = GLASS.find(([sel]) => el.matches(sel));
+          if (glass) {
+            el.dataset.liuliGlass = '1';
+            el.style.setProperty('background', glass[1], 'important');
+            el.style.setProperty('backdrop-filter', 'var(--ll-material-blur)', 'important');
+            el.style.setProperty('-webkit-backdrop-filter', 'var(--ll-material-blur)', 'important');
+            el.style.setProperty('border-radius', 'var(--ll-radius)', 'important');
+          }
+        }
+        if (!el.dataset.liuliClear && el.matches(CLEAR_TARGETS)) {
           el.dataset.liuliClear = '1';
           el.style.setProperty('background', 'transparent', 'important');
           el.style.setProperty('backdrop-filter', 'none', 'important');
           el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
-        });
+        }
       }
     } catch (e) {}
   }
@@ -836,7 +837,7 @@
     llModeCfg = llNormalizeSettings(cfg);
     const paletteChanged = previous.colorSource !== llModeCfg.colorSource ||
       previous.customColor !== llModeCfg.customColor;
-    const reflowMessages = !llSettingsApplied || ['chatStyle', 'avatarPosition', 'timSenderPosition', 'hideImageNames', 'scrollTime']
+    const reflowMessages = !llSettingsApplied || ['chatStyle', 'avatarPosition', 'timSenderPosition', 'hideImageNames']
       .some(key => previous[key] !== llModeCfg[key]);
     llSettingsApplied = true;
     window.__liuliSettingsCache = llModeCfg;
@@ -1340,11 +1341,8 @@
   }
   function groupMessages(roots) {
     try {
-      var list = document.querySelectorAll('.chat-msg-area .message-container');
-      if (list.length === 0) return;
-      // Reuse row classification, not adjacency: virtual windows and native
-      // history boundaries can change even when most mounted rows do not.
       const rowCache = groupMessages.rowCache ??= new WeakMap();
+      const initialized = groupMessages.initialized ??= new WeakMap();
       const dirty = new Set();
       const mode = llModeCfg.chatStyle;
       for (const root of roots || []) {
@@ -1353,10 +1351,11 @@
         else for (const row of root.querySelectorAll('.message-container')) dirty.add(row);
       }
       const rows = new WeakMap();
+      const recycled = new Set();
       var sequences = new Map();
       var visibleRecords = new Map();
       function recordOf(mc) {
-        return rows.get(mc)?.record || null;
+        return infoOf(mc).record;
       }
       function keyOf(mc, record) {
         var sender = record && (record.senderUid || record.senderUin);
@@ -1373,36 +1372,14 @@
         if (img && img.src) return img.src;
         return '';
       }
-      function hiddenTimestampRow(row) {
-        // Only a pure native time row may disappear from visual adjacency.
-        // Never skip hidden system/revoke rows or virtual-list placeholders.
-        if (!row.matches('.ml-item')) return false;
-        var stamps = row.querySelectorAll('.message__timestamp');
-        // A native divider is a boundary unless the time prompt hides it.
-        // Avoid a computed-style read for each adjacency check.
-        if (!llModeCfg.scrollTime || (typeof FILES !== 'undefined' && !FILES.includes('scroll-time.css')) || stamps.length !== 1 ||
-            (stamps[0].style?.display && stamps[0].style.display !== 'none')) return false;
-        function onlyTimestamp(node) {
-          if (node === stamps[0] || node.nodeType === 8) return true;
-          if (node.nodeType === 3) return !node.textContent.trim();
-          return node.nodeType === 1 && (node === row || node.matches('.message')) &&
-            node.childNodes.length > 0 && [...node.childNodes].every(onlyTimestamp);
-        }
-        return onlyTimestamp(row);
-      }
       function adjacent(a, b) {
         if (!a || !b || a.closest('.chat-msg-area') !== b.closest('.chat-msg-area')) return false;
         var ra = recordOf(a), rb = recordOf(b);
         var ta = Number(ra && ra.msgTime), tb = Number(rb && rb.msgTime);
-        // Time is presented by the top pill. A hidden native timestamp or
-        // elapsed interval must not split otherwise consecutive sender rows.
+        // A time difference alone does not split consecutive sender rows.
         if (ta > 0 && tb > 0 && tb < ta) return false;
         var rowA = a.closest('.ml-item'), rowB = b.closest('.ml-item');
-        if (rowA && rowB && rowA !== rowB) {
-          var next = rowA.nextElementSibling;
-          while (next && next !== rowB && hiddenTimestampRow(next)) next = next.nextElementSibling;
-          if (next !== rowB) return false;
-        }
+        if (rowA && rowB && rowA !== rowB && rowA.nextElementSibling !== rowB) return false;
         return true;
       }
       function classifyRow(mc, area, wrapper) {
@@ -1425,42 +1402,98 @@
         }
         return { key: keyOf(mc, record), record, timText: !!timText, area, wrapper, rowId: wrapper?.id, mode };
       }
-      var keys = [];
-      var groupable = [];
-      var timTextRows = [];
-      for (var i = 0; i < list.length; i++) {
-        const mc = list[i], area = mc.closest('.chat-msg-area'), wrapper = mc.closest('.ml-item');
+      function infoOf(mc) {
+        if (rows.has(mc)) return rows.get(mc);
+        const area = mc.closest('.chat-msg-area'), wrapper = mc.closest('.ml-item');
         let row = rowCache.get(mc);
+        if (row && (row.wrapper !== wrapper || row.rowId !== wrapper?.id)) recycled.add(mc);
         if (!roots?.length || dirty.has(mc) || !row?.record || row.mode !== mode ||
             row.area !== area || row.wrapper !== wrapper || row.rowId !== wrapper?.id) {
           row = classifyRow(mc, area, wrapper);
           rowCache.set(mc, row);
         }
         rows.set(mc, row);
-        keys.push(row.key);
-        timTextRows.push(row.timText);
-        groupable.push(mode === 'tg' || row.timText);
-        const record = row.record;
-        if (!visibleRecords.has(area)) visibleRecords.set(area, new Map());
-        if (record?.msgId != null) visibleRecords.get(area).set(String(record.msgId), i);
-        if (!sequences.has(area) && (mode === 'tg' || mode === 'tim')) {
-          var sequence = null;
-          try { sequence = window.LiuliQQ?.loadedMessageSequence?.(area) || null; } catch (e) {}
-          sequences.set(area, sequence);
-        }
+        return row;
       }
-      function nativeBoundary(index, direction, shape) {
-        var mc = list[index], info = rows.get(mc), area = info.area;
-        var sequence = sequences.get(area), current = info.record;
-        if (!sequence || !current) return false;
+      const mounted = new Map();
+      function containerOf(row) {
+        if (!row?.matches('.ml-item')) return null;
+        if (!mounted.has(row)) {
+          const containers = row.querySelectorAll('.message-container');
+          // Nested or unusual layouts keep the original document-order pass.
+          if (containers.length > 1) throw new Error('Ambiguous message row');
+          mounted.set(row, containers[0] || null);
+        }
+        return mounted.get(row);
+      }
+      function localRows() {
+        if (!roots?.length) return null;
+        const affected = new Set(), lists = new Set();
+        const add = row => { const mc = containerOf(row); if (mc) affected.add(mc); };
+        try {
+          for (const root of roots) {
+            const row = root.closest?.('.ml-item'), list = row?.parentElement;
+            if (!list?.matches('.ml-list') || initialized.get(list) !== mode) return null;
+            lists.add(list);
+            add(row);
+            add(row.previousElementSibling);
+            add(row.nextElementSibling);
+          }
+          // The native history can grow while the opposite edge is still mounted.
+          for (const list of lists) {
+            add(list.firstElementChild);
+            add(list.lastElementChild);
+          }
+          const neighborsOf = mc => {
+            const { wrapper } = infoOf(mc);
+            const previous = containerOf(wrapper.previousElementSibling);
+            const next = containerOf(wrapper.nextElementSibling);
+            for (const neighbor of [previous, next]) {
+              if (neighbor) infoOf(neighbor);
+            }
+            return [mc, previous, next];
+          };
+          const work = [...affected].map(neighborsOf);
+          for (const mc of recycled) {
+            const row = neighborsOf(mc);
+            for (const neighbor of row) {
+              if (!neighbor || affected.has(neighbor)) continue;
+              affected.add(neighbor);
+              work.push(neighborsOf(neighbor));
+            }
+          }
+          return work;
+        } catch (e) { return null; }
+      }
+      const local = localRows();
+      let work = local;
+      if (!work) {
+        const list = [...document.querySelectorAll('.chat-msg-area .message-container')];
+        work = list.map((mc, i) => {
+          const { area, wrapper, record } = infoOf(mc);
+          if (wrapper?.parentElement?.matches('.ml-list')) initialized.set(wrapper.parentElement, mode);
+          if (!visibleRecords.has(area)) visibleRecords.set(area, new Map());
+          if (record?.msgId != null) visibleRecords.get(area).set(String(record.msgId), mc);
+          return [mc, list[i - 1], list[i + 1]];
+        });
+      }
+      const canGroup = mc => mode === 'tg' || infoOf(mc).timText;
+      function nativeBoundary(info, direction, shape) {
+        const { area, record: current } = info;
+        if (!current) return false;
         var row = info.wrapper;
         if (!row) return false;
-        var sibling = direction === 'previous' ? row.previousElementSibling : row.nextElementSibling;
-        while (sibling && hiddenTimestampRow(sibling))
-          sibling = direction === 'previous' ? sibling.previousElementSibling : sibling.nextElementSibling;
+        const sibling = direction === 'previous' ? row.previousElementSibling : row.nextElementSibling;
         // Native data only fills a virtual-window edge. Every mounted system,
         // revoke, unknown row or visible time divider remains authoritative.
         if (sibling) return false;
+        if (!sequences.has(area)) {
+          let sequence = null;
+          try { sequence = window.LiuliQQ?.loadedMessageSequence?.(area) || null; } catch (e) {}
+          sequences.set(area, sequence);
+        }
+        const sequence = sequences.get(area);
+        if (!sequence) return false;
         var neighbors = sequence.neighbors(current);
         var other = neighbors && neighbors[direction];
         var peer = current.peerUid || current.peerUin, sender = current.senderUid || current.senderUin;
@@ -1470,8 +1503,14 @@
         var before = direction === 'previous' ? other : current;
         var after = direction === 'previous' ? current : other;
         if (Number(before.msgTime) > 0 && Number(after.msgTime) > 0 && Number(after.msgTime) < Number(before.msgTime)) return false;
-        var visible = visibleRecords.get(area)?.get(String(other.msgId));
-        if (visible !== undefined) return !shape || groupable[visible];
+        let visible = visibleRecords.get(area)?.get(String(other.msgId));
+        if (local && other.msgId != null) {
+          const wrapper = document.getElementById(String(other.msgId));
+          const container = wrapper?.querySelector('.message-container');
+          if (container && wrapper.closest('.chat-msg-area') === area &&
+              String(recordOf(container)?.msgId) === String(other.msgId)) visible = container;
+        }
+        if (visible) return !shape || canGroup(visible);
         // Offscreen records have no DOM classification. Only positively known
         // ordinary text/inline faces extend an edge; system and unknown media
         // payloads must never be inferred from their sender or msgType alone.
@@ -1481,34 +1520,35 @@
             (Number(element.elementType) === 6 && element.faceElement && typeof element.faceElement === 'object'));
       }
       var states = [];
-      for (var j = 0; j < list.length; j++) {
-        var mc = list[j];
-        var key = keys[j];
+      for (const [mc, previous, next] of work) {
+        const info = infoOf(mc), { key, timText } = info;
+        const prevSameSender = key && previous && infoOf(previous).key === key && adjacent(previous, mc);
+        const nextSameSender = key && next && infoOf(next).key === key && adjacent(mc, next);
         var avatarGroup = null;
-        if (llModeCfg.chatStyle === 'tim') {
+        if (mode === 'tim') {
           // Avatar groups span native media as TG does; TIM text shapes remain
           // independent so images/files/voice never acquire connected corners.
-          var prevAvatar = key && ((j > 0 && keys[j - 1] === key && adjacent(list[j - 1], mc)) || nativeBoundary(j, 'previous', false));
-          var nextAvatar = key && ((j < list.length - 1 && keys[j + 1] === key && adjacent(mc, list[j + 1])) || nativeBoundary(j, 'next', false));
+          var prevAvatar = key && (prevSameSender || nativeBoundary(info, 'previous', false));
+          var nextAvatar = key && (nextSameSender || nativeBoundary(info, 'next', false));
           avatarGroup = !key ? '' : prevAvatar ? (nextAvatar ? 'mid' : 'last') : (nextAvatar ? 'first' : 'single');
         }
         if (!key) {
-          states.push({ row: mc, group: '', avatar: avatarGroup, timText: timTextRows[j] });
+          states.push({ row: mc, group: '', avatar: avatarGroup, timText });
           continue;
         }
-        var grouped = groupable[j];
-        var prevSame = grouped && ((j > 0 && groupable[j - 1] && keys[j - 1] === key && adjacent(list[j - 1], mc)) || nativeBoundary(j, 'previous', true));
-        var nextSame = grouped && ((j < list.length - 1 && groupable[j + 1] && keys[j + 1] === key && adjacent(mc, list[j + 1])) || nativeBoundary(j, 'next', true));
+        var grouped = canGroup(mc);
+        var prevSame = grouped && ((prevSameSender && canGroup(previous)) || nativeBoundary(info, 'previous', true));
+        var nextSame = grouped && ((nextSameSender && canGroup(next)) || nativeBoundary(info, 'next', true));
         var g;
         if (!prevSame && !nextSame) g = 'single';
         else if (!prevSame && nextSame) g = 'first';
         else if (prevSame && nextSame) g = 'mid';
         else g = 'last';
-        states.push({ row: mc, group: g, avatar: avatarGroup, timText: timTextRows[j] });
+        states.push({ row: mc, group: g, avatar: avatarGroup, timText });
       }
       // Resolve the complete native neighborhood before publishing any state.
       // Repeated passes over unchanged rows must not emit attribute mutations.
-      for (var state of states) {
+      for (const state of states) {
         var mc = state.row;
         if (mc.hasAttribute('data-liuli-tim-text') !== state.timText) mc.toggleAttribute('data-liuli-tim-text', state.timText);
         if (state.avatar === null) {
@@ -1912,7 +1952,7 @@
   }
   function liuliMessagePass(roots) {
     prepareMessageLayout(roots);
-    window.__liuliVoiceLayout?.refresh();
+    window.__liuliVoiceLayout?.refresh(roots);
     for (const root of roots) {
       markQuoteRoots(root);
       llMarkdownPass(root);
@@ -2766,6 +2806,9 @@
       '#liuli-settings-dialog, #liuli-settings-entry, #liuli-input-overlay, #liuli-toast, #liuli-scroll-time, .liuli-top-hint, #liuli-nav-handle, #liuli-ctl-shield, .liuli-pin-heading, .liuli-pin-surface, #liuli-video-layer, .liuli-pane-transition, .liuli-pane-prepared';
     const structure =
       '#app, .global-container, .window-title-bar, .window-control-area, .chat-input-area, .msg-input, .chat-msg-area, .recent-contact, .container-sidebar';
+    const forwardSelector = '.aio .chat-input-area > .forward-ops';
+    const forwardAttribute = 'data-liuli-forward-visible';
+    const forwardBars = new Set();
     let frame = 0;
     let flushing = false;
     let needsRefresh = false;
@@ -2836,8 +2879,21 @@
       )
         work.add('layout');
       if (touches('.chat-input-area, .expression-panel')) work.add('geometry');
-      if (descendants && (element.matches(structure) || element.querySelector(structure)))
+      if (descendants && (element.matches(structure) || element.querySelector(structure))) {
         work.add('structure');
+        return true;
+      }
+      return false;
+    }
+    function syncForwardBars() {
+      const current = new Set(document.querySelectorAll(forwardSelector));
+      for (const bar of forwardBars) if (!current.has(bar)) bar.removeAttribute(forwardAttribute);
+      forwardBars.clear();
+      for (const bar of current) {
+        const inline = bar.getAttribute('style') || '';
+        bar.toggleAttribute(forwardAttribute, !inline.includes('display: none') && !inline.includes('display:none'));
+        forwardBars.add(bar);
+      }
     }
     const observer = new MutationObserver(records => {
       if (disposed) return;
@@ -2846,9 +2902,18 @@
         return;
       }
       const childRecords = records.filter(record => record.type === 'childList');
+      let forwardChanged = false;
       for (const record of records) {
         const target = elementOf(record.target);
         if (isThemeUi(target)) continue;
+        // Watch input-area structure and the toolbar itself, not message or scrollbar styles.
+        if ((record.type === 'childList' && target.matches('.chat-input-area')) ||
+            (record.type === 'attributes' && ['style', 'class'].includes(record.attributeName) &&
+              (forwardBars.has(target) || target.matches('.forward-ops') ||
+                (record.attributeName === 'class' && (target.matches('.aio, .chat-input-area') ||
+                  /(?:^|\s)(?:aio|chat-input-area)(?:\s|$)/.test(record.oldValue || '')))))) {
+          forwardChanged = true;
+        }
         let contentChanged = true;
         if (record.type === 'attributes') {
           if (
@@ -2882,7 +2947,7 @@
           if (!record.addedNodes.length && ((!target.children.length && target.textContent.trim()) || target.matches(TEXT_SELECTORS.join(',')))) roots.add(target);
           for (const node of nodes) {
             if (node.nodeType !== Node.ELEMENT_NODE || isThemeUi(node)) continue;
-            classify(node, true);
+            if (classify(node, true)) forwardChanged = true;
           }
           for (const node of record.addedNodes) {
             const element = elementOf(node);
@@ -2892,7 +2957,7 @@
             for (const message of elementsWithin(element, '.ml-item')) addedMessages.add(message);
           }
           if (record.removedNodes.length && target.closest('.chat-msg-area')) {
-            if (target.closest('.ml-item, .message-container')) messageRoots.add(target);
+            if (target.closest('.ml-item, .message-container') || (target.matches('.ml-list') && !target.firstElementChild)) messageRoots.add(target);
             for (const [sibling, direction] of [
               [record.previousSibling, 'previousElementSibling'],
               [record.nextSibling, 'nextElementSibling']
@@ -2917,6 +2982,7 @@
       if (childRecords.length) {
         try { llMembersArrived(childRecords); } catch (e) {}
       }
+      if (forwardChanged) syncForwardBars();
       if (roots.size || work.size) schedule();
     });
     const resize = new ResizeObserver(() => onGeometry());
@@ -2988,6 +3054,7 @@
     }
     function refreshPage() {
       if (disposed) return;
+      syncForwardBars();
       colors.invalidate(document.body);
       roots.add(document.body);
       for (const kind of ['structure', 'messages', 'members']) work.add(kind);
@@ -3041,6 +3108,8 @@
         work.clear();
         addedMessages.clear();
         messageRoots.clear();
+        for (const bar of forwardBars) bar.removeAttribute(forwardAttribute);
+        forwardBars.clear();
         measured = [];
         document.removeEventListener('visibilitychange', onVisibility);
         window.removeEventListener('liuli-scope', refreshPage);
@@ -3051,6 +3120,7 @@
       }
     };
     window.__liuliPageObserver = api;
+    syncForwardBars();
     roots.add(document.body);
     for (const kind of ['structure', 'messages', 'members']) work.add(kind);
     flush();

@@ -13,10 +13,11 @@
   pulse.style.cssText = 'position:fixed;inset:0 auto auto 0;width:1px;height:1px;visibility:hidden;pointer-events:none';
   const scrollerSelector = '.chat-msg-area #ml-root';
   const mode = () => document.body.dataset.liuliAvatarPosition === 'bottom' && document.body.dataset.liuliChatStyle;
-  const stats = { passes: 0, requested: 0, measures: 0, updates: 0, clears: 0, writes: 0 };
+  const stats = { passes: 0, fullPasses: 0, rowsInspected: 0, requested: 0, measures: 0, updates: 0, clears: 0, writes: 0 };
   const tracks = new Map(), pending = new Map(), dirty = new Set();
-  let scroller, list, scheduled = false, disposed = false, remeasure = false;
-  let shells = new Set(), measured = new Set();
+  const candidates = new Map(), owners = new WeakMap(), measured = new Set();
+  let scroller, list, activeMode, scheduled = false, disposed = false, remeasure = false;
+  let discovery = true, rebuild = true, directRows = false;
   const areaSelector = '.chat-msg-area';
 
   function schedule() {
@@ -38,11 +39,32 @@
   });
 
   function onMutations(records) {
-    for (const { target } of records) {
+    for (const { target, type, addedNodes, removedNodes, previousSibling, nextSibling } of records) {
       const row = target.closest('.ml-item');
-      if (row) dirty.add(row);
+      if (row && list?.contains(row)) {
+        dirty.add(row);
+      } else if (target === list && type === 'childList') {
+        for (const node of [...addedNodes, ...removedNodes, previousSibling, nextSibling]) {
+          if (node?.matches?.('.ml-item')) dirty.add(node);
+          else if (node?.querySelector?.('.ml-item')) rebuild = true;
+        }
+      } else if (type === 'childList') {
+        // Ancestors can replace the scroller or list; descendants can wrap rows.
+        if (list?.contains(target)) rebuild = true;
+        else discovery = true;
+      }
     }
     schedule();
+  }
+
+  function rediscover() {
+    discovery = true;
+    schedule();
+  }
+
+  function onVisibility() {
+    if (!document.hidden) remeasure = true;
+    rediscover();
   }
 
   function onLoad(e) {
@@ -54,8 +76,8 @@
 
   const structure = new MutationObserver(onMutations);
   const attributes = new MutationObserver(onMutations);
-  const settings = new MutationObserver(schedule);
-  const areaState = new MutationObserver(schedule);
+  const settings = new MutationObserver(rediscover);
+  const areaState = new MutationObserver(rediscover);
 
   function clear(host, track) {
     host.removeAttribute('data-ll-compact-host');
@@ -127,10 +149,7 @@
     }
   }
 
-  function refresh() {
-    if (disposed) return;
-    stats.passes++;
-    const theme = mode();
+  function bindList(theme) {
     let nextScroller = null;
     areaState.disconnect();
     if (['tim', 'tg'].includes(theme)) {
@@ -142,69 +161,157 @@
       }
     }
     const nextList = nextScroller?.querySelector('.ml-list') || null;
-    const switched = list !== nextList;
-    if (nextScroller !== scroller) {
+    const changedScroller = nextScroller !== scroller;
+    if (changedScroller) {
       if (scroller) resize.unobserve(scroller);
       scroller = nextScroller;
       if (scroller) resize.observe(scroller, { box: 'border-box' });
     }
-    if (switched) {
+    if (list !== nextList || changedScroller) {
       list = nextList;
+      rebuild = true;
       attributes.disconnect();
-      if (list) attributes.observe(list, { subtree: true, attributes: true,
-        attributeFilter: ['id', 'data-liuli-g', 'data-liuli-avatar-g'] });
+      structure.disconnect();
+      if (list) {
+        attributes.observe(list, { subtree: true, attributes: true,
+          attributeFilter: ['id', 'data-liuli-g', 'data-liuli-avatar-g'] });
+        structure.observe(list, { childList: true, subtree: true });
+      }
+      for (let el = list?.parentElement || scroller; el && el !== document.body; el = el.parentElement)
+        structure.observe(el, { childList: true });
     }
-    const groupKey = theme === 'tim' ? 'liuliAvatarG' : 'liuliG';
-    const nextShells = new Set(), candidates = new Map();
-    for (let el = list || scroller; el && el !== document.body; el = el.parentElement) nextShells.add(el);
-    let members = [];
-    for (const row of list?.querySelectorAll('.ml-item') || []) {
-      // Include system rows as hard boundaries, not just rows with bubbles.
-      for (let el = row; el && el !== list; el = el.parentElement) nextShells.add(el);
-      const host = row.querySelector('.message-container');
-      if (host) for (let el = host; el && el !== row; el = el.parentElement) nextShells.add(el);
-      const group = host?.dataset[groupKey];
-      const bubble = host?.querySelector(':scope > .message-content__wrapper') || host?.querySelector('.msg-content-container');
-      if (!bubble || !['first', 'mid', 'last'].includes(group)) { members = []; continue; }
-      if (group === 'first') members = [];
-      members.push({ host, row, id: row.id, group, bubble });
-      if (group !== 'last') continue;
-      const groupMembers = members;
-      members = [];
-      if (groupMembers.length < 2) continue;
-      const avatar = host.querySelector(':scope > .avatar-span');
-      if (!avatar?.querySelector(':scope > .message-container__avatar')) continue;
-      nextShells.add(avatar);
-      candidates.set(host, { avatar, members: groupMembers, theme, groupKey });
-    }
+    discovery = false;
+  }
 
-    const same = (a, b) => !switched && a && b && a.avatar === b.avatar && a.theme === b.theme &&
-      a.members.length === b.members.length && a.members.every((m, i) => {
-        const p = b.members[i];
+  function changeCandidates(affected, next, requests) {
+    // Remove old ownership first so a split/merge can claim rows from another tail.
+    for (const host of affected) {
+      const previous = candidates.get(host), track = next.get(host);
+      if (!previous || previous === track) continue;
+      cancel(host);
+      if (tracks.has(host)) clear(host, tracks.get(host));
+      for (const { row, bubble } of previous.members) {
+        if (owners.get(row) === host) owners.delete(row);
+        for (const el of [row, bubble]) {
+          resize.unobserve(el);
+          measured.delete(el);
+        }
+      }
+      candidates.delete(host);
+    }
+    for (const [host, track] of next) {
+      if (candidates.get(host) !== track) {
+        candidates.set(host, track);
+        for (const { row, bubble } of track.members) {
+          owners.set(row, host);
+          for (const el of [row, bubble]) if (!measured.has(el)) {
+            resize.observe(el, { box: 'border-box' });
+            measured.add(el);
+          }
+        }
+      }
+      cancel(host);
+      requests.set(host, track);
+    }
+  }
+
+  function refresh() {
+    if (disposed) return;
+    stats.passes++;
+    const theme = mode();
+    if (theme !== activeMode) {
+      activeMode = theme;
+      discovery = rebuild = true;
+    }
+    if (discovery || (list && !list.isConnected)) bindList(theme);
+    const groupKey = theme === 'tim' ? 'liuliAvatarG' : 'liuliG';
+    const inspected = new Map();
+    function memberOf(row) {
+      if (!row?.matches('.ml-item') || !list?.contains(row)) return null;
+      if (!inspected.has(row)) {
+        stats.rowsInspected++;
+        const host = row.querySelector('.message-container');
+        const group = host?.dataset[groupKey];
+        const bubble = host?.querySelector(':scope > .message-content__wrapper') || host?.querySelector('.msg-content-container');
+        inspected.set(row, bubble && ['first', 'mid', 'last'].includes(group) ? { host, row, id: row.id, group, bubble } : null);
+      }
+      return inspected.get(row);
+    }
+    function collect(members, next) {
+      if (members.length < 2) return;
+      const { host } = members.at(-1);
+      const avatar = host.querySelector(':scope > .avatar-span');
+      if (!avatar?.querySelector(':scope > .message-container__avatar')) return;
+      const old = candidates.get(host);
+      const same = old?.theme === theme && old.avatar === avatar && old.members.length === members.length && members.every((m, i) => {
+        const p = old.members[i];
         return m.row === p.row && m.id === p.id && m.host === p.host && m.bubble === p.bubble && m.group === p.group;
       });
-    for (const [host, track] of tracks) if (!same(track, candidates.get(host))) clear(host, track);
-    for (const [host, job] of pending) if (!same(job.track, candidates.get(host)) || remeasure || job.track.members.some(m => dirty.has(m.row))) cancel(host);
-    const requests = new Map();
-    for (const [host, track] of candidates) {
-      if (!pending.has(host) && (!tracks.has(host) || remeasure || track.members.some(m => dirty.has(m.row)))) requests.set(host, track);
+      next.set(host, same ? old : { avatar, members, theme, groupKey });
     }
-    if (nextShells.size !== shells.size || [...shells].some(el => !nextShells.has(el))) {
-      structure.disconnect();
-      for (const el of nextShells) structure.observe(el, { childList: true });
-      shells = nextShells;
+    const next = new Map(), affected = new Set(), requests = new Map();
+    if (rebuild || (!directRows && dirty.size)) {
+      stats.fullPasses++;
+      for (const host of candidates.keys()) affected.add(host);
+      directRows = true;
+      let members = [];
+      for (const row of list?.querySelectorAll('.ml-item') || []) {
+        if (row.parentElement !== list) directRows = false;
+        const member = memberOf(row);
+        if (!member) { members = []; continue; }
+        if (member.group === 'first') members = [];
+        members.push(member);
+        if (member.group === 'last') { collect(members, next); members = []; }
+      }
+    } else if (dirty.size) {
+      // Resolve only the old and new groups touching the changed rows.
+      const tails = new Set(), visited = new Set();
+      function siblingRow(row, direction) {
+        for (let sibling = row[direction]; sibling; sibling = sibling[direction]) {
+          if (sibling.matches('.ml-item')) return sibling;
+        }
+        return null;
+      }
+      function findTail(row) {
+        let member = memberOf(row);
+        while (member && member.group !== 'last') {
+          if (visited.has(member.row)) return;
+          visited.add(member.row);
+          member = memberOf(siblingRow(member.row, 'nextElementSibling'));
+          if (member?.group === 'first') return;
+        }
+        if (member) tails.add(member.row);
+      }
+      for (const row of dirty) {
+        const owner = owners.get(row);
+        if (owner) {
+          affected.add(owner);
+          tails.add(candidates.get(owner).members.at(-1).row);
+        }
+        if (row.parentElement === list) findTail(row);
+      }
+      for (const tail of tails) {
+        const last = memberOf(tail);
+        if (last?.group !== 'last') continue;
+        const members = [last];
+        for (let row = siblingRow(tail, 'previousElementSibling'); row; row = siblingRow(row, 'previousElementSibling')) {
+          const member = memberOf(row);
+          if (!member || member.group === 'last') break;
+          members.push(member);
+          if (member.group === 'first') break;
+        }
+        collect(members.reverse(), next);
+      }
+      for (const host of next.keys()) affected.add(host);
     }
-    const nextMeasured = new Set();
-    for (const { members } of candidates.values()) for (const { row, bubble } of members) {
-      nextMeasured.add(row);
-      nextMeasured.add(bubble);
+    changeCandidates(affected, next, requests);
+    if (remeasure) for (const [host, track] of candidates) {
+      cancel(host);
+      requests.set(host, track);
     }
-    for (const el of measured) if (!nextMeasured.has(el)) resize.unobserve(el);
-    for (const el of nextMeasured) if (!measured.has(el)) resize.observe(el, { box: 'border-box' });
-    measured = nextMeasured;
-    sample(requests);
     dirty.clear();
-    remeasure = false;
+    rebuild = remeasure = false;
+    sample(requests);
   }
 
   function dispose() {
@@ -218,8 +325,8 @@
     for (const host of pending.keys()) cancel(host);
     for (const [host, track] of tracks) clear(host, track);
     document.removeEventListener('load', onLoad, true);
-    document.removeEventListener('visibilitychange', schedule);
-    window.removeEventListener('liuli-route', schedule);
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('liuli-route', rediscover);
     window.removeEventListener('pagehide', dispose);
     pulse.remove();
     delete window[key];
@@ -228,13 +335,14 @@
   document.body.append(pulse);
   settings.observe(document.body, { attributes: true, attributeFilter: ['data-liuli-chat-style', 'data-liuli-avatar-position'] });
   document.addEventListener('load', onLoad, true);
-  document.addEventListener('visibilitychange', schedule);
-  window.addEventListener('liuli-route', schedule);
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('liuli-route', rediscover);
   window.addEventListener('pagehide', dispose, { once: true });
   window[key] = {
     refresh(invalidate) {
       if (invalidate === true) remeasure = true;
-      schedule();
+      if (!list?.isConnected) rediscover();
+      else if (remeasure || dirty.size || rebuild) schedule();
     },
     dispose, stats, tracks: () => tracks
   };

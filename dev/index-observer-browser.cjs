@@ -66,6 +66,7 @@ const fixture = `<!doctype html><style>body{color:rgb(33,34,35);--ll-on-glass-2:
       window.__liuliVoiceLayout={refresh:()=>count('voiceRefresh')};
       window.LiuliQQ={messageRecord: element=>{count('messageRecord');const row=element.closest('.ml-item');return {chatType:2,peerUid:'fixture',senderUid:row?.dataset.sender||row?.id,msgTime:1000};}};
       ${snippets}
+      window.applyTestOverrides = applyOverrides;
       for(const [name, original] of [['repair',fixContrast],['group',groupMessages],['members',llGroupMembersPass],['motion',llMotionPass]]) {
         const wrapped = (...args) => {count(name);return original(...args);};
         if(name==='repair') fixContrast=wrapped;
@@ -89,6 +90,100 @@ const fixture = `<!doctype html><style>body{color:rgb(33,34,35);--ll-on-glass-2:
       report.cases.push({ name, counts });
     };
     await settle();
+    const layoutCss = fs.readFileSync(path.join(root, 'assets/layout.css'), 'utf8');
+    const forwardCss = layoutCss.slice(layoutCss.indexOf('/* ── 多选底栏'), layoutCss.indexOf('/* #61：仅隐藏'));
+    assert(forwardCss.includes('data-liuli-forward-visible'));
+    const originalForwardCss = forwardCss.replaceAll('[data-liuli-forward-visible][data-liuli-forward-visible]',
+      ':not([style*="display: none"]):not([style*="display:none"])');
+    await page.addStyleTag({ content: forwardCss });
+    await page.evaluate(original => {
+      const reference = document.createElement('style');
+      reference.id = 'forward-reference';
+      reference.textContent = original;
+      document.head.append(reference);
+      reference.sheet.disabled = true;
+      const candidate = [...document.styleSheets].find(sheet => sheet !== reference.sheet &&
+        sheet.cssRules[0]?.selectorText?.includes('data-liuli-forward-visible'));
+      if (!candidate) throw Error('Cannot find candidate rules');
+      window.forwardParity = () => {
+        const snapshot = () => [...document.querySelectorAll('.chat-input-area, .msg-input, .chat-func-bar, .forward-ops, #liuli-input-overlay, .ml-item')].map(el => {
+          const css = getComputedStyle(el), r = el.getBoundingClientRect();
+          return [css.display, css.justifyContent, css.padding, r.x, r.y, r.width, r.height];
+        });
+        const actual = snapshot();
+        candidate.disabled = true;
+        reference.sheet.disabled = false;
+        try { return JSON.stringify(actual) === JSON.stringify(snapshot()); }
+        finally { reference.sheet.disabled = true; candidate.disabled = false; }
+      };
+    }, originalForwardCss);
+    const checkForward = async (name, setup, state) => {
+      await page.evaluate(setup);
+      await settle();
+      assert(await page.evaluate(() => window.forwardParity()), name);
+      assert.deepEqual(await page.evaluate(() => ({
+        marker: document.querySelector('.chat-input-area > .forward-ops').hasAttribute('data-liuli-forward-visible'),
+        editor: getComputedStyle(document.querySelector('.msg-input')).display,
+        padding: getComputedStyle(document.querySelector('.chat-input-area')).padding,
+      })), state, name);
+      report.cases.push({ name });
+    };
+    await checkForward('normal input matches original rules', () => {
+      document.querySelector('.aio').insertAdjacentHTML('beforeend', '<div class="chat-input-area"><div class="chat-func-bar"></div><div class="msg-input">Editor</div><div class="forward-ops" style="display:none">Actions</div></div>');
+      document.body.insertAdjacentHTML('beforeend', '<div id="liuli-input-overlay">Controls</div>');
+    }, { marker: false, editor: 'block', padding: '0px' });
+    await checkForward('enter multi-select preserves layout', () => {
+      document.querySelector('.forward-ops').style.display = '';
+    }, { marker: true, editor: 'none', padding: '10px 0px' });
+    await checkForward('native input ignores multi-select styling', () => {
+      document.body.dataset.liuliInputLayout = 'native';
+    }, { marker: true, editor: 'block', padding: '0px' });
+    await checkForward('replace an active multi-select bar with a hidden bar', () => {
+      delete document.body.dataset.liuliInputLayout;
+      document.querySelector('.forward-ops').outerHTML = '<div class="forward-ops" style="display: none">Actions</div>';
+    }, { marker: false, editor: 'block', padding: '0px' });
+    await checkForward('rebuild the input area while active', () => {
+      const area = document.querySelector('.chat-input-area');
+      area.outerHTML = area.outerHTML.replace(' style="display: none"', '');
+    }, { marker: true, editor: 'none', padding: '10px 0px' });
+    await checkForward('exit multi-select restores input', () => {
+      document.querySelector('.forward-ops').style.display = 'none';
+    }, { marker: false, editor: 'block', padding: '0px' });
+    await page.evaluate(() => {
+      const native = document.querySelectorAll.bind(document);
+      window.forwardQueries = 0;
+      document.querySelectorAll = selector => {
+        if (selector === '.aio .chat-input-area > .forward-ops') window.forwardQueries++;
+        return native(selector);
+      };
+      document.querySelector('.chat-msg-area').insertAdjacentHTML('beforeend', '<div class="v-scrollbar-thumb"></div>');
+    });
+    await settle();
+    await page.evaluate(() => {
+      window.forwardQueries = 0;
+      document.querySelector('.v-scrollbar-thumb').style.transform = 'translateY(20px)';
+    });
+    await settle();
+    assert.equal(await page.evaluate(() => window.forwardQueries), 0, 'Scrollbar writes must not scan the input area');
+    await page.evaluate(() => {
+      document.querySelector('.chat-input-area').remove();
+      document.getElementById('liuli-input-overlay').remove();
+    });
+    await settle();
+    const material = await page.evaluate(() => {
+      const host = document.createElement('div');
+      host.className = 'group-box';
+      host.innerHTML = '<div class="group-member-list"></div>';
+      const query = host.querySelectorAll.bind(host);
+      let queries = 0;
+      host.querySelectorAll = selector => { queries++; return query(selector); };
+      window.applyTestOverrides(host);
+      return { queries, glass: host.style.getPropertyValue('backdrop-filter'),
+        clear: host.firstElementChild.style.getPropertyValue('backdrop-filter'),
+        priority: host.firstElementChild.style.getPropertyPriority('backdrop-filter') };
+    });
+    assert.deepEqual(material, { queries: 1, glass: 'var(--ll-material-blur)', clear: 'none', priority: 'important' });
+    report.cases.push({ name: 'One material scan preserves root glass and descendant clearing', material });
     for (const selector of ['#message-inner', '#recent-inner', '.group-member-list', '#placeholder']) {
       await testCase('virtual geometry ' + selector, () => page.evaluate(selector => {
         const target=document.querySelector(selector);

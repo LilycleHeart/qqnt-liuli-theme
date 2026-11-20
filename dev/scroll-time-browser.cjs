@@ -24,6 +24,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       .chat-msg-area { position:absolute; left:100px; top:80px; width:500px; height:240px; background:#e8e1f1; }
       .q-scroll-view { height:240px; overflow:auto; }
       .message { box-sizing:border-box; height:100px; padding:25px; border-bottom:1px solid #bbb; }
+      .message__timestamp { line-height:16px; margin:16px 0 8px; }
       .old { position:absolute; top:-9000px; }
       .recent-contact { position:absolute; top:10px; left:10px; }
     </style><button class="recent-contact">另一个会话</button><main class="chat-msg-area"><div class="chat-msg-area__vlist"><div class="q-scroll-view">
@@ -114,11 +115,11 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForFunction(() => document.querySelector('#liuli-scroll-time')?.textContent === '2025年11月11日 23:16');
     const native = page.locator('[data-row="4"] .message__timestamp');
     assert.equal(await native.count(), 1);
-    assert.equal(await native.evaluate(el => getComputedStyle(el).visibility), 'hidden');
-    assert(await native.evaluate(el => el.getBoundingClientRect().height > 0), 'Hidden native timestamps retain their virtual-list height');
+    assert.equal(await native.evaluate(el => getComputedStyle(el).display), 'none');
+    assert.equal(await native.evaluate(el => el.getBoundingClientRect().height), 0);
     assert.equal(await native.locator('.babble').textContent(), '2025年11月11日 23:16');
     assert.equal(await page.locator(label).getAttribute('aria-hidden'), 'false');
-    await page.screenshot({ path: path.join(artifactDir, 'native-hidden-fallback.png') });
+    await page.screenshot({ path: path.join(artifactDir, 'native-collapsed-fallback.png') });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await page.locator(label).evaluate(el => getComputedStyle(el).transitionDuration), '0s');
     await page.evaluate(() => { document.querySelector('.chat-msg-area').style.display = 'none'; });
@@ -140,16 +141,37 @@ fs.mkdirSync(artifactDir, { recursive: true });
       window.LiuliScrollTime.setEnabled(false);
       return window.readCount;
     });
-    assert.equal(await native.evaluate(el => getComputedStyle(el).visibility), 'visible');
+    assert.equal(await native.evaluate(el => getComputedStyle(el).display), 'block');
+    assert.equal(await native.evaluate(el => el.getBoundingClientRect().height), 16);
     await scroll(260);
     await page.waitForTimeout(420);
     assert.equal(await page.evaluate(() => window.readCount), readsBeforeDisable);
     assert.equal(await page.locator(label).count(), 0);
     assert.equal(await page.evaluate(() => typeof window.__liuliScrollTime), 'undefined');
+    await page.setContent(`<style>
+      .message__timestamp { height:16px; margin:16px 0 8px; }
+      .ml-item { display:flow-root; }
+      .message { padding-bottom:8px; }
+      .message-container { height:36px; }
+      .system-tip { height:24px; }
+    </style><main class="chat-msg-area"><div class="ml-list">
+      <div class="ml-item"><div class="message"><div class="message-container"></div></div></div>
+      <div class="ml-item" id="stamped"><div class="message"><div class="message__timestamp">12:34</div><div class="message-container"></div></div></div>
+      <div class="ml-item" id="divider"><div class="message"><div class="message__timestamp">12:35</div></div></div>
+      <div class="ml-item" id="system"><div class="message"><div class="message__timestamp">12:36</div><div class="system-tip">System message</div></div></div>
+    </div></main>`);
+    await page.addStyleTag({ content: css });
+    await page.addScriptTag({ content: script });
+    const heights = () => page.evaluate(() => ['stamped', 'divider', 'system'].map(id => document.getElementById(id).offsetHeight));
+    assert.deepEqual(await heights(), [84, 48, 72]);
+    await page.evaluate(() => window.LiuliScrollTime.setEnabled(true));
+    assert.deepEqual(await heights(), [44, 0, 32], 'Only native time space, including standalone divider padding, is removed');
+    await page.evaluate(() => window.LiuliScrollTime.setEnabled(false));
+    assert.deepEqual(await heights(), [84, 48, 72]);
     console.log('PASS local Chromium: zero reads during scroll, one read on settle, virtual row reuse, chat switch cancellation, native fallback, idle, reduced motion, hidden/reinject/dispose');
     const report = { passed: true, checks: ['no-reads-during-scroll-burst', 'one-read-on-settle', 'hold-label-while-scrolling',
       'cancel-pending-refresh-on-chat-switch', 'bottom-visible-row', 'exclude-old-virtual-rows', 'reused-msgTime',
-      'cross-day-date', 'scroll-idle', 'no-idle-polling', 'chat-switch', 'native-timestamp-height-preserved',
+      'cross-day-date', 'scroll-idle', 'no-idle-polling', 'chat-switch', 'native-timestamp-collapses-and-restores',
       'native-fallback-readable', 'reduced-motion', 'hidden-cleanup', 'reinjection', 'dispose'],
       sha256: Object.fromEntries(['renderer/scroll-time.js', 'assets/scroll-time.css'].map(file => [file,
         require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', file))).digest('hex')])) };

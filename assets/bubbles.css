@@ -1013,7 +1013,6 @@ body .message-container .msg-content-container > .user-name .q-tag {
 }
 :scope[data-liuli-chat-style='tim'] .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face):not(.container--personalization):not(#ll) {
   padding: 0 !important;
-  background: transparent !important;
   border-radius: 8px !important;
 }
 :scope[data-liuli-chat-style='tim'] .message-container > .avatar-span {
@@ -1174,8 +1173,7 @@ body .message-container .msg-content-container:is(.container--self, .container--
   color: var(--ll-chat-fg) !important;
   text-shadow: none !important;
 }
-/* QQ's pure pictures and native stickers already paint their media. They must
- * not receive a text surface or its padding, in any bubble style. */
+/* Keep the compact media geometry and leave native stickers transparent. */
 body .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face, [data-liuli-image-only]):not(.container--personalization):not(#ll) {
   background: transparent !important;
   padding: 0 !important;
@@ -1184,6 +1182,10 @@ body .message-container .msg-content-container:is(.mix-message__container--pic, 
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+/* Match .2's picture backing: the slot stays visible before the thumbnail paints. */
+body .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, [data-liuli-image-only]):not(.container--personalization, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face):not(#ll) {
+  background: var(--ll-chat-bg, rgba(var(--ll-acrylic), 0.86)) !important;
 }
 body .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face, [data-liuli-image-only]):not(.container--personalization):not(#ll)::before {
   content: none !important;

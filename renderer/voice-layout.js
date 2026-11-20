@@ -2,14 +2,28 @@
   window.__liuliVoiceLayout?.dispose();
   let frame = 0;
   const voices = new Set();
+  const pending = new Set();
+  const selector = '.ptt-element';
   // Retire the old coupling between maximum width and voice's natural size.
   document.body.style.removeProperty('--ll-voice-width-ratio');
 
-  function refresh() {
-    if (frame) cancelAnimationFrame(frame);
-    frame = 0;
+  function refresh(roots) {
     if (document.hidden) return;
-    for (const voice of document.querySelectorAll('.chat-msg-area .ptt-element')) {
+    const changed = new Set();
+    if (!roots) {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      pending.clear();
+      for (const voice of document.querySelectorAll('.chat-msg-area .ptt-element')) changed.add(voice);
+    } else for (const root of roots) {
+      if (!root.isConnected) continue;
+      const voice = root.closest?.(selector);
+      if (voice) changed.add(voice);
+      else for (const voice of root.querySelectorAll(selector)) changed.add(voice);
+    }
+    for (const voice of changed) {
+      pending.delete(voice);
+      if (!voice.closest('.chat-msg-area')) continue;
       const bars = voice.querySelectorAll('.ptt-element__progress-item').length;
       const bubble = voice.closest('.ptt-message__container');
       if (!bubble) continue;
@@ -21,23 +35,36 @@
     }
     for (const bubble of voices) if (!bubble.isConnected) voices.delete(bubble);
   }
-  function schedule() {
-    if (!frame && !document.hidden) frame = requestAnimationFrame(refresh);
+  function flush() {
+    frame = 0;
+    const roots = [...pending];
+    pending.clear();
+    refresh(roots);
+  }
+  function scheduleFull() {
+    if (frame) cancelAnimationFrame(frame);
+    frame = document.hidden ? 0 : requestAnimationFrame(() => refresh());
   }
   const observer = new MutationObserver(records => {
-    if (records.some(record => record.target === document.body ||
-      (record.type === 'childList' && (record.target.closest?.('.chat-msg-area') ||
-        [...record.addedNodes].some(node => node.nodeType === 1 &&
-          (node.matches('.chat-msg-area') || node.querySelector('.chat-msg-area'))))))) schedule();
+    if (document.hidden) return;
+    for (const record of records) {
+      const voice = record.target.closest?.(selector);
+      if (voice) pending.add(voice);
+      else for (const node of record.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (node.matches(selector)) pending.add(node);
+        for (const nested of node.querySelectorAll(selector)) pending.add(nested);
+      }
+    }
+    if (pending.size && !frame) frame = requestAnimationFrame(flush);
   });
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
-  document.addEventListener('visibilitychange', schedule);
-  window.addEventListener('storage', schedule);
+  observer.observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('visibilitychange', scheduleFull);
   window.__liuliVoiceLayout = { refresh, dispose() {
     observer.disconnect();
     cancelAnimationFrame(frame);
-    document.removeEventListener('visibilitychange', schedule);
-    window.removeEventListener('storage', schedule);
+    pending.clear();
+    document.removeEventListener('visibilitychange', scheduleFull);
     for (const bubble of voices) bubble.style.removeProperty('--ll-voice-wave-width');
     voices.clear();
     delete window.__liuliVoiceLayout;
