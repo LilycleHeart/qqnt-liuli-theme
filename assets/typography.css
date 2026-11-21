@@ -93,8 +93,9 @@
   ) !important;
 }
 
-/* 中间胶囊：把文字本身做成 pill（若结构里文字是独立元素） */
-[class*='new-msg'] > *,
+/* QQNT 新消息提示的直接子元素为文字 span 和装饰 div，细节由 details.css 覆盖。 */
+.new-msg-indicator > span,
+.new-msg-indicator > div,
 [class*='msg-divider'] > *,
 [class*='unread-divider'] > * {
   flex: 0 0 auto !important;

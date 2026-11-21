@@ -2047,8 +2047,11 @@
   function llAnimateEnter(items) {
     if (!items.length || motion.reduced) return;
     // 越靠下（越新）越先出来
-    items.sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top);
-    const visible = items.slice(0, LL_ENTER_MAX);
+    const ordered = items
+      .map(el => ({ el, top: el.getBoundingClientRect().top }))
+      .sort((a, b) => b.top - a.top)
+      .map(entry => entry.el);
+    const visible = ordered.slice(0, LL_ENTER_MAX);
     visible.forEach((el, i) => {
       el.style.setProperty('--ll-enter-i', String(i));
       el.classList.remove('ll-enter');
@@ -2154,7 +2157,9 @@
       animation.finished.then(release, release);
     }
     function cancelScope(scope) {
-      for (const row of scope?.querySelectorAll('.ml-item.ll-enter') || []) cancelRow(row);
+      // Snapshot the live collection before cancelRow removes ll-enter.
+      const entering = scope?.getElementsByClassName('ml-item ll-enter');
+      if (entering?.length) for (const row of Array.from(entering)) cancelRow(row);
       for (const row of legacyEntries.keys()) if (row === scope || scope?.contains(row)) cancelRow(row);
       motion.cancelEntries?.(scope);
     }
@@ -2368,6 +2373,7 @@
           });
         // Resolve the start now; a cold route can block the first render frame.
         animation.startTime = document.timeline.currentTime;
+        animation.finished.catch(() => {});
         exits.set(el, animation);
       } catch (e) {}
     }
@@ -2526,18 +2532,23 @@
       }
       const prevArea = st.areaEl;
       st.areaEl = area;
-      // The final visible row is sufficient to detect settling. Measuring every
-      // message on each cold-route frame adds layout work before its first paint.
+      // 切换会话时先测最后一个非测量行；不可见才倒序扫描剩余行。
       const bounds = area.getBoundingClientRect();
-      const candidates = area.querySelectorAll('.ml-item');
-      let last = null;
-      for (let i = candidates.length - 1; i >= 0; i--) {
-        const item = candidates[i];
-        if (item.closest('.viewport-list__measure')) continue;
-        const rect = item.getBoundingClientRect();
-        if (rect.width > 2 && rect.height > 2 && rect.bottom >= bounds.top && rect.top <= bounds.bottom) {
-          last = item;
-          break;
+      const candidates = Array.from(area.querySelectorAll('.ml-item'))
+        .filter(item => !item.closest('.viewport-list__measure'));
+      const isVisible = rect => rect.width > 2 && rect.height > 2 &&
+        rect.bottom >= bounds.top && rect.top <= bounds.bottom;
+      let last = candidates.pop();
+      let rect = last?.getBoundingClientRect();
+      if (!rect || !isVisible(rect)) {
+        last = null;
+        for (let i = candidates.length - 1; i >= 0; i--) {
+          const item = candidates[i];
+          rect = item.getBoundingClientRect();
+          if (isVisible(rect)) {
+            last = item;
+            break;
+          }
         }
       }
       if (!last) {
@@ -2545,7 +2556,7 @@
         return;
       }
       const id = String(last.id || '');
-      const top = last.getBoundingClientRect().top;
+      const top = rect.top;
       if (id && id === st.sampleId && Math.abs(top - st.sampleTop) < 0.5) {
         st.stable++;
       } else {
@@ -2757,7 +2768,14 @@
 
     try {
       // 群公告元素可能被整块替换：靠 MutationObserver 重新绑定 ResizeObserver
-      noticeMo = new MutationObserver(() => {
+      noticeMo = new MutationObserver(records => {
+        // 滚动时虚拟列表行进出视口会产生大量无关记录，先过滤掉再进回调。
+        // 增删两侧都要看：公告被移除时 record.target 是它的旧父节点，不在 .group-notice 内。
+        const touchesNotice = records.some(record =>
+          record.target.closest?.('.group-notice') ||
+          [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1 &&
+            (node.matches?.('.group-notice') || node.querySelector?.('.group-notice'))));
+        if (!touchesNotice) return;
         try {
           if (document.hidden) return;
           swBindNotice();
@@ -2806,6 +2824,9 @@
       '#liuli-settings-dialog, #liuli-settings-entry, #liuli-input-overlay, #liuli-toast, #liuli-scroll-time, .liuli-top-hint, #liuli-nav-handle, #liuli-ctl-shield, .liuli-pin-heading, .liuli-pin-surface, #liuli-video-layer, .liuli-pane-transition, .liuli-pane-prepared';
     const structure =
       '#app, .global-container, .window-title-bar, .window-control-area, .chat-input-area, .msg-input, .chat-msg-area, .recent-contact, .container-sidebar';
+    const shellSelector = '.global-container, .chat-input-area';
+    const shellClass = /(?:^|\s)(?:global-container|aio|message-panel|chat-input-area)(?:\s|$)/;
+    const shellMarkers = new Map();
     const forwardSelector = '.aio .chat-input-area > .forward-ops';
     const forwardAttribute = 'data-liuli-forward-visible';
     const forwardBars = new Set();
@@ -2865,21 +2886,21 @@
       }
       if (!frame) frame = requestAnimationFrame(flush);
     }
+    const messageScopes = '.chat-msg-area, .topbar-profile';
+    const memberScopes = '.group-member';
+    const layoutScopes = '.chat-func-bar, .sidebar__nav, .sidebar__menu, .aio-right-click-menu, .window-control-area';
+    const geometryScopes = '.chat-input-area, .expression-panel';
+    const descendantScopes = [structure, messageScopes, memberScopes, layoutScopes, geometryScopes].join(', ');
     function classify(element, descendants = false, contentChanged = true) {
-      const touches = selector =>
-        element.closest(selector) || (descendants && element.querySelector(selector));
-      if (contentChanged && touches('.chat-msg-area, .topbar-profile')) {
-        work.add('messages');
-      }
-      if (contentChanged && touches('.group-member')) work.add('members');
-      if (
-        touches(
-          '.chat-func-bar, .sidebar__nav, .sidebar__menu, .aio-right-click-menu, .window-control-area'
-        )
-      )
-        work.add('layout');
-      if (touches('.chat-input-area, .expression-panel')) work.add('geometry');
-      if (descendants && (element.matches(structure) || element.querySelector(structure))) {
+      // Detached wrappers may still contain relevant UI; reject only subtrees with no matching descendant.
+      const scan = descendants && element.querySelector(descendantScopes);
+      const touches = selector => element.closest(selector) || (scan && element.querySelector(selector));
+      if (contentChanged && !work.has('messages') && touches(messageScopes)) work.add('messages');
+      if (contentChanged && !work.has('members') && touches(memberScopes)) work.add('members');
+      if (!work.has('layout') && touches(layoutScopes)) work.add('layout');
+      if (!work.has('geometry') && touches(geometryScopes)) work.add('geometry');
+      // The caller uses this return value even when structure work is already queued.
+      if (descendants && (element.matches(structure) || (scan && element.querySelector(structure)))) {
         work.add('structure');
         return true;
       }
@@ -2895,6 +2916,34 @@
         forwardBars.add(bar);
       }
     }
+    function syncShellMarkers() {
+      const next = new Map();
+      const mark = (element, attribute) => {
+        if (!next.has(element)) next.set(element, new Set());
+        next.get(element).add(attribute);
+      };
+      for (const input of document.querySelectorAll('.aio .chat-input-area')) {
+        const parent = input.parentElement;
+        if (parent.parentElement?.closest('.aio')) mark(parent, 'data-liuli-input-parent');
+        let insideAio = false;
+        for (let ancestor = parent; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+          if (insideAio && ancestor.matches('.message-panel')) mark(ancestor, 'data-liuli-input-panel');
+          if (ancestor.matches('.aio')) {
+            mark(ancestor, 'data-liuli-input-aio');
+            insideAio = true;
+          }
+        }
+      }
+      if (document.querySelector('.global-container.container--narrow')) mark(document.body, 'data-liuli-narrow');
+      for (const [element, attributes] of shellMarkers) {
+        for (const attribute of attributes) if (!next.get(element)?.has(attribute)) element.removeAttribute(attribute);
+      }
+      shellMarkers.clear();
+      for (const [element, attributes] of next) {
+        for (const attribute of attributes) element.toggleAttribute(attribute, true);
+        shellMarkers.set(element, attributes);
+      }
+    }
     const observer = new MutationObserver(records => {
       if (disposed) return;
       if (document.hidden) {
@@ -2903,9 +2952,20 @@
       }
       const childRecords = records.filter(record => record.type === 'childList');
       let forwardChanged = false;
+      let shellChanged = false;
       for (const record of records) {
         const target = elementOf(record.target);
         if (isThemeUi(target)) continue;
+        if (!shellChanged && record.type === 'attributes' && record.attributeName === 'class') {
+          const before = record.oldValue || '';
+          const after = target.getAttribute('class') || '';
+          if (shellClass.test(before) || shellClass.test(after)) {
+            const shellRoles = value => (value.match(/\S+/g) || []).filter(name =>
+              /^(?:global-container|container--narrow|aio|message-panel|chat-input-area)$/.test(name)
+            ).sort().join(' ');
+            shellChanged = shellRoles(before) !== shellRoles(after);
+          }
+        }
         // Watch input-area structure and the toolbar itself, not message or scrollbar styles.
         if ((record.type === 'childList' && target.matches('.chat-input-area')) ||
             (record.type === 'attributes' && ['style', 'class'].includes(record.attributeName) &&
@@ -2947,7 +3007,10 @@
           if (!record.addedNodes.length && ((!target.children.length && target.textContent.trim()) || target.matches(TEXT_SELECTORS.join(',')))) roots.add(target);
           for (const node of nodes) {
             if (node.nodeType !== Node.ELEMENT_NODE || isThemeUi(node)) continue;
-            if (classify(node, true)) forwardChanged = true;
+            if (classify(node, true)) {
+              forwardChanged = true;
+              if (!shellChanged && (node.matches(shellSelector) || node.querySelector(shellSelector))) shellChanged = true;
+            }
           }
           for (const node of record.addedNodes) {
             const element = elementOf(node);
@@ -2965,6 +3028,7 @@
               const nodeDirection = direction === 'previousElementSibling' ? 'previousSibling' : 'nextSibling';
               for (let current = sibling?.nodeType === Node.ELEMENT_NODE ? sibling : sibling?.[nodeDirection];
                 current; current = current[direction]) {
+                if (current.nodeType !== Node.ELEMENT_NODE) continue;
                 const row = current.matches('.ml-item') ? current : current.closest('.ml-item') ||
                   (current.querySelector('.message-container') ? current : null);
                 if (!row) continue;
@@ -2979,6 +3043,7 @@
         }
         classify(target, false, contentChanged);
       }
+      if (shellChanged) syncShellMarkers();
       if (childRecords.length) {
         try { llMembersArrived(childRecords); } catch (e) {}
       }
@@ -3054,6 +3119,7 @@
     }
     function refreshPage() {
       if (disposed) return;
+      syncShellMarkers();
       syncForwardBars();
       colors.invalidate(document.body);
       roots.add(document.body);
@@ -3110,6 +3176,10 @@
         messageRoots.clear();
         for (const bar of forwardBars) bar.removeAttribute(forwardAttribute);
         forwardBars.clear();
+        for (const [element, attributes] of shellMarkers) {
+          for (const attribute of attributes) element.removeAttribute(attribute);
+        }
+        shellMarkers.clear();
         measured = [];
         document.removeEventListener('visibilitychange', onVisibility);
         window.removeEventListener('liuli-scope', refreshPage);
@@ -3120,6 +3190,7 @@
       }
     };
     window.__liuliPageObserver = api;
+    syncShellMarkers();
     syncForwardBars();
     roots.add(document.body);
     for (const kind of ['structure', 'messages', 'members']) work.add(kind);

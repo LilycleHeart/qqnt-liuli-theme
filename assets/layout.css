@@ -13,7 +13,7 @@
  *   .container-sidebar          → 导航卡
  *   .recent-contact             → 会话列表卡
  *   .aio > .chat-header         → header 卡
- *   *:has(> .chat-input-area)   → 正文卡（群聊是 .group-chat，私聊类名不同，用 :has 兼容）
+ *   [data-liuli-input-parent]  → 正文卡（群聊、私聊由 renderer 标记输入区的直接父元素）
  *   .group-box                  → 详情卡（群公告 + 成员）
  *   .chat-input-area            → 浮动输入卡
  * ============================================================ */
@@ -88,7 +88,7 @@ body[data-liuli-dark="0"] .aio > .chat-header {
 /* ── 正文卡：按用户要求不加材质，壁纸直接透出；只保留左侧间距 ──
  * 独立聊天窗（#/chat）同样要有这 8px：它的 .chat-msg-area 原来贴到左边 4，
  * 比标题（margin-left 8）和主窗都靠左（2026-11-10）。 */
-body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio *:has(> .chat-input-area) {
+body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio [data-liuli-input-parent] {
   position: relative !important;
   margin-left: var(--ll-dock-gap) !important;
   border: none !important;
@@ -105,8 +105,8 @@ body:not([data-liuli-input-layout="native"]):is([data-liuli-scope="main"], [data
  * ⚠️ 仍然不加 backdrop-filter（会让 ProseMirror 不绘制），
  * 下面是正文卡的磨砂，这里只给更实的底色。 ── */
 body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat-input-area {
-  /* 上边 10px：聊天记录最后一条不贴输入框（2026-10-30） */
-  margin: 10px 10px 10px !important;
+  /* 收回输入卡上方 10px，留给消息视口。 */
+  margin: 0 10px 10px !important;
   width: auto !important;
   align-self: stretch !important;
   padding: 0 !important;
@@ -114,6 +114,13 @@ body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat
   border-radius: var(--ll-radius) !important;
   background: var(--ll-noise), rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.36)) !important;
   box-shadow: var(--ll-shadow) !important;
+}
+
+/* 留白放在外层滚动视口内，保留收回的 10px 视口高度。
+ * QQ 的 .ml-list 内联 padding 是虚拟占位，不能用来留白。 */
+body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .chat-msg-area .chat-msg-area__vlist > #ml-root {
+  box-sizing: border-box;
+  padding-block-end: 8px;
 }
 
 /* 输入卡本身就是框，里面不再套第二层框 */
@@ -882,9 +889,22 @@ body .q-popup__modal {
 }
 
 /* 弹层里的文字/图标：统一走 onSurface 体系，次要文字不低于 on-glass-2 */
-body :is(.q-context-menu, .q-menu, .q-popup__main, .q-dialog-main, .q-dialog, .mini-buddy,
-  .buddy-profile, .group-profile-card, .group-member-card, .menu-stickers-panel, .editor-at-panel,
-  .bot-panel-wrapper, .q-float-card, .pulldown-menu, .q-pulldown-menu-wrapper, .panel-container) {
+body .q-context-menu,
+body .q-menu,
+body .q-popup__main,
+body .q-dialog-main,
+body .q-dialog,
+body .mini-buddy,
+body .buddy-profile,
+body .group-profile-card,
+body .group-member-card,
+body .menu-stickers-panel,
+body .editor-at-panel,
+body .bot-panel-wrapper,
+body .q-float-card,
+body .pulldown-menu,
+body .q-pulldown-menu-wrapper,
+body .panel-container {
   --text_primary: var(--ll-on-glass);
   --text_secondary: var(--ll-on-glass-2);
   --text_tertiary: var(--ll-on-glass-2);
@@ -1215,9 +1235,9 @@ body:not([data-liuli-input-layout="native"])[data-liuli-scope="main"] .aio .chat
  * 独立窗也走 TG 单行输入条，但 .aio 的承载规则是主窗专属，这里单独补齐；
  * 材质放在 ::before 上（理由同主窗：直接给输入区挂 backdrop-filter 会让编辑器不绘制）。 */
 body:not([data-liuli-input-layout="native"])[data-hash^="#/chat"] .chat-input-area {
-  /* 底边和主窗一致：贴住正文卡底（0），只有左右上 10px；
+  /* 底边和主窗一致：贴住正文卡底（0），上边 0 让消息区吃掉间隙（2026-11-22）；
    * 原来 10px 四周，底部多出 10px，输入卡和右侧群成员卡不在同一条底线上（2026-11-10） */
-  margin: 10px 10px 0 !important;
+  margin: 0 10px 0 !important;
   width: auto !important;
   align-self: stretch !important;
   padding: 0 !important;
@@ -1787,8 +1807,8 @@ body .q-toast-item:not(#ll) * {
  * 输入卡底边和两侧卡片对齐，正好贴着 .aio / .message-panel 的底边，两者都是 overflow:hidden，
  * :focus-within 的泛光和 1px 描边在底下被裁掉，只剩上、左、右三边。
  * 改成 overflow:clip + overflow-clip-margin，往外多留 8px（= 窗口底部的空隙），裁剪范围之外的其它行为不变。 */
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .message-panel:has(.aio .chat-input-area),
-body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio:has(.chat-input-area) {
+body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .message-panel[data-liuli-input-panel][data-liuli-input-panel],
+body:is([data-liuli-scope="main"], [data-hash^="#/chat"]) .aio[data-liuli-input-aio] {
   overflow: clip !important;
   overflow-clip-margin: var(--ll-dock-gap, 8px) !important;
 }
@@ -1904,7 +1924,10 @@ body[data-liuli-scope="main"][data-liuli-hide-empty-logo] .empty-aio .qq-logo {
   display: none !important;
 }
 /* QQ 经典模式保留原生标题栏/头像区/导航；悬浮入口只用于效率模式。 */
-body:has(.global-container.container--narrow) :is(.liuli-top-hint, #liuli-nav-handle, #liuli-ctl-shield) {
+body[data-liuli-narrow][data-liuli-narrow] > #liuli-top-hint-l,
+body[data-liuli-narrow][data-liuli-narrow] > #liuli-top-hint-r,
+body[data-liuli-narrow][data-liuli-narrow] > #liuli-nav-handle,
+body[data-liuli-narrow][data-liuli-narrow] > #liuli-ctl-shield {
   display: none !important;
 }
 
@@ -1914,7 +1937,7 @@ body[data-liuli-input-layout="native"]:is([data-liuli-scope="main"], [data-hash^
   position: relative !important;
   isolation: isolate !important;
   z-index: 120 !important;
-  margin: 10px 10px 0 !important;
+  margin: 0 10px 0 !important;
   width: auto !important;
   align-self: stretch !important;
   border-radius: var(--ll-radius) !important;

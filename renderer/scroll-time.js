@@ -184,6 +184,7 @@
             { transform: 'rotateX(0deg)', filter: 'brightness(1)' }],
             { duration: duration / 2, delay: delay + duration / 2, easing: 'ease-out', fill: 'both' })
         );
+        for (const animation of animations.slice(-2)) animation.finished.catch(() => {});
       }
       element.classList.add('is-flipping');
       flipTimer = win.setTimeout(stopFlip, changed * duration);
@@ -215,7 +216,8 @@
     function messagesWithin(node) {
       if (node?.nodeType !== 1) return [];
       const result = node.matches('.message') ? [node] : [];
-      result.push(...(node.querySelectorAll?.('.message') || []));
+      // Rows have a direct .message child, but a mutation can replace a whole list wrapper.
+      result.push(...node.getElementsByClassName('message'));
       return result;
     }
     const previousStyle = doc.createElement('i').style;
@@ -439,7 +441,6 @@
       hide(true);
       scroller?.removeEventListener('scroll', onScroll);
       area?.removeEventListener('pointerover', onPointerOver);
-      area?.removeEventListener('pointermove', onPointerOver);
       area?.removeEventListener('pointerout', onPointerOut);
       area?.removeEventListener('pointerleave', onPointerLeave);
       intersection?.disconnect();
@@ -472,7 +473,7 @@
       scroller = nextScroller;
       scroller.addEventListener('scroll', onScroll, { passive: true });
       area.addEventListener('pointerover', onPointerOver, { passive: true });
-      area.addEventListener('pointermove', onPointerOver, { passive: true });
+      // 进入新元素时 pointerover 会冒泡；同一元素内移动不改变悬停行，无需监听 pointermove。
       area.addEventListener('pointerout', onPointerOut, { passive: true });
       area.addEventListener('pointerleave', onPointerLeave, { passive: true });
       if (typeof win.IntersectionObserver === 'function') {

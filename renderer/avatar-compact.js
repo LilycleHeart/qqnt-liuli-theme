@@ -13,7 +13,8 @@
   pulse.style.cssText = 'position:fixed;inset:0 auto auto 0;width:1px;height:1px;visibility:hidden;pointer-events:none';
   const scrollerSelector = '.chat-msg-area #ml-root';
   const mode = () => document.body.dataset.liuliAvatarPosition === 'bottom' && document.body.dataset.liuliChatStyle;
-  const stats = { passes: 0, fullPasses: 0, rowsInspected: 0, requested: 0, measures: 0, updates: 0, clears: 0, writes: 0 };
+  const maxSampleRetries = 3;
+  const stats = { passes: 0, fullPasses: 0, rowsInspected: 0, requested: 0, abandoned: 0, measures: 0, updates: 0, clears: 0, writes: 0 };
   const tracks = new Map(), pending = new Map(), dirty = new Set();
   const candidates = new Map(), owners = new WeakMap(), measured = new Set();
   let scroller, list, activeMode, scheduled = false, disposed = false, remeasure = false;
@@ -33,7 +34,7 @@
     }
     for (const { target } of entries) {
       if (target === scroller) remeasure = true;
-      else if (measured.has(target)) dirty.add(target.closest('.ml-item'));
+      else if (measured.has(target)) { const row = target.closest('.ml-item'); if (row) dirty.add(row); }
     }
     if (!document.hidden) refresh();
   });
@@ -103,7 +104,7 @@
     if (!job.batch.jobs.size) job.batch.io.disconnect();
   }
 
-  function sample(requests) {
+  function sample(requests, attempts = 0) {
     if (!requests.size) return;
     const batch = { jobs: new Map(), refs: new Map(), io: new IntersectionObserver(entries => {
       const rects = new Map();
@@ -116,7 +117,15 @@
           list.contains(m.row) && m.row.contains(m.host) && m.host.contains(m.bubble) &&
           m.row.id === m.id && m.host.dataset[track.groupKey] === m.group) || track.avatar.parentElement !== host) continue;
         const first = rects.get(targets[0]), last = rects.get(targets[1]);
-        if (!first || !last || first.time !== last.time) { retry.set(host, track); continue; }
+        if (!first || !last || first.time !== last.time) {
+          if (attempts < maxSampleRetries) retry.set(host, track);
+          else {
+            // 跨投递的坐标差不能用于测量组高，保留已有轨道。
+            stats.abandoned++;
+            console.debug('[liuli] 头像轨道采样达到重试上限，放弃本轮测量');
+          }
+          continue;
+        }
         if (!first.boundingClientRect.height || !last.boundingClientRect.height) continue;
         const height = last.boundingClientRect.bottom - first.boundingClientRect.top;
         if (height <= 0) continue;
@@ -133,7 +142,7 @@
         }
         tracks.set(host, { ...track, height });
       }
-      if (!disposed && !document.hidden) sample(retry);
+      if (!disposed && !document.hidden) sample(retry, attempts + 1);
     }) };
     for (const [host, track] of requests) {
       const targets = [track.members[0].bubble, track.members.at(-1).bubble];
@@ -286,7 +295,7 @@
         const owner = owners.get(row);
         if (owner) {
           affected.add(owner);
-          tails.add(candidates.get(owner).members.at(-1).row);
+          const previous = candidates.get(owner); if (previous) tails.add(previous.members.at(-1).row);
         }
         if (row.parentElement === list) findTail(row);
       }

@@ -260,6 +260,7 @@
         if (!state.done && state.slide.startTime !== null) animation.startTime = state.slide.startTime;
       }, () => {});
     }
+    animation.finished.catch(() => {});
     state.animations.push(animation);
     return animation;
   }

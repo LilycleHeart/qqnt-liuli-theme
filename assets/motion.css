@@ -225,7 +225,7 @@ body .liuli-embedded > :nth-child(n+7) { animation-delay: 120ms; }
  * #/av（scope=aux），本规则正好在通话画面首帧挂上动画，所以每次必现。
  * 这里改成 backwards（本文件第 18 行起就规定一律 backwards，不用 both），
  * 并把 #/av 明确排除，通话窗口连入场动画都不要。 */
-body:not([data-liuli-scope="main"]):not([data-liuli-scope="boot"]):not([data-hash^="#/av"]):not([data-liuli-av]) #app > *:not(.app-border) {
+body[data-liuli-scope]:is([data-liuli-scope="aux"], [data-liuli-scope="setting"]):not([data-liuli-av]):not([data-hash^="#/av"]) #app > *:not(.app-border) {
   animation: liuli-fade-in 240ms ease backwards;
 }
 /* 双保险：hash 同步（400ms 轮询）晚于首次匹配时，宁可没有入场动画也不冒这个险 */

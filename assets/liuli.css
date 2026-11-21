@@ -295,22 +295,16 @@ body[data-liuli-dark='0'] .q-tag--orange .title {
 @scope (body:not([data-liuli-chat-style='classic'])) {
 .msg-content-container {
   border-radius: var(--ll-radius) !important;
-  backdrop-filter: blur(12px) saturate(1.4) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
-  box-shadow: 0 1px 6px rgba(var(--ll-shadow-rgb, 0, 0, 0), 0.16) !important;
+  /* 不在通用气泡规则中加模糊或阴影，避免新变体漏过覆盖时拖慢聊天滚动。 */
 }
 
-/* 对方气泡：0.62 在亮壁纸上几乎看不见，提到 0.78 并加一圈极淡描边 */
+/* 双方气泡的背景和边框均由后加载的 bubbles.css 覆盖，此处仅保留文字颜色。 */
 .msg-content-container.container--others {
-  background: rgba(var(--ll-acrylic), calc(var(--ll-material-opacity) + 0.28)) !important;
-  border: 1px solid rgba(var(--ll-tint-rgb), 0.1) !important;
   color: var(--ll-on-glass) !important;
 }
 
 /* 自己气泡 */
 .msg-content-container.container--self {
-  background: rgba(var(--ll-brand-rgb), 0.32) !important;
-  border: 1px solid rgba(var(--ll-brand-rgb), 0.4) !important;
   color: var(--ll-on-glass) !important;
 }
 
