@@ -4,7 +4,7 @@
   "name": "琉璃主题",
   "author": "LilycleHeart",
   "description": "毛玻璃风格的 QQNT 主题，支持壁纸、配色和动效",
-  "version": "1.3.5+snowlora.9",
+  "version": "1.3.5+snowlora.10",
   "minSnowLora": "0.3.0",
   "rules": [
     { "name": "qq-main", "title_contains": "QQ", "script": "load.js", "enabled": true },
