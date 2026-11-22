@@ -51,10 +51,18 @@
  * 视觉上"指向"而不是"切断"对话流。
  * ════════════════════════════════════════════════════════════ */
 
-/* 容器：横向 flex，两侧线 + 中间 pill */
-[class*='new-msg'],
-[class*='newMsg'],
-[class*='newmsg'],
+/* 容器：横向 flex，两侧线 + 中间 pill
+ *
+ * 2026-11-22：选择器必须排除设置页。
+ * [class*='new-msg'] 会命中设置页「消息通知」里的 .new-msg ——
+ * 那是通知选项的容器（9 个 .new-msg__item 横向排开，总宽 1375px），
+ * 被这里强制成 display:flex + align-items:center + gap:10px 后，
+ * 在 600px 宽的 .setting-main 里全部被压缩，.label / .tips 只剩 14~24px 宽，
+ * 文字被挤成竖排单字（用户反馈的「截断和文字排版」问题）。
+ * 设置页的容器用 :not(.setting-main *) 排除掉，只保留聊天区的分隔线。 */
+:not(.setting-main *) > [class*='new-msg']:not([class*='new-msg__']):not(.new-msg-indicator),
+:not(.setting-main *) > [class*='newMsg'],
+:not(.setting-main *) > [class*='newmsg'],
 .chat-msg-area__tip,
 [class*='msg-divider'],
 [class*='unread-divider'] {
@@ -74,8 +82,8 @@
 }
 
 /* 两侧细线 */
-[class*='new-msg']::before,
-[class*='new-msg']::after,
+:not(.setting-main *) > [class*='new-msg']:not([class*='new-msg__']):not(.new-msg-indicator)::before,
+:not(.setting-main *) > [class*='new-msg']:not([class*='new-msg__']):not(.new-msg-indicator)::after,
 [class*='msg-divider']::before,
 [class*='msg-divider']::after,
 [class*='unread-divider']::before,

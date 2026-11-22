@@ -873,6 +873,29 @@ body .expression-panel .sticker-panel .sticker-panel {
   box-shadow: none !important;
 }
 
+/* 下拉菜单面板（设置页「发送消息」那种 .q-pulldown-menu-panel）
+ * ------------------------------------------------------------
+ * 它同时带 .q-context-menu，会命中上面 843 行的 :not(.is-pure) 规则：
+ * 背景被设成 transparent、材质交给 ::before（z-index: -1）。
+ * 但下拉面板自身是 overflow: hidden auto（实测），会把 z-index: -1 的
+ * ::before 裁到面板背后 —— 结果面板完全透明，只剩 QQ 原生那层深色底，
+ * 和主题其它浮层不是一种东西（用户反馈「下拉框显示问题」）。
+ * 这里单独给下拉面板上材质：不用 ::before，直接写在本体上。
+ * 选择器带上 .q-pulldown-menu-panel 提高特异性，压过 843 行那条。 */
+body .q-pulldown-menu-panel.q-context-menu:not(.is-pure):not(#ll) {
+  background: var(--ll-noise), var(--ll-menu-bg, var(--ll-float-bg)) !important;
+  backdrop-filter: var(--ll-float-blur) !important;
+  -webkit-backdrop-filter: var(--ll-float-blur) !important;
+  border: none !important;
+  border-radius: var(--ll-radius) !important;
+  box-shadow: var(--ll-float-shadow) !important;
+  color: var(--ll-on-glass) !important;
+  overflow: hidden !important;
+}
+body .q-pulldown-menu-panel.q-context-menu:not(.is-pure):not(#ll)::before {
+  content: none !important;
+}
+
 /* #27.5 白名单兜底（2026-11-06，未实测命中）
  * 上面 690 行的 :not(.is-pure) 保留：核对 QQ 原样式后确认 .is-pure 是「容器不画底、
  * 内容自带」的那类菜单（.q-context-menu.is-pure 只有 overflow:unset），
