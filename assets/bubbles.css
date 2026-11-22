@@ -1646,3 +1646,45 @@ body .chat-msg-area .message-container .user-name :is(.q-tag, .user-label, .grou
   background: transparent !important;
   color: inherit !important;
 }
+
+/* ════════════════════════════════════════════════════════════
+ * 自己消息的文字对齐（设置 → 自己消息的文字对齐）
+ * ------------------------------------------------------------
+ * 背景：QQ 的气泡宽度跟着内容收缩（实测同一条会话里 782 / 1282 / 126 / 98px），
+ * 多行文本按最长行定宽，短行就贴在气泡右侧 —— 连续代码、表格、日志这类
+ * 等宽内容看起来参差不齐（用户反馈）。
+ *
+ * 要让气泡撑满，必须同时改三层（少一层都不行，逐层实测过）：
+ *   1. 消息行 grid 的第 4 列：auto → minmax(0, 1fr)，否则列宽由内容决定；
+ *   2. .message-content__wrapper：它是 display:flex，默认收缩到内容宽度，
+ *      要 width: 100% 才会占满那一列；
+ *   3. .msg-content-container 自身：justify-self: end + flex: 0 1 auto
+ *      会继续收缩到内容宽度，也要 width: 100%。
+ * 只改 1 时气泡仍是 126px；改 1+2 时 wrapper 到 568px 但气泡仍 126px；
+ * 三层齐改后气泡 568px、正文左对齐。
+ *
+ * 注意 text-align 单独没用：.msg-content-container 是 display:flex，
+ * flex 容器的 text-align 不继承给子元素，正文一直是左对齐的
+ * （实测 .text-element 的 computed text-align 恒为 left）。
+ *
+ * 三条规则都必须放在文件末尾、@scope 块外面，并且带 :not(#ll)：
+ *   - 本文件主体包在 @scope (body:not([data-liuli-chat-style='classic'])) 里，
+ *     @scope 只匹配 scope 根的后代，body 自身不是后代 —— 带 body[data-…]
+ *     前缀的规则写在 @scope 内不生效（实测：规则在样式表里、
+ *     选择器 matches() 为 true，但计算值不变；换 :scope 前缀同样不匹配）；
+ *   - @scope 内的规则带隐式 :scope 前缀，特异性比 scope 外的高，
+ *     所以这里用 :not(#ll) 把特异性提到 ID 级才压得住。
+ * 只作用于纯文本气泡，媒体 / 卡片 / 语音保持原宽度。
+ * ════════════════════════════════════════════════════════════ */
+body[data-liuli-self-text-align='left'] .message-container:has(.msg-content-container.container--self):not(#ll) {
+  grid-template-columns: 0px minmax(46px, 1fr) 8px minmax(0, 1fr) 14px 32px !important;
+}
+body[data-liuli-self-text-align='left'] .message-container:has(.msg-content-container.container--self):not(#ll) > .message-content__wrapper {
+  width: 100% !important;
+}
+body[data-liuli-self-text-align='left'] .message-container .msg-content-container.container--self:not(#ll):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not(.ark-msg-content-container):not([data-liuli-image-only]):not([data-liuli-video-only]):not(:has(.ark-view-message, .forward-msg, .file-element, .pic-element, .market-face-element, .video-element, [class*='lottie'])) {
+  width: 100% !important;
+}
+body[data-liuli-self-text-align='left'] .message-container .msg-content-container.container--self :is(.text-element, .text-normal, .message-content) {
+  text-align: left !important;
+}

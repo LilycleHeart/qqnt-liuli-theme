@@ -620,6 +620,10 @@
     chatStyle: 'tg',
     avatarPosition: 'bottom',
     timSenderPosition: 'outside',
+    // 自己发出的消息正文对齐。'right' 是 QQ 原生行为（气泡靠右、文字也靠右），
+    // 'left' 让正文左对齐 —— 连续代码、表格、日志这类等宽内容左对齐更好读。
+    // 只影响正文，不影响气泡本身的位置与时间戳。
+    selfTextAlign: 'right',
     messageFontSize: 14,
     nameFontSize: 12,
     titleFontSize: 10,
@@ -640,6 +644,7 @@
     cfg.avatarPosition = cfg.avatarPosition === 'top' ? 'top' : 'bottom';
     cfg.scrollTime = cfg.scrollTime === true;
     cfg.timSenderPosition = cfg.timSenderPosition === 'inside' ? 'inside' : 'outside';
+    cfg.selfTextAlign = cfg.selfTextAlign === 'left' ? 'left' : 'right';
     cfg.colorSource = cfg.colorSource === 'custom' ? 'custom' : 'wallpaper';
     cfg.customColor = llNormalizeColorSeed(cfg.customColor) || DEFAULT_SOURCE;
     for (const key of ['showMessageTitles', 'showMessageIdentity', 'truncateMessageNames']) {
@@ -853,6 +858,7 @@
     b.dataset.liuliChatStyle = llModeCfg.chatStyle;
     b.dataset.liuliAvatarPosition = llModeCfg.avatarPosition;
     b.dataset.liuliTimSenderPosition = llModeCfg.timSenderPosition;
+    b.dataset.liuliSelfTextAlign = llModeCfg.selfTextAlign;
     window.LiuliScrollTime?.setEnabled(llModeCfg.scrollTime);
     b.style.setProperty('--ll-message-font-size', llModeCfg.messageFontSize + 'px');
     b.style.setProperty('--ll-name-font-size', llModeCfg.nameFontSize + 'px');
@@ -5797,6 +5803,11 @@
     host.appendChild(bubbleHint);
     choice('头像位置（TG / TIM）', 'avatarPosition', [['top', '消息开头'], ['bottom', '消息末尾']]);
     choice('名称与标签位置（TIM）', 'timSenderPosition', [['inside', '气泡内（TG）'], ['outside', '气泡外（原版）']]);
+    choice('自己消息的文字对齐', 'selfTextAlign', [['right', '右对齐（原生）'], ['left', '左对齐']]);
+    const alignHint = document.createElement('div');
+    alignHint.className = 'liuli-field__hint';
+    alignHint.textContent = '只影响自己发出的正文。连续代码、表格、日志这类等宽内容左对齐更好读；气泡位置与时间戳不受影响。';
+    host.appendChild(alignHint);
     const scaleField = document.createElement('div');
     scaleField.className = 'liuli-field';
     const scaleRow = document.createElement('div');
