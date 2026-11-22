@@ -284,3 +284,48 @@
     padding-inline: 12px !important;
   }
 }
+
+/* ── 超级调色盘的缩略图占位（2026-11-22）──
+ * QQ 的缩略图是 <img onerror="this.style='display: none;'">，
+ * 预览图来自 qqpatch.gtimg.cn。CDN 不可达时（实测该域名 443 直接拒连）
+ * 图片被 QQ 自己的 onerror 隐藏，卡片只剩 rgba(0,0,0,0.2) 的空白方块，
+ * 看起来像主题坏了。
+ * 这里给卡片补一层主题同款材质 + 居中图标，让「加载不出来」看起来是
+ * 有意的占位而不是渲染错误。只在图片确实不可见时生效（:has 判断），
+ * 图片正常加载时完全不影响。 */
+.setting-main .themes-item:not(#ll) {
+  background: var(--ll-noise), rgba(var(--ll-acrylic), 0.35) !important;
+  border-radius: 8px !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+/* 占位图标：图片加载失败时（QQ 自己的 onerror 把 img 设成 display:none），
+ * 卡片只剩一块空白底色，看起来像主题坏了。
+ * 这里给卡片本体加一层「图片」轮廓的渐变背景 —— 不用 ::after：
+ * 实测 ::after 的 border / background 都算对了（30x22、top 37 left 53），
+ * 但在这个 list-item 上渲染不出来（可能是 QQ 自己的层叠上下文）。
+ * 直接画在卡片背景上最稳。
+ * 注意图层顺序：background 简写里先写的在上层，所以图标必须写在
+ * var(--ll-noise) 之前 —— 噪点是不透明 SVG，写在前面会把图标盖掉
+ * （实测第一版就是这么失效的）。 */
+.setting-main .themes-item:not(#ll):has(> img.preview[style*='display: none']) {
+  background:
+    /* 斜线（山） */
+    linear-gradient(
+        to top right,
+        transparent calc(50% - 0.75px),
+        rgba(232, 226, 217, 0.3) calc(50% - 0.75px),
+        rgba(232, 226, 217, 0.3) calc(50% + 0.75px),
+        transparent calc(50% + 0.75px)
+      )
+      center / 30px 22px no-repeat,
+    /* 外框：横线 + 竖线 */
+    linear-gradient(rgba(232, 226, 217, 0.3), rgba(232, 226, 217, 0.3)) center / 30px 1.5px no-repeat,
+    linear-gradient(rgba(232, 226, 217, 0.3), rgba(232, 226, 217, 0.3)) center / 1.5px 22px no-repeat,
+    var(--ll-noise),
+    rgba(var(--ll-acrylic), 0.35) !important;
+}
+.setting-main .themes-item.is-active:not(#ll) {
+  outline: 2px solid var(--ll-brand) !important;
+  outline-offset: -2px !important;
+}
