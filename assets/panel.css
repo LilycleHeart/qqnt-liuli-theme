@@ -146,6 +146,14 @@
 .liuli-field {
   margin-bottom: 16px;
 }
+/* 上一个 field 的说明文字（.liuli-field__hint）和下一个 field 的标题之间
+ * 原本是零间距（实测 hint 底边 y=530、下一个 field 顶边也是 y=530），
+ * 视觉上「气泡大小」会紧贴上一行的说明，看起来像同一段文字。
+ * 给 field 补上边距；第一个 field 不需要（它前面是分组标题，已有间距）。 */
+.liuli-field + .liuli-field,
+.liuli-field__hint + .liuli-field {
+  margin-top: 14px;
+}
 .liuli-field__row {
   display: flex;
   align-items: baseline;
