@@ -258,6 +258,16 @@ body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-l
 body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container * {
   top: auto;
 }
+/* 在线状态圆点：QQ 原生按 30px 高的头像容器算 bottom: 7px，
+ * 但主题把头像改成 24px 并加了 margin-top: 5px（.user-avatar 从 y=66 起，
+ * 容器从 y=61 起），圆点就浮在头像中间偏上（实测 y=74，头像下边界 90，
+ * 圆点高 10 → 应到 80）。
+ * 圆点与头像是兄弟节点，都挂在 .user-avatar-container（高 30px）下，
+ * 所以按容器算：头像底边距容器底 = 30 - 24 - 5 = 1px，圆点 bottom 取 1px。 */
+body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .user-avatar-container > .avatar__status {
+  top: auto !important;
+  bottom: 1px !important;
+}
 body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-profile .avatar.user-avatar {
   margin: 3px 0 0 !important;
 }
