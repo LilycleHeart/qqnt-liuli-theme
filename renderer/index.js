@@ -3406,6 +3406,21 @@
     function efficiencyMode() {
       return !!document.querySelector('.global-container.container--wide');
     }
+    /* 搜索栏激活时临时禁用导航唤出。
+     * 搜索面板从搜索栏向下展开，覆盖会话列表左侧；用户在里面上下移动鼠标时
+     * 很容易滑到 x <= EDGE 的感应带，导航卡就弹出来盖住面板（用户反馈）。
+     * 判据用「搜索面板存在」而不是「输入框有焦点」：面板打开后焦点可能落在
+     * 结果项上，而面板本身才是遮挡源。面板关闭后自动恢复。 */
+    function searchActive() {
+      try {
+        var panel = document.querySelector('.main-search .search-result');
+        if (panel && panel.getBoundingClientRect().height > 0) return true;
+        var input = document.querySelector('.main-search input');
+        return !!(input && document.activeElement === input);
+      } catch (e) {
+        return false;
+      }
+    }
     function clearClassicReveal() {
       if (efficiencyMode()) return;
       for (const key of ['nav', 'l', 'r']) {
@@ -3426,7 +3441,12 @@
         y = e.clientY;
       last.x = x;
       last.y = y;
-      set('nav', x <= EDGE || (state.nav && over('.container-sidebar', x, y)));
+      // 搜索面板打开时不让导航卡弹出：它会盖住面板，且用户此时是在面板里操作。
+      if (searchActive()) {
+        set('nav', false);
+      } else {
+        set('nav', x <= EDGE || (state.nav && over('.container-sidebar', x, y)));
+      }
       if (nativeBar()) {
         set('l', false);
         set('r', false);

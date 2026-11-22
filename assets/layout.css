@@ -347,6 +347,13 @@ body[data-hash^="#/chat"]:not([data-liuli-tb="native"]) .window-title-bar > .win
  * 导航卡脱离文档流，平时只在窗口左缘露 6px（带一条提示竖线），
  * 鼠标移到左缘时滑出，盖在会话列表上，不挤动布局。
  * ::before 向左延伸 14px 作为感应区，滑出后鼠标仍在元素范围内，不会抖动。
+ *
+ * 2026-11-22：搜索栏让位。
+ * 导航卡展开后右边界到 60px，而 .contact-top-bar 里的搜索栏从 20px 开始，
+ * 会被盖住 40px（实测 overlapPx=40、searchCovered=true），点不到也看不清。
+ * 导航卡是 fixed + z-index:3000，盖在会话列表之上，所以只能让搜索栏自己让位：
+ * 展开时给 .contact-top-bar 加左内边距，把搜索栏推到导航卡右侧。
+ * 用 :has() 跟随导航卡的 hover / focus 状态，与滑出动画同一时机。
  * ════════════════════════════════════════════════════════════ */
 .global-container.container--wide .container-content > .container-sidebar {
   position: fixed !important;
@@ -364,6 +371,17 @@ body[data-hash^="#/chat"]:not([data-liuli-tb="native"]) .window-title-bar > .win
 .global-container.container--wide .container-content > .container-sidebar:has(:focus-visible) {
   transform: translateX(0) !important;
   box-shadow: var(--ll-card-shadow), var(--ll-shadow-float) !important;
+}
+/* 导航卡展开时，会话列表顶栏让出导航卡的宽度（52px 卡宽 + 8px 缝隙 = 60px，
+ * 减去顶栏原本的 8px 外边距，实际补 52px），搜索栏与「+」按钮一起右移。
+ * 用 body[data-liuli-r-nav]（renderer 在鼠标进入左边缘时写的属性）而不是
+ * :has(.container-sidebar:hover)：后者在合成输入 / 键盘导航下不触发，
+ * 而且 r-nav 与滑出动画本来就是同一时机。 */
+body[data-liuli-r-nav] .recent-contact > .contact-top-bar {
+  padding-left: calc(var(--ll-dock-gap) + 52px) !important;
+}
+.recent-contact > .contact-top-bar {
+  transition: padding-left 220ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 .global-container.container--wide .container-content > .container-sidebar::before {
   content: "" !important;
@@ -553,8 +571,17 @@ body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-l
   transition: opacity 180ms ease 120ms, transform 200ms cubic-bezier(0.22, 1, 0.36, 1) 120ms !important;
 }
 body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .topbar-content .user-profile-card.topbar-profile {
-  /* 让出左侧导航条（约 56px），展开时不压住导航顶部（2026-10-30） */
+  /* 让出左侧导航条（约 56px），展开时不压住导航顶部（2026-10-30）。
+   * 2026-11-22：原来写死 64px，正好压在会话列表顶栏的搜索栏（x=20~160）和
+   * 「+」按钮（x=168~194）上 —— 资料卡是 z-index:3600 的 fixed 元素，
+   * 搜索栏点不到、文字也被盖住（用户反馈）。
+   * 会话列表卡只有 198px 宽，搜索栏 + 加号已占 166px，放不下 126px 的资料卡；
+   * 放到聊天标题栏又会压住会话标题。所以改成纵向让位：
+   * 顶栏占 y=8~60，资料卡落到 y=64 起，浮在会话列表第一项上方。
+   * 它本来就是 opacity:0 的悬浮胶囊，只在鼠标靠近左边缘时短暂显示，
+   * 落在列表上比落在搜索栏 / 标题上更不碍事。 */
   left: calc(var(--ll-dock-gap) + 56px) !important;
+  top: 64px !important;
 }
 body[data-liuli-scope="main"]:has(.global-container.container--wide):not([data-liuli-tb="native"]) .window-title-bar .window-control-area {
   right: var(--ll-dock-gap) !important;
@@ -790,6 +817,14 @@ body .aio .panel-container {
   border-radius: var(--ll-radius) !important;
   box-shadow: var(--ll-float-shadow) !important;
   color: var(--ll-on-glass) !important;
+}
+/* 搜索结果面板：内容密度高（会话名 + 摘要 + 时间 + 头像），
+ * 跟着「不透明度」滑条走到 0.5 时压在壁纸上读不清（用户反馈）。
+ * 这里单独把不透明度抬到 0.92、模糊抬到 28px，与展开的导航卡同一档，
+ * 其余浮层仍跟随设置。只改这两个变量，不动 --ll-float-bg 的其它使用者。 */
+body .main-search .search-result {
+  --ll-menu-bg: rgba(var(--ll-acrylic), 0.92);
+  --ll-float-blur: blur(28px) saturate(1.6);
 }
 /* 右键菜单：模糊放到 ::before 上。
  * 实测（ll-probe）：「输入"/"时唤起」的子菜单 .q-context-sub-menu__container 是 position:fixed，
