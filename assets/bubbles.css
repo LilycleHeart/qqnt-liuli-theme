@@ -645,13 +645,18 @@
   margin-top: 0 !important;
 }
 
-/* ── 头像：由 renderer 的 stickAvatars() 用 transform 推到视口内 ──
- * 必须压在上一行之上（它会被推进前几行的头像列）。 */
+/* ── 头像：压在上一行之上（它会被推进前几行的头像列）──
+ * 这里曾经有 `will-change: transform`，配合已删除的 stickAvatars() 用 transform
+ * 把头像推进视口。stickAvatars 在 230a029 移除后全仓库再无 JS 写 transform 到
+ * .avatar-span，这条声明成了死代码。真机实测（tim / tg / classic 各 14 行）：
+ *   - classic：本规则在 @scope (body:not([data-liuli-chat-style='classic'])) 内，不匹配；
+ *   - tg：唯一可见行被 avatar-compact.css:35 的 `will-change: auto !important` 覆盖；
+ *   - tim：13 个命中行全是 display:none 的 mid/first，唯一可见行同样被覆盖成 auto。
+ * 即三种样式下它都没有作用在任何可见元素上，删除是纯清理、零视觉变化。 */
 .message-container[data-liuli-g='last'] > .avatar-span,
 .message-container[data-liuli-g='single'] > .avatar-span {
   position: relative !important;
   z-index: 3 !important;
-  will-change: transform;
 }
 
 /* ════════════════════════════════════════════════════════════

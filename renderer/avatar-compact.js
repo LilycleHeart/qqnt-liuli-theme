@@ -14,9 +14,14 @@
   const scrollerSelector = '.chat-msg-area #ml-root';
   const mode = () => document.body.dataset.liuliAvatarPosition === 'bottom' && document.body.dataset.liuliChatStyle;
   const maxSampleRetries = 3;
-  const stats = { passes: 0, fullPasses: 0, rowsInspected: 0, requested: 0, abandoned: 0, measures: 0, updates: 0, clears: 0, writes: 0 };
+  const stats = { passes: 0, fullPasses: 0, rowsInspected: 0, reused: 0, requested: 0, abandoned: 0, measures: 0, updates: 0, clears: 0, writes: 0 };
   const tracks = new Map(), pending = new Map(), dirty = new Set();
   const candidates = new Map(), owners = new WeakMap(), measured = new Set();
+  // Row identity survives virtual-list recycling only through its id, so the
+  // resolved host/bubble pair is cached per row and revalidated by id plus a
+  // cheap ancestor check. Grouping is re-read every pass because index.js
+  // rewrites it without touching the row.
+  const memberCache = new WeakMap();
   let scroller, list, activeMode, scheduled = false, disposed = false, remeasure = false;
   let discovery = true, rebuild = true, directRows = false;
   const areaSelector = '.chat-msg-area';
@@ -81,6 +86,10 @@
   const areaState = new MutationObserver(rediscover);
 
   function clear(host, track) {
+    // Always clear, even for a detached host: the virtual list can reattach the
+    // same element, and a leftover marker plus a stale track height would make
+    // avatar-compact.css:52-64 apply `position: absolute` with a bogus height.
+    // Removing an attribute from a detached element costs no style invalidation.
     host.removeAttribute('data-ll-compact-host');
     track.avatar.style.removeProperty('--ll-compact-track-height');
     stats.writes += 2;
@@ -239,12 +248,33 @@
       if (!row?.matches('.ml-item') || !list?.contains(row)) return null;
       if (!inspected.has(row)) {
         stats.rowsInspected++;
-        const host = row.querySelector('.message-container');
-        const group = host?.dataset[groupKey];
-        const bubble = host?.querySelector(':scope > .message-content__wrapper') || host?.querySelector('.msg-content-container');
-        inspected.set(row, bubble && ['first', 'mid', 'last'].includes(group) ? { host, row, id: row.id, group, bubble } : null);
+        const cached = memberCache.get(row);
+        // A recycled row keeps its element but swaps id and contents; the id,
+        // the still-mounted host and the still-mounted bubble must all match
+        // before the cache is trusted. A stale bubble would fail the
+        // `m.host.contains(m.bubble)` check in sample() and silently stop the
+        // group from ever being measured.
+        if (cached && cached.id === row.id && cached.host.isConnected && row.contains(cached.host) &&
+            cached.bubble.isConnected && cached.host.contains(cached.bubble)) {
+          stats.reused++;
+          inspected.set(row, cached);
+        } else {
+          const host = row.querySelector('.message-container');
+          const bubble = host?.querySelector(':scope > .message-content__wrapper') || host?.querySelector('.msg-content-container');
+          const member = host && bubble ? { host, row, id: row.id, bubble } : null;
+          if (member) memberCache.set(row, member);
+          else memberCache.delete(row);
+          inspected.set(row, member);
+        }
       }
-      return inspected.get(row);
+      const member = inspected.get(row);
+      if (!member) return null;
+      // Grouping is owned by index.js and changes without a row mutation, so it
+      // is re-read every pass and returned as a fresh object. The cached entry
+      // must stay immutable: `collect()` compares member identity against the
+      // previous track, and mutating a shared object would hide a group change.
+      const group = member.host.dataset[groupKey];
+      return ['first', 'mid', 'last'].includes(group) ? { ...member, group } : null;
     }
     function collect(members, next) {
       if (members.length < 2) return;
