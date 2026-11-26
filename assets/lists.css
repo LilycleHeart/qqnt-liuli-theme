@@ -55,11 +55,11 @@ body .contact-layout .avatar[style*='/avatar/group/'] {
 body .recent-contact-item .item__content {
   position: relative;
 }
-body .recent-contact-item:has(.q-badge-num) .contact-name__text {
+body .recent-contact-item[data-liuli-unread] .contact-name__text {
   font-weight: 600 !important;
 }
 body
-  .recent-contact-item:has(.q-badge-num):not(:has(.no-disturb-icon)):not(:has(.q-badge__grey)):not(
+  .recent-contact-item[data-liuli-unread]:not([data-liuli-muted]):not([data-liuli-badge-grey]):not(
     .recent-contact-item--selected
   )
   .item__content::before {
@@ -78,26 +78,26 @@ body
   pointer-events: none;
 }
 body
-  .recent-contact-item:has(.q-badge-num):not(:has(.no-disturb-icon))
+  .recent-contact-item[data-liuli-unread]:not([data-liuli-muted])
   .q-badge-num:not(.q-badge__grey):not(#ll) {
   box-shadow: 0 0 8px rgba(var(--ll-brand-rgb), 0.5) !important;
 }
 
 /* 免打扰：未读数改灰色胶囊，摘要淡一档。
  * QQ 给免打扰会话的角标加 q-badge__grey，有的会话不显示免打扰图标，两种都认（#23）。 */
-body .recent-contact-item:has(.no-disturb-icon) .q-badge-num:not(#ll),
+body .recent-contact-item[data-liuli-muted] .q-badge-num:not(#ll),
 body .recent-contact-item .q-badge-num.q-badge__grey:not(#ll) {
   background: rgba(var(--ll-on-glass-rgb), 0.16) !important;
   color: var(--ll-on-glass-2) !important;
   box-shadow: none !important;
 }
-body .recent-contact-item:has(.no-disturb-icon) .q-badge-num:not(#ll) *,
-body .recent-contact-item .q-badge-num.q-badge__grey:not(#ll) * {
+body .recent-contact-item[data-liuli-muted] .q-badge-num:not(#ll) i,
+body .recent-contact-item .q-badge-num.q-badge__grey:not(#ll) i {
   background: transparent !important;
   color: inherit !important;
 }
-body .recent-contact-item:has(.no-disturb-icon):not(.recent-contact-item--selected) .item__summary,
-body .recent-contact-item:has(.q-badge__grey):not(.recent-contact-item--selected) .item__summary {
+body .recent-contact-item[data-liuli-muted]:not(.recent-contact-item--selected) .item__summary,
+body .recent-contact-item[data-liuli-badge-grey]:not(.recent-contact-item--selected) .item__summary {
   opacity: 0.72;
 }
 
@@ -172,31 +172,35 @@ body .group-member .group-member-title {
   height: auto !important;
   min-height: 28px !important;
   flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 6px !important;
   padding-block: 4px !important;
 }
 body .group-member .group-member-title > .search-icon {
-  flex-shrink: 0;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
 }
 
 /* 标题后补管理人数：「群聊成员 262 · 管理 3」 */
 body .group-member-title > span[data-liuli-staff]::after {
-  content: '  ·  管理 ' attr(data-liuli-staff);
-  white-space: pre;
+  content: '· 管理 ' attr(data-liuli-staff);
+  display: inline-block;
+  white-space: nowrap;
+  margin-left: 6px;
   font-size: 12px;
   font-weight: 400;
   color: var(--ll-on-glass-3);
 }
 
-/* #32.1a 群人数到 4 位（>1000）后「· 管理 N」被截断（2026-11-06）
- * .group-member-title 是 display:flex + justify-content:space-between（QQ 原样式），
- * 追加的计数和标题同属一个 flex item：容器不够宽时 flex-shrink 先压这个 span，
- * 于是 "· 管理 N" 连同标题尾部一起被 QQ 自己的 overflow/ellipsis 吃掉。
- * 让这个 span 不参与压缩、不换行、允许溢出：计数永远完整，
- * 标题文字的截断仍旧交给 QQ（它自己的 .text-ellipsis 负责），<1000 人时观感不变。 */
+/* #73：群人数 >= 1000 或管理 >= 20 时，旧的 white-space:nowrap + flex-shrink:0
+ * 会把右侧 .search-icon 挤出容器边界并被裁切。允许标题与「· 管理 N」在窄栏中
+ * 整体折行，搜索图标始终保持完整固定宽度。 */
 body .group-member-title > span[data-liuli-staff] {
-  flex-shrink: 0 !important;
-  white-space: nowrap !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  white-space: normal !important;
   overflow: visible !important;
+  line-height: 1.35 !important;
 }
 
 /* 悬停 */
@@ -303,12 +307,12 @@ body .recent-contact .recent-contact-item--selected:not(#ll) .secondary-info * {
 }
 /* 徽标反色 */
 body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll),
-body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) * {
+body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) i {
   background: var(--ll-selection-badge-bg, var(--ll-selected, var(--ll-brand))) !important;
   color: var(--ll-selection-badge-fg, var(--ll-on-selected, var(--ll-on-brand))) !important;
   box-shadow: none !important;
 }
-body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) * {
+body .recent-contact .recent-contact-item--selected:not(#ll) .q-badge-num:not(#ll) i {
   background: transparent !important;
 }
 /* 免打扰图标 */
@@ -330,8 +334,8 @@ body[data-liuli-soft-selection] .recent-contact .recent-contact-item--selected:n
 
 /* 数量徽标的光晕超出16px摘要行；为光效留余量，文字仍由子节点省略。
  * 外层会话行与列表继续裁切，避免长摘要或滚动内容越界。 */
-body .recent-contact-item .item__summary:has(.q-badge-num),
-body .recent-contact-item .item__info:has(.q-badge-num) {
+body .recent-contact-item .item__summary[data-liuli-has-badge],
+body .recent-contact-item .item__info[data-liuli-has-badge] {
   overflow: clip !important;
   overflow-clip-margin: 8px;
   min-width: 0 !important;

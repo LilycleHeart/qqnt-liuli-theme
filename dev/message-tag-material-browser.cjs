@@ -70,11 +70,17 @@ function sample() {
         const hidden = await page.evaluate(() => {
           document.body.setAttribute('data-liuli-hide-message-titles', '');
           document.body.setAttribute('data-liuli-hide-message-identity', '');
-          return { title: getComputedStyle(document.querySelector('.user-label')).display, identity: [...document.querySelectorAll('.q-tag--orange,.q-tag--blue')].map(tag => getComputedStyle(tag).display), level: getComputedStyle(document.querySelector('.q-tag--grey .level')).display };
+          const hasLayout = element => element.getClientRects().length > 0;
+          const titles = [...document.querySelectorAll('.group-member-label:not(.q-tag--orange, .q-tag--blue)')];
+          return {
+            title: hasLayout(document.querySelector('.user-label')),
+            identity: [...document.querySelectorAll('.q-tag--orange,.q-tag--blue')].map(hasLayout),
+            titles: titles.map(badge => [badge, ...badge.children].map(hasLayout))
+          };
         });
-        assert.equal(hidden.title, 'none');
-        assert(hidden.identity.every(display => display === 'none'));
-        assert.notEqual(hidden.level, 'none');
+        assert.equal(hidden.title, false);
+        assert.deepEqual(hidden.identity, [false, false]);
+        assert.deepEqual(hidden.titles, Array.from({ length: 5 }, () => [false, false, false]));
         await page.evaluate(() => { document.body.removeAttribute('data-liuli-hide-message-titles'); document.body.removeAttribute('data-liuli-hide-message-identity'); });
         report.cases.push({ mode, placement, dark, size, values, passed: true });
       } catch (error) { report.failures.push({ mode, placement, dark, size, error: error.message, values }); }

@@ -103,9 +103,7 @@
 
 /* QQNT 新消息提示的直接子元素为文字 span 和装饰 div，细节由 details.css 覆盖。 */
 .new-msg-indicator > span,
-.new-msg-indicator > div,
-[class*='msg-divider'] > *,
-[class*='unread-divider'] > * {
+.new-msg-indicator > div {
   flex: 0 0 auto !important;
   padding: 3px 12px !important;
   border-radius: 999px !important;
@@ -232,10 +230,9 @@
   font-variant-numeric: tabular-nums !important;
 }
 
-/* QQ 的普通群等级标签可同时含 LV 与头衔两个 span；头衔开关只隐藏
- * 后者，不把等级一并当作群主/管理员身份。独立开关始终保留昵称。 */
+/* 头衔开关隐藏整个普通等级或头衔标签，群主和管理员由身份开关控制。 */
 body[data-liuli-hide-message-titles] .message-container .user-name .user-label,
-body[data-liuli-hide-message-titles] .message-container .user-name .group-member-label.q-tag--grey > span:not(.level) {
+body[data-liuli-hide-message-titles] .message-container .user-name .group-member-label:not(.q-tag--orange, .q-tag--blue) {
   display: none !important;
 }
 body[data-liuli-hide-message-identity] .message-container .user-name .group-member-label:is(.q-tag--orange, .q-tag--blue) {

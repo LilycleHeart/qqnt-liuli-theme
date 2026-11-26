@@ -64,6 +64,13 @@
   let refreshDiagnosticErrors = () => {};
   let refreshInputGeometry = () => {};
   window.addEventListener('liuli-errors', () => refreshDiagnosticErrors());
+  function isMiniFishingWindow() {
+    const hash = location.hash || '';
+    const search = location.search || '';
+    const winName = document.body?.getAttribute?.('window-name') || '';
+    return /mini-?fishing/i.test(hash) || /mini-?fishing/i.test(search) || /^MiniFishing/i.test(winName) ||
+      /^#\/(?:toast-msg|tray-notification)(\/|$|\?)/i.test(hash);
+  }
   function installRouteScope() {
     if (window.__liuliRouteScope) return;
     window.__liuliRouteScope = true;
@@ -85,6 +92,13 @@
         if (isAv) body.dataset.liuliAv = '1';
         else delete body.dataset.liuliAv;
       }
+      const isMini = isMiniFishingWindow();
+      const hadMini = body.dataset.liuliMiniFishing === '1';
+      if (hadMini !== isMini) {
+        if (isMini) body.dataset.liuliMiniFishing = '1';
+        else delete body.dataset.liuliMiniFishing;
+        if (typeof llWpLast !== 'undefined' && llWpLast !== null) renderWallpaper(llWpLast);
+      }
       const scope =
         hash.indexOf('#/setting') === 0
           ? 'setting'
@@ -100,6 +114,9 @@
     };
     sync();
     addEventListener('liuli-route', sync);
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(sync).observe(body, { attributes: true, attributeFilter: ['window-name'] });
+    }
   }
   function chromaticSourceFromCanvas(ctx, w, h) {
     let px;
@@ -620,9 +637,7 @@
     chatStyle: 'tg',
     avatarPosition: 'bottom',
     timSenderPosition: 'outside',
-    // 自己发出的消息正文对齐。'right' 是 QQ 原生行为（气泡靠右、文字也靠右），
-    // 'left' 让正文左对齐 —— 连续代码、表格、日志这类等宽内容左对齐更好读。
-    // 只影响正文，不影响气泡本身的位置与时间戳。
+    // 自己发出的消息文字对齐，气泡仍按内容定宽并靠右。
     selfTextAlign: 'right',
     messageFontSize: 14,
     nameFontSize: 12,
@@ -908,17 +923,26 @@
     }
   }
   function llSyncSettingDependencies() {
-    for (const [key, enabled, reason] of [
-      ['avatarPosition', ['tg', 'tim'].includes(llModeCfg.chatStyle), '仅 TG 和 TIM 气泡使用此设置，已保存的头像位置会保留。'],
-      ['timSenderPosition', llModeCfg.chatStyle === 'tim', '仅 TIM 气泡使用此设置，已保存的名称与标签位置会保留。'],
-      ['pinColor', llModeCfg.pinGroup !== false, '先开启「置顶会话单独成组」，已保存的颜色选项会保留。']
+    const style = llModeCfg.chatStyle;
+    const senderInside = llModeCfg.timSenderPosition === 'inside';
+    for (const [key, enabled, hideWhenDisabled, reason] of [
+      ['avatarPosition', ['tg', 'tim'].includes(style), true, '仅 TG 和 TIM 气泡使用此设置，已保存的头像位置会保留。'],
+      ['timSenderPosition', style === 'tim', true, '仅 TIM 气泡使用此设置，已保存的名称与标签位置会保留。'],
+      ['truncateMessageNames', style === 'tg' || (style === 'tim' && senderInside), true, '仅名称位于气泡内时使用此设置，已保存的省略偏好会保留。'],
+      ['pinColor', llModeCfg.pinGroup !== false, false, '先开启「置顶会话单独成组」，已保存的颜色选项会保留。']
     ]) {
+      const hidden = hideWhenDisabled && !enabled;
       for (const row of document.querySelectorAll('[data-liuli-setting="' + key + '"]')) {
         row.classList.toggle('is-dependent-disabled', !enabled);
-        row.hidden = false;
+        row.hidden = hidden;
         row.setAttribute('aria-disabled', String(!enabled));
         row.title = enabled ? '' : reason;
         for (const button of row.querySelectorAll('button')) button.disabled = !enabled;
+      }
+      if (hideWhenDisabled) {
+        for (const hint of document.querySelectorAll('[data-liuli-setting-hint="' + key + '"]')) {
+          hint.hidden = hidden;
+        }
       }
     }
   }
@@ -1299,6 +1323,54 @@
       var homes = moveSenderIntoBubble.homes || (moveSenderIntoBubble.homes = new WeakMap());
       var inside = llModeCfg.chatStyle === 'tg' ||
         (llModeCfg.chatStyle === 'tim' && llModeCfg.timSenderPosition === 'inside');
+      const hideMediaNames = llModeCfg.hideImageNames === true;
+      // This whitelist controls sender visibility only, not media shape or grouping.
+      const media = '.pic-element, .video-element, .file-element, .normal-file, .ptt-element, .market-face-element, .lottie-face-element';
+      const wrappers = hideMediaNames && new Set(['message-content', 'mix-message__inner', 'markdown-message__inner',
+        'message-content__wrapper', 'file-message--content', 'ptt-message__inner']);
+      const isMediaOnlyContent = hideMediaNames && ((content, bubble) => {
+        let attachments = 0;
+        const hasTranscript = node => [...node.querySelectorAll('.ptt-element__bottom-area-text')].some(text => {
+          if (!text.textContent.trim()) return false;
+          return getComputedStyle(text).visibility === 'visible' && text.getClientRects().length > 0;
+        });
+        function visit(node) {
+          if (node.nodeType === Node.COMMENT_NODE) return true;
+          if (node.nodeType === Node.TEXT_NODE) return !node.textContent.trim();
+          if (node.nodeType !== Node.ELEMENT_NODE) return false;
+          if (node === bubble) {
+            if (node.matches('.ark-msg-content-container')) return false;
+            return [...node.childNodes].every(child =>
+              (child.nodeType === Node.ELEMENT_NODE && child.matches('.user-name, .personalization-bubble, .message-tips:empty')) || visit(child));
+          }
+          if (node.matches('.ptt-element__bottom-area') && node.parentElement?.classList.contains('ptt-message__inner'))
+            return !hasTranscript(node);
+          // QQ places these voice controls beside the bubble, not in its payload.
+          if (bubble?.classList.contains('ptt-message__container') &&
+              (node.parentElement === content || node.parentElement === bubble ||
+                node.parentElement?.classList.contains('ptt-message__inner')) &&
+              node.matches('sub.ptt-message__badge:empty, .ptt-translate-btn')) return true;
+          if (node.matches(media)) {
+            // Attachment UI (e.g. a file name or duration) isn't message text.
+            // Voice transcription is actual text, even inside the player.
+            if (node.matches('.ptt-element') && hasTranscript(node)) return false;
+            attachments++;
+            return true;
+          }
+          if (!['DIV', 'SPAN'].includes(node.tagName) || [...node.classList].some(name => !wrappers.has(name)) ||
+              !node.childNodes.length) return false;
+          return [...node.childNodes].every(visit);
+        }
+        return !!content && visit(content) && attachments > 0;
+      });
+      const togAttr = (el, attr, on) => {
+        if (el?.hasAttribute && el.toggleAttribute && on !== el.hasAttribute(attr)) el.toggleAttribute(attr, on);
+      };
+      const setAttr = (el, attr, val) => {
+        if (!el?.getAttribute || !el.hasAttribute) return;
+        if (val == null) { if (el.hasAttribute(attr)) el.removeAttribute(attr); }
+        else if (el.getAttribute(attr) !== val) el.setAttribute(attr, val);
+      };
       var containers = elementsWithin(root, '.message-container');
       for (var i = 0; i < containers.length; i++) {
         var mc = containers[i];
@@ -1306,11 +1378,27 @@
         // QQ also renders video files without a normal bubble/content pair.
         // Inspect the whole content wrapper so captions/replies stay mixed.
         var fileBubble = mc.querySelector('.file-message--content');
-        var videoContent = bubble ? bubble.querySelector('.message-content') :
-          mc.querySelector(':scope > .message-content__wrapper') || fileBubble;
+        var directWrapper = mc.querySelector(':scope > .message-content__wrapper');
+        var wrapper = (!bubble || hideMediaNames) && directWrapper;
+        var videoContent = bubble ? bubble.querySelector('.message-content') : wrapper || fileBubble;
         var videoOnly = isVideoOnlyContent(videoContent);
+        const mediaOnly = hideMediaNames && isMediaOnlyContent(wrapper || bubble || fileBubble, bubble);
+        if (mediaOnly !== mc.hasAttribute('data-liuli-media-only')) mc.toggleAttribute('data-liuli-media-only', mediaOnly);
         mc.toggleAttribute('data-liuli-video-only', videoOnly);
         if (fileBubble) fileBubble.toggleAttribute('data-liuli-video-only', videoOnly);
+        const isSelf = !!(mc.classList?.contains('message-container--self') ||
+          mc.classList?.contains('message-container--align-right') || bubble?.classList?.contains('container--self'));
+        const isOthers = !isSelf && !!(bubble?.classList?.contains('container--others') || directWrapper);
+        setAttr(mc, 'data-liuli-side', isSelf ? 'self' : isOthers ? 'others' : null);
+        togAttr(mc, 'data-liuli-msg-row', !!directWrapper);
+        const msgRow = mc.closest?.('.message');
+        if (msgRow) togAttr(msgRow, 'data-liuli-msg-row', !!directWrapper);
+        togAttr(mc, 'data-liuli-has-avatar', !!mc.querySelector(':scope > .avatar-span > .message-container__avatar'));
+        const picker = mc.querySelector('.msg-picker');
+        togAttr(mc, 'data-liuli-picker', !!picker);
+        const listItem = mc.closest?.('.ml-item');
+        if (listItem) togAttr(listItem, 'data-liuli-picker-checked', !!picker?.classList?.contains('is-checked'));
+        togAttr(mc, 'data-liuli-forward', !!mc.querySelector('.forward-msg'));
         if (!bubble) {
           continue;
         }
@@ -1323,8 +1411,15 @@
         }
         mc.toggleAttribute('data-liuli-image-only', imageOnly);
         bubble.toggleAttribute('data-liuli-video-only', videoOnly);
+        const isCard = !!bubble.querySelector('.ark-view-message, .forward-msg');
+        togAttr(bubble, 'data-liuli-card', isCard);
+        togAttr(bubble, 'data-liuli-non-bubble', isCard || !!bubble.querySelector(".market-face-element, [class*='lottie']"));
+        if (content) togAttr(content, 'data-liuli-has-text', !!content.querySelector('.text-element'));
         var name = mc.querySelector('.user-name');
-        if (!name) continue;
+        if (!name) {
+          togAttr(bubble, 'data-liuli-name-only-content', false);
+          continue;
+        }
         if (!inside) {
           // Return the same native node to its original grid position, including
           // its sibling order. A recycled row may no longer contain that home.
@@ -1341,6 +1436,18 @@
             bubble.insertBefore(name, bubble.firstChild);
           }
           if (bubble.dataset.liuliNamed !== '1') bubble.dataset.liuliNamed = '1';
+        }
+        const nameNext = name.parentElement === bubble ? name.nextElementSibling : null;
+        const nextIsContent = !!nameNext?.classList?.contains('message-content');
+        togAttr(name, 'data-liuli-name-before', nextIsContent);
+        togAttr(bubble, 'data-liuli-name-only-content', nextIsContent && !nameNext.nextElementSibling);
+      }
+      if (!Array.isArray(root) && root?.querySelectorAll) {
+        const msgs = elementsWithin(root, '.message');
+        for (let j = 0; j < msgs.length; j++) {
+          const msg = msgs[j];
+          const tsOnly = msg.children.length === 1 && msg.firstElementChild.classList.contains('message__timestamp');
+          togAttr(msg, 'data-liuli-ts-only', tsOnly);
         }
       }
     } catch (e) {}
@@ -2128,14 +2235,15 @@
     const visible = ordered.slice(0, LL_ENTER_MAX);
     visible.forEach((el, i) => {
       el.style.setProperty('--ll-enter-i', String(i));
-      el.classList.remove('ll-enter');
+      el.classList.remove('ll-enter', 'll-enter-self');
     });
     // Restart the cascade with one layout flush, not one per message.
     if (visible.length) void visible[0].offsetWidth;
     visible.forEach((el, i) => {
       el.classList.add('ll-enter');
+      el.classList.toggle('ll-enter-self', !!el.querySelector('.message-container--self'));
       clearTimeout(el.__llEnterT);
-      el.__llEnterT = setTimeout(() => el.classList.remove('ll-enter'), 400 + i * 28);
+      el.__llEnterT = setTimeout(() => el.classList.remove('ll-enter', 'll-enter-self'), 400 + i * 28);
     });
   }
 
@@ -2222,7 +2330,9 @@
       if (!row) return;
       clearTimeout(row.__llEnterT);
       delete row.__llEnterT;
-      if (row.classList.contains('ll-enter')) row.classList.remove('ll-enter');
+      if (row.classList.contains('ll-enter') || row.classList.contains('ll-enter-self')) {
+        row.classList.remove('ll-enter', 'll-enter-self');
+      }
       motion.cancelEntries?.(row);
       for (const animation of legacyEntries.get(row) || []) animation.cancel();
       legacyEntries.delete(row);
@@ -2916,11 +3026,12 @@
     const structure =
       '#app, .global-container, .window-title-bar, .window-control-area, .chat-input-area, .msg-input, .chat-msg-area, .recent-contact, .container-sidebar';
     const shellSelector = '.global-container, .chat-input-area';
-    const shellClass = /(?:^|\s)(?:global-container|aio|message-panel|chat-input-area)(?:\s|$)/;
+    const shellClass = /(?:^|\s)(?:global-container|container--wide|container--narrow|aio|message-panel|chat-input-area)(?:\s|$)/;
     const shellMarkers = new Map();
     const forwardSelector = '.aio .chat-input-area > .forward-ops';
     const forwardAttribute = 'data-liuli-forward-visible';
     const forwardBars = new Set();
+    const forwardHosts = new Set();
     let frame = 0;
     let flushing = false;
     let needsRefresh = false;
@@ -2993,17 +3104,19 @@
       }
       if (!frame) frame = requestAnimationFrame(flush);
     }
-    const messageScopes = '.chat-msg-area, .topbar-profile';
+    const messageScopes = '.chat-msg-area, .topbar-profile, .message-container';
     const memberScopes = '.group-member';
+    const contactScopes = '.recent-contact';
     const layoutScopes = '.chat-func-bar, .sidebar__nav, .sidebar__menu, .aio-right-click-menu, .window-control-area';
     const geometryScopes = '.chat-input-area, .expression-panel';
-    const descendantScopes = [structure, messageScopes, memberScopes, layoutScopes, geometryScopes].join(', ');
+    const descendantScopes = [structure, messageScopes, memberScopes, contactScopes, layoutScopes, geometryScopes].join(', ');
     function classify(element, descendants = false, contentChanged = true) {
       // Detached wrappers may still contain relevant UI; reject only subtrees with no matching descendant.
       const scan = descendants && element.querySelector(descendantScopes);
       const touches = selector => element.closest(selector) || (scan && element.querySelector(selector));
       if (contentChanged && !work.has('messages') && touches(messageScopes)) work.add('messages');
       if (contentChanged && !work.has('members') && touches(memberScopes)) work.add('members');
+      if (contentChanged && !work.has('contacts') && touches(contactScopes)) work.add('contacts');
       if (!work.has('layout') && touches(layoutScopes)) work.add('layout');
       if (!work.has('geometry') && touches(geometryScopes)) work.add('geometry');
       // The caller uses this return value even when structure work is already queued.
@@ -3017,10 +3130,51 @@
       const current = new Set(document.querySelectorAll(forwardSelector));
       for (const bar of forwardBars) if (!current.has(bar)) bar.removeAttribute(forwardAttribute);
       forwardBars.clear();
+      let anyVisible = false;
+      const nextHosts = new Set();
       for (const bar of current) {
         const inline = bar.getAttribute('style') || '';
-        bar.toggleAttribute(forwardAttribute, !inline.includes('display: none') && !inline.includes('display:none'));
+        const visible = !inline.includes('display: none') && !inline.includes('display:none');
+        if (visible !== bar.hasAttribute(forwardAttribute)) bar.toggleAttribute(forwardAttribute, visible);
         forwardBars.add(bar);
+        const host = bar.parentElement;
+        if (host) {
+          nextHosts.add(host);
+          if (visible !== host.hasAttribute(forwardAttribute)) host.toggleAttribute(forwardAttribute, visible);
+        }
+        if (visible) anyVisible = true;
+      }
+      for (const host of forwardHosts) if (!nextHosts.has(host)) host.removeAttribute(forwardAttribute);
+      forwardHosts.clear();
+      for (const host of nextHosts) forwardHosts.add(host);
+      if (anyVisible !== document.body.hasAttribute(forwardAttribute)) document.body.toggleAttribute(forwardAttribute, anyVisible);
+    }
+    function syncContactMarkers(targets) {
+      const seenItems = new Set();
+      const tog = (el, attr, on) => {
+        if (el && on !== el.hasAttribute(attr)) el.toggleAttribute(attr, on);
+      };
+      const items = [];
+      for (const root of targets || [document.body]) {
+        if (!root?.isConnected) continue;
+        const item = root.closest?.('.recent-contact-item');
+        if (item) {
+          if (!seenItems.has(item)) { seenItems.add(item); items.push(item); }
+        } else {
+          for (const el of elementsWithin(root, '.recent-contact-item')) {
+            if (!seenItems.has(el)) { seenItems.add(el); items.push(el); }
+          }
+        }
+      }
+      for (const item of items) {
+        const hasBadge = !!item.querySelector('.q-badge-num');
+        tog(item, 'data-liuli-unread', hasBadge);
+        tog(item, 'data-liuli-muted', !!item.querySelector('.no-disturb-icon'));
+        tog(item, 'data-liuli-badge-grey', !!item.querySelector('.q-badge__grey'));
+        const summary = item.querySelector('.item__summary');
+        const info = item.querySelector('.item__info');
+        if (summary) tog(summary, 'data-liuli-has-badge', !!summary.querySelector('.q-badge-num'));
+        if (info) tog(info, 'data-liuli-has-badge', !!info.querySelector('.q-badge-num'));
       }
     }
     function syncShellMarkers() {
@@ -3042,6 +3196,7 @@
         }
       }
       if (document.querySelector('.global-container.container--narrow')) mark(document.body, 'data-liuli-narrow');
+      if (document.querySelector('.global-container.container--wide')) mark(document.body, 'data-liuli-wide');
       for (const [element, attributes] of shellMarkers) {
         for (const attribute of attributes) if (!next.get(element)?.has(attribute)) element.removeAttribute(attribute);
       }
@@ -3068,7 +3223,7 @@
           const after = target.getAttribute('class') || '';
           if (shellClass.test(before) || shellClass.test(after)) {
             const shellRoles = value => (value.match(/\S+/g) || []).filter(name =>
-              /^(?:global-container|container--narrow|aio|message-panel|chat-input-area)$/.test(name)
+              /^(?:global-container|container--wide|container--narrow|aio|message-panel|chat-input-area)$/.test(name)
             ).sort().join(' ');
             shellChanged = shellRoles(before) !== shellRoles(after);
           }
@@ -3083,6 +3238,9 @@
         }
         let contentChanged = true;
         if (record.type === 'attributes') {
+          if (record.attributeName === 'hidden' &&
+              !(llModeCfg.hideImageNames === true && target.closest('.ptt-message, .ptt-message__container, .ptt-element')))
+            continue;
           if (
             target === document.body ||
             record.oldValue === target.getAttribute(record.attributeName)
@@ -3102,14 +3260,17 @@
             if (properties.every(name => layoutProperties.test(name)) &&
                 (isVirtualContainer(target) || target.matches('.avatar-span')))
               continue;
-            // Color/material overrides still inspect this changed subtree. An
-            // inline style update alone does not change message grouping/content.
-            contentChanged = false;
+            // Inline style alone normally cannot change message content. Voice
+            // transcription can be revealed by toggling its native container.
+            contentChanged = llModeCfg.hideImageNames === true &&
+              properties.some(name => name === 'display' || name === 'visibility') &&
+              !!target.closest('.ptt-message, .ptt-message__container, .ptt-element');
           }
         }
         if (record.type === 'childList') {
           const nodes = [...record.addedNodes, ...record.removedNodes];
-          if (!nodes.some(node => !isThemeUi(elementOf(node)))) continue;
+          // Removed text nodes have no parent; their mutation target still identifies the row.
+          if (!nodes.some(node => node.nodeType === Node.TEXT_NODE || !isThemeUi(elementOf(node)))) continue;
           colors.invalidate(target, false);
           if (!record.addedNodes.length && ((!target.children.length && target.textContent.trim()) || target.matches(TEXT_SELECTORS.join(',')))) roots.add(target);
           for (const node of nodes) {
@@ -3214,6 +3375,9 @@
         }
         if (pending.has('members')) llGroupMembersPass();
         else if (pending.has('messages')) llGroupRecentPass();
+        if (pending.has('contacts') || pending.has('structure')) {
+          syncContactMarkers(pending.has('structure') ? [document.body] : changed);
+        }
         if (pending.has('geometry') || pending.has('layout')) {
           syncBubbleWidth();
           mountInputBar();
@@ -3230,7 +3394,7 @@
       syncForwardBars();
       colors.invalidate(document.body);
       roots.add(document.body);
-      for (const kind of ['structure', 'messages', 'members']) work.add(kind);
+      for (const kind of ['structure', 'messages', 'members', 'contacts']) work.add(kind);
       schedule();
     }
     function onGeometry() {
@@ -3245,7 +3409,7 @@
       characterData: true,
       attributes: true,
       attributeOldValue: true,
-      attributeFilter: ['class', 'style', 'aria-label', 'data-element-id', 'id', 'data-index']
+      attributeFilter: ['class', 'style', 'hidden', 'aria-label', 'data-element-id', 'id', 'data-index']
     });
     function onVisibility() {
       if (document.hidden) deferHidden();
@@ -3283,6 +3447,9 @@
         messageRoots.clear();
         for (const bar of forwardBars) bar.removeAttribute(forwardAttribute);
         forwardBars.clear();
+        for (const host of forwardHosts) host.removeAttribute(forwardAttribute);
+        forwardHosts.clear();
+        document.body.removeAttribute(forwardAttribute);
         for (const [element, attributes] of shellMarkers) {
           for (const attribute of attributes) element.removeAttribute(attribute);
         }
@@ -3300,12 +3467,46 @@
     syncShellMarkers();
     syncForwardBars();
     roots.add(document.body);
-    for (const kind of ['structure', 'messages', 'members']) work.add(kind);
+    for (const kind of ['structure', 'messages', 'members', 'contacts']) work.add(kind);
     flush();
   }
   function installRevealTracker() {
-    if (window.__liuliReveal2) return;
-    window.__liuliReveal2 = true;
+    if (window.__liuliReveal2?.bindColumn) { window.__liuliReveal2.bindColumn(); return; }
+    // Older hot-loaded versions still own the right controls and navigation listeners.
+    const legacyTracker = window.__liuliReveal2 === true;
+    const listeners = new AbortController();
+    const capture = { capture: true, signal: listeners.signal };
+    let contactColumn, contactSearch;
+    function syncSearchBounds() {
+      const column = contactColumn?.getBoundingClientRect();
+      if (column && contactSearch) {
+        const input = contactSearch.getBoundingClientRect();
+        const available = Math.min(column.bottom, window.innerHeight) - input.bottom - 4;
+        contactSearch.style.setProperty('--ll-search-panel-left', (column.left - input.left) + 'px');
+        contactSearch.style.setProperty('--ll-search-panel-width', column.width + 'px');
+        contactSearch.style.setProperty('--ll-search-available-height', Math.max(0, Math.floor(available)) + 'px');
+      }
+    }
+    const columnSize = new ResizeObserver(syncSearchBounds);
+    function clearSearchBounds() {
+      for (const name of ['--ll-search-available-height', '--ll-search-panel-left', '--ll-search-panel-width'])
+        contactSearch?.style.removeProperty(name);
+    }
+    function bindColumn() {
+      const column = document.querySelector('.two-col-layout__aside > .recent-contact');
+      const search = column?.querySelector('.contact-top-bar > .main-search');
+      if (column === contactColumn && search === contactSearch) return;
+      columnSize.disconnect();
+      clearSearchBounds();
+      contactColumn = column;
+      contactSearch = search;
+      if (column) columnSize.observe(column);
+      if (search) columnSize.observe(search);
+      syncSearchBounds();
+    }
+    window.__liuliReveal2 = { bindColumn, dispose };
+    bindColumn();
+    window.addEventListener('resize', syncSearchBounds, { signal: listeners.signal });
     var EDGE = 8,
       PAD = 18,
       CORNER = 200;
@@ -3341,7 +3542,7 @@
       r: 600
     };
     var KEYS = {
-      l: 'liuliRL',
+      l: 'liuliProfileRevealed',
       r: 'liuliRR',
       nav: 'liuliRNav'
     };
@@ -3364,6 +3565,7 @@
       delete document.body.dataset.liuliRNav;
     }
     function set(k, on, hold) {
+      if (legacyTracker && k !== 'l') return;
       if (k === 'nav' && navPinned()) {
         dropNav();
         return;
@@ -3418,17 +3620,72 @@
      * 判据用「搜索面板存在」而不是「输入框有焦点」：面板打开后焦点可能落在
      * 结果项上，而面板本身才是遮挡源。面板关闭后自动恢复。 */
     function searchActive() {
-      try {
-        var panel = document.querySelector('.main-search .search-result');
-        if (panel && panel.getBoundingClientRect().height > 0) return true;
-        var input = document.querySelector('.main-search input');
-        return !!(input && document.activeElement === input);
-      } catch (e) {
-        return false;
-      }
+      if (document.activeElement?.closest('.main-search')) return true;
+      const panel = document.querySelector('.main-search .search-result');
+      return !!panel && getComputedStyle(panel).visibility === 'visible' && panel.getClientRects().length > 0;
     }
+    let hoveringProfile = false;
+    function blockProfile(blocked) {
+      document.body.toggleAttribute('data-liuli-search-active', blocked);
+      if (!blocked) return;
+      hoveringProfile = false;
+      clearTimeout(timers.l);
+      timers.l = 0;
+      state.l = false;
+      delete document.body.dataset.liuliProfileRevealed;
+      dropNav();
+    }
+    function hitsSearch(event) {
+      if (event.target.closest?.('.main-search, .contact-top-bar .contact-adder-btn')) return true;
+      if (hoveringProfile && event.target.closest?.('.topbar-profile')) return false;
+      if (!contactSearch || !event.target.closest?.('.topbar-profile, #liuli-top-hint-l')) return false;
+      const addButton = contactSearch.parentElement.querySelector('.contact-adder-btn');
+      return [contactSearch, addButton].some(el => {
+        if (!el) return false;
+        const box = el.getBoundingClientRect();
+        return event.clientX >= box.left && event.clientX < box.right &&
+          event.clientY >= box.top && event.clientY < box.bottom;
+      });
+    }
+    function syncSearch(event) {
+      if (event.target.closest?.('.main-search')) {
+        bindColumn();
+        syncSearchBounds();
+      }
+      if (!efficiencyMode()) return;
+      blockProfile(hitsSearch(event) || searchActive());
+    }
+    let edgePress;
+    function searchEdge(target) {
+      return target.matches?.('.main-search, .main-search__search-input, .q-input.q-search__input')
+        ? target.closest('.contact-top-bar > .main-search') : null;
+    }
+    function onSearchPress(event) {
+      const edge = event.button === 0 && searchEdge(event.target);
+      edgePress = edge && edge.querySelector('.search-content') ? edge : null;
+      syncSearch(event);
+    }
+    function onSearchClick(event) {
+      const edge = edgePress;
+      edgePress = null;
+      if (!edge || edge !== searchEdge(event.target)) return;
+      // Let QQ finish its two-step focus change before invoking its native outside-click handler.
+      queueMicrotask(() => {
+        const active = document.activeElement;
+        if (!edge.isConnected || !edge.querySelector('.search-content') ||
+            (edge.contains(active) && !searchEdge(active))) return;
+        if (edge.contains(active)) active.blur();
+        edge.parentElement.click();
+        blockProfile(searchActive());
+      });
+    }
+    document.addEventListener('pointerdown', onSearchPress, capture);
+    document.addEventListener('click', onSearchClick, { signal: listeners.signal });
+    document.addEventListener('focusin', syncSearch, capture);
+    document.addEventListener('focusout', () => queueMicrotask(() => blockProfile(searchActive())), capture);
     function clearClassicReveal() {
       if (efficiencyMode()) return;
+      blockProfile(false);
       for (const key of ['nav', 'l', 'r']) {
         clearTimeout(timers[key]);
         timers[key] = 0;
@@ -3448,9 +3705,13 @@
       last.x = x;
       last.y = y;
       // 搜索面板打开时不让导航卡弹出：它会盖住面板，且用户此时是在面板里操作。
-      if (searchActive()) {
-        set('nav', false);
-      } else {
+      if (!e.target.closest?.('.topbar-profile')) hoveringProfile = false;
+      const searching = hitsSearch(e) || searchActive();
+      // Entering the exposed part of the capsule gives its own controls the
+      // pointer until it leaves. Direct entry over the search field still passes through.
+      hoveringProfile = !searching && state.l && !!e.target.closest?.('.topbar-profile');
+      blockProfile(searching);
+      if (!searching) {
         set('nav', x <= EDGE || (state.nav && over('.container-sidebar', x, y)));
       }
       if (nativeBar()) {
@@ -3462,7 +3723,7 @@
       var top = topEdge();
       set(
         'l',
-        (y <= top && x >= 56 && x <= CORNER + 56) || (state.l && over('.topbar-profile', x, y))
+        !searching && ((y <= top && x >= 56 && x <= CORNER + 56) || (state.l && over('.topbar-profile', x, y)))
       );
       set(
         'r',
@@ -3472,6 +3733,7 @@
       );
     }
     function onLeave() {
+      hoveringProfile = false;
       set('nav', false);
       ['l', 'r'].forEach(function (k) {
         var sel = k === 'l' ? '.topbar-profile' : '.window-control-area';
@@ -3479,13 +3741,25 @@
       });
     }
     function onBlur() {
+      hoveringProfile = false;
       set('nav', false);
       set('l', false);
       set('r', false);
     }
-    document.addEventListener('mousemove', onMove, true);
-    document.documentElement.addEventListener('mouseleave', onLeave);
-    window.addEventListener('blur', onBlur);
+    document.addEventListener('mousemove', onMove, capture);
+    document.documentElement.addEventListener('mouseleave', onLeave, { signal: listeners.signal });
+    window.addEventListener('blur', onBlur, { signal: listeners.signal });
+    function dispose() {
+      listeners.abort();
+      modeObserver.disconnect();
+      columnSize.disconnect();
+      clearSearchBounds();
+      for (const timer of Object.values(timers)) clearTimeout(timer);
+      for (const key of legacyTracker ? ['l'] : ['nav', 'l', 'r']) delete document.body.dataset[KEYS[key]];
+      document.body.removeAttribute('data-liuli-search-active');
+      if (legacyTracker) window.__liuliReveal2 = true;
+      else delete window.__liuliReveal2;
+    }
   }
   function syncCtlShield() {
     try {
@@ -3748,7 +4022,7 @@
      * 铺壁纸会把原生画面盖住；CSS 侧还有 content:none 双保险。 */
     if (
       document.body.dataset.liuliAv === '1' ||
-      (location.hash || '').indexOf('#/mini-fishing') === 0
+      isMiniFishingWindow()
     ) {
       el.textContent = '';
       return;
@@ -5513,8 +5787,10 @@
     const started = Date.now();
     installRouteScope();
     try {
+      const hash = location.hash || '';
       const chunks = await Promise.all(
         FILES.map(async file => {
+          if (file === 'settings-page.css' && !hash.startsWith('#/setting')) return '';
           try {
             return await loadText(file);
           } catch (e) {
@@ -5801,12 +6077,12 @@
     bubbleHint.className = 'liuli-field__hint';
     bubbleHint.textContent = '原版和 TIM 保留各自气泡形状，颜色角色与材质跟随主题。TG 和 TIM 可合并连续消息的头像。';
     host.appendChild(bubbleHint);
-    choice('头像位置（TG / TIM）', 'avatarPosition', [['top', '消息开头'], ['bottom', '消息末尾']]);
-    choice('名称与标签位置（TIM）', 'timSenderPosition', [['inside', '气泡内（TG）'], ['outside', '气泡外（原版）']]);
-    choice('自己消息的文字对齐', 'selfTextAlign', [['right', '右对齐（原生）'], ['left', '左对齐']]);
+    choice('头像位置', 'avatarPosition', [['top', '消息开头'], ['bottom', '消息末尾']]);
+    choice('名称与标签位置', 'timSenderPosition', [['inside', '气泡内（TG）'], ['outside', '气泡外（原版）']]);
+    choice('自己消息的文字对齐', 'selfTextAlign', [['right', '右对齐'], ['left', '左对齐']]);
     const alignHint = document.createElement('div');
     alignHint.className = 'liuli-field__hint';
-    alignHint.textContent = '只影响自己发出的正文。连续代码、表格、日志这类等宽内容左对齐更好读；气泡位置与时间戳不受影响。';
+    alignHint.textContent = '多行文字可在气泡内靠左或靠右，气泡仍按内容定宽。';
     host.appendChild(alignHint);
     const scaleField = document.createElement('div');
     scaleField.className = 'liuli-field';
@@ -5864,19 +6140,20 @@
     widthHint.className = 'liuli-field__hint';
     widthHint.textContent = '只限制消息最大宽度，不缩放气泡、文字或语音。短消息保持自然大小；100% 使用 QQ 原生宽度上限。';
     host.appendChild(widthHint);
-    settingSwitch('隐藏纯图片消息的昵称', 'hideImageNames', settings.hideImageNames === true);
-    const imageHint = document.createElement('div');
-    imageHint.className = 'liuli-field__hint';
-    imageHint.textContent = '同时隐藏图片上方的头衔；带文字或引用的混合消息保留昵称。';
-    host.appendChild(imageHint);
+    settingSwitch('隐藏非文字消息的昵称', 'hideImageNames', settings.hideImageNames === true);
+    const mediaHint = document.createElement('div');
+    mediaHint.className = 'liuli-field__hint';
+    mediaHint.textContent = '适用于仅含图片、视频、文件、语音或表情包的消息，同时隐藏头衔；含文字或引用的消息不受此开关影响。';
+    host.appendChild(mediaHint);
     for (const [label, key, description] of [
-      ['显示群头衔', 'showMessageTitles', '只控制昵称旁的个性群头衔，保留昵称和群主、管理员身份。'],
+      ['显示群头衔', 'showMessageTitles', '控制昵称旁的群头衔和等级，保留昵称和群主、管理员身份。'],
       ['显示群主 / 管理员身份', 'showMessageIdentity', '只控制群主、管理员身份标签，保留昵称和个性群头衔。'],
       ['名称按气泡宽度省略', 'truncateMessageNames', '开启后长昵称按气泡宽度省略；关闭后可显示完整名称，短消息的名称行可能更宽。']
     ]) {
       settingSwitch(label, key, settings[key] !== false);
       const detail = document.createElement('div');
       detail.className = 'liuli-field__hint';
+      detail.dataset.liuliSettingHint = key;
       detail.textContent = description;
       host.appendChild(detail);
     }

@@ -14,8 +14,8 @@ const css = files.filter(name => fs.existsSync(path.join(root, 'assets', name)))
 const native = read('dev/fixtures/qq-native-message-layout.css') + '\n' + read('dev/fixtures/qq-native-forward-layout.css');
 const capturedRows = JSON.parse(read('dev/fixtures/qq-native-forward-rows.json'));
 const setup = `body{margin:20px!important;background:repeating-linear-gradient(60deg,#80735f 0px,#80735f 80px,#ded6be 80px,#ded6be 160px)!important;font:14px 'Microsoft YaHei UI',sans-serif;--avatar_size_2:32px;--font_size_1:12px;--line_height_1:16px;--font_size_2:14px;--line_height_2:20px;--font_size_main_2:14px;--line_height_main_2:22px;--ll-message-font-size:14px;--ll-name-font-size:12px;--ll-title-font-size:10px;--ll-material-opacity:.3;--ll-shadow-rgb:0,0,0;--ll-brand:#f0c043;--ll-brand-rgb:240,192,67;--bubble_guest:rgba(var(--ll-acrylic),.42);--bubble_guest_text:var(--ll-on-glass);--text_primary:var(--ll-on-glass);--text_secondary:var(--ll-on-glass-2);--text_tertiary:var(--ll-on-glass-3)}.chat-msg-area{width:900px}.avatar,.avatar-native{background-image:none!important;background:#a1a19b!important}section{margin-bottom:12px}.sample-heading{font-size:12px;color:#333}.preview-author{font-weight:500}.reference{width:max-content}.reference .msg-content-container{display:block}.pic-element{width:90px;height:50px;background:#a8a19b}`;
-const reference = direction => `<div class="message-container message-container--${direction}" data-reference="${direction}"><div class="user-name">普通消息发送者</div><div class="message-content__wrapper reference"><div class="msg-content-container container--${direction}"><div class="message-content"><span class="text-element text-normal">普通消息正文</span></div></div></div></div>`;
-const picture = '<div class="message-container" data-control="picture"><div class="user-name">图片发送者</div><div class="message-content__wrapper"><div class="msg-content-container container--others mix-message__container--pic" data-liuli-image-only><div class="message-content"><div class="pic-element"></div></div></div></div></div>';
+const reference = direction => `<div class="message-container message-container--${direction}" data-reference="${direction}" data-liuli-side="${direction}" data-liuli-msg-row><div class="user-name">普通消息发送者</div><div class="message-content__wrapper reference"><div class="msg-content-container container--${direction}"><div class="message-content"><span class="text-element text-normal">普通消息正文</span></div></div></div></div>`;
+const picture = '<div class="message-container" data-control="picture" data-liuli-side="others" data-liuli-msg-row><div class="user-name">图片发送者</div><div class="message-content__wrapper"><div class="msg-content-container container--others mix-message__container--pic" data-liuli-image-only><div class="message-content"><div class="pic-element"></div></div></div></div></div>';
 function measure() {
   const pick = node => { const s = getComputedStyle(node); return { background: s.backgroundColor, color: s.color, shadow: s.boxShadow, blur: s.backdropFilter }; };
   const refs = Object.fromEntries([...document.querySelectorAll('[data-reference]')].map(row => [row.dataset.reference, pick(row.querySelector('.msg-content-container'))]));
@@ -53,11 +53,13 @@ function measure() {
           const row = section.querySelector('.message-container');
           row.classList.remove('message-container--others', 'message-container--self', 'message-container--align-right'); row.classList.add('message-container--' + direction);
           row.dataset.liuliG = 'single'; row.dataset.liuliAvatarG = 'single';
+          row.dataset.liuliSide = direction === 'others' ? 'others' : 'self'; row.setAttribute('data-liuli-msg-row', ''); row.setAttribute('data-liuli-forward', '');
           const card = row.querySelector('.forward-msg');
           const content = card.querySelector('.fwd-content');
           const previewName = document.createElement('span'); previewName.className = 'preview-author'; previewName.textContent = '预览发送者: '; content.prepend(previewName);
           if (nested) {
             const wrapper = card.parentElement, bubble = document.createElement('div'); bubble.className = 'msg-content-container container--' + (direction === 'others' ? 'others' : 'self');
+            bubble.setAttribute('data-liuli-card', ''); bubble.setAttribute('data-liuli-non-bubble', '');
             const body = document.createElement('div'); body.className = 'message-content'; wrapper.appendChild(bubble); bubble.appendChild(body); body.appendChild(card);
             // Recreate a native sender already moved inside by a previous pass.
             bubble.prepend(row.querySelector('.user-name'));

@@ -20,7 +20,7 @@ const native = `
 .message-container .user-name .group-member-label{margin-left:0;margin-right:4px;font-size:min(var(--font_size_1),14px)!important;line-height:min(var(--line_height_1),20px)!important}
 `;
 const production = ['typography.css', 'bubbles.css', 'lists.css', 'markdown.css'].map(file => read('assets/' + file)).join('\n');
-const sender = (label, nickname) => `<div class="user-name no-copy text-ellipsis">${label}<span class="text-ellipsis" style="white-space:pre">${nickname}</span><span class="user-label">自定义群头衔</span></div>`;
+const sender = (label, nickname, extraAttr = '') => `<div class="user-name no-copy text-ellipsis" ${extraAttr}>${label}<span class="text-ellipsis" style="white-space:pre">${nickname}</span><span class="user-label">自定义群头衔</span></div>`;
 const labels = [
   '<div class="group-member-label q-tag q-tag--grey"><span class="level">LV100</span><span>热心群友</span></div>',
   '<div class="group-member-label q-tag q-tag--blue"><span>管理员</span></div>',
@@ -31,6 +31,8 @@ const measure = () => [...document.querySelectorAll('.user-name')].map(name => (
   nicknameVisible: getComputedStyle(name.querySelector('.text-ellipsis')).display !== 'none',
   nicknameHeight: name.querySelector('.text-ellipsis').getBoundingClientRect().height,
   nicknameLineHeight: parseFloat(getComputedStyle(name.querySelector('.text-ellipsis')).lineHeight),
+  marginBottom: getComputedStyle(name).marginBottom,
+  bodyGap: name.nextElementSibling.getBoundingClientRect().top - name.getBoundingClientRect().bottom,
   label: [...name.querySelectorAll('.q-tag,.user-label')].map(label => ({
     display: getComputedStyle(label).display,
     fontSize: parseFloat(getComputedStyle(label).fontSize),
@@ -48,22 +50,26 @@ const measure = () => [...document.querySelectorAll('.user-name')].map(name => (
   const report = { scope: 'QQ native name rules + source CSS; no runtime setting writes or conversation navigation', cases: [] };
   try {
     const page = await browser.newPage({ viewport: { width: 820, height: 500 } });
-    for (const style of ['tg', 'tim', 'classic']) for (const full of [false, true]) for (const size of [10, 16]) for (const width of [110, 260]) {
+    for (const [style, inside] of [['tg', true], ['tim', true], ['tim', false], ['classic', false]]) for (const full of [false, true]) for (const size of [10, 16]) for (const width of [110, 260]) {
       const fullAttr = full ? 'data-liuli-full-message-names' : '';
       const samples = labels.map((label, i) => {
-        const name = sender(label, i ? '坏心眼' : 'CpiyLie');
-        const bubble = `<div class="msg-content-container container--others"><div class="message-content"><span class="text-element">DJmax不恶心</span></div></div>`;
-        return `<div class="ml-item"><div class="message-container message-container--others" style="width:${width}px">${style === 'tg' ? bubble.replace('<div class="message-content">', name + '<div class="message-content">') : name + bubble}</div></div>`;
+        const name = sender(label, i ? '坏心眼' : 'CpiyLie', inside ? 'data-liuli-name-before' : '');
+        const bubble = `<div class="msg-content-container container--others"${inside ? ' data-liuli-name-only-content' : ''}><div class="message-content"><span class="text-element">DJmax不恶心</span></div></div>`;
+        return `<div class="ml-item"><div class="message-container message-container--others" data-liuli-side="others" style="width:${width}px">${inside ? bubble.replace('<div class="message-content">', name + '<div class="message-content">') : name + bubble}</div></div>`;
       }).join('');
       await page.setContent(`<!doctype html><style>${native}\n${production}
 body{margin:24px;background:#28271e;color:#e8e6dc;font-family:'Microsoft YaHei UI',sans-serif;--ll-brand:#a9cdad;--ll-brand-rgb:169,205,173;--ll-acrylic:50,44,29;--ll-material-opacity:.3;--ll-name-font-size:14px;--ll-title-font-size:${size}px;--ll-name:#a9cdad;--ll-on-glass:#e8e6dc;--ll-on-glass-2:#ddd;--ll-secondary-container:#3a4e3d;--ll-on-secondary-container:#c8e6c9;--font_size_1:12px;--line_height_1:16px;--font_size_2:14px;--line_height_2:20px}
 .ml-item{margin-bottom:20px}.message-container{display:flex;flex-direction:column;align-items:flex-start}.msg-content-container{box-sizing:border-box;max-width:100%;min-width:0}.text-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.message-content{padding-top:4px}.user-name{box-sizing:border-box;max-width:100%}
-</style><body data-liuli-chat-style="${style}" ${fullAttr}>${samples}</body>`);
+</style><body data-liuli-chat-style="${style}" data-liuli-tim-sender-position="${inside ? 'inside' : 'avatar'}" ${fullAttr}>${samples}</body>`);
       const values = await page.evaluate(measure);
       for (const name of values) {
         assert(name.nicknameVisible);
         if (full) assert(name.nicknameHeight <= name.nicknameLineHeight + 1, 'Short nickname squeezed into one glyph per line beside metadata');
-        if (style === 'tg') assert(['auto', '0px'].includes(name.top), 'Native -2px offset escaped into the TG bubble');
+        if (inside) {
+          assert(['auto', '0px'].includes(name.top), 'Native -2px offset escaped into the bubble');
+          assert.equal(name.marginBottom, '0px', 'Nickname retained a bottom margin inside the bubble');
+          assert(Math.abs(name.bodyGap) < 0.1, 'Nickname and message body line boxes should meet inside the bubble');
+        }
         for (const label of name.label) {
           assert.equal(label.whiteSpace, 'nowrap', 'Metadata wrapped internally');
           assert.equal(label.fontSize, size, 'Independent title font setting was overridden');
@@ -75,33 +81,28 @@ body{margin:24px;background:#28271e;color:#e8e6dc;font-family:'Microsoft YaHei U
           }
         }
       }
-      for (const hidden of ['titles', 'identity']) {
-        const result = await page.evaluate(hidden => {
-          document.body.toggleAttribute('data-liuli-hide-message-titles', hidden === 'titles');
-          document.body.toggleAttribute('data-liuli-hide-message-identity', hidden === 'identity');
+      for (const [hideTitles, hideIdentity] of [[false, false], [true, false], [true, true], [false, true], [false, false]]) {
+        const result = await page.evaluate(({ hideTitles, hideIdentity }) => {
+          document.body.toggleAttribute('data-liuli-hide-message-titles', hideTitles);
+          document.body.toggleAttribute('data-liuli-hide-message-identity', hideIdentity);
+          const hasLayout = element => element.getClientRects().length > 0;
           return [...document.querySelectorAll('.user-name')].map(name => ({
-            title: getComputedStyle(name.querySelector('.user-label')).display,
-            identity: getComputedStyle(name.querySelector('.group-member-label')).display,
-            role: name.querySelector('.group-member-label').matches('.q-tag--blue,.q-tag--orange'),
-            groupTitle: name.querySelector('.q-tag--grey > span:not(.level)') && getComputedStyle(name.querySelector('.q-tag--grey > span:not(.level)')).display,
-            level: name.querySelector('.level') && getComputedStyle(name.querySelector('.level')).display,
-            nickname: getComputedStyle(name.querySelector('.text-ellipsis')).display
+            title: hasLayout(name.querySelector('.user-label')),
+            badge: hasLayout(name.querySelector('.group-member-label')),
+            grey: !!name.querySelector('.q-tag--grey'),
+            greyText: [...name.querySelectorAll('.q-tag--grey > span')].map(hasLayout),
+            nickname: hasLayout(name.querySelector('.text-ellipsis'))
           }));
-        }, hidden);
+        }, { hideTitles, hideIdentity });
         for (const name of result) {
-          assert.equal(name.title === 'none', hidden === 'titles');
-          assert.equal(name.identity === 'none', name.role && hidden === 'identity');
-          if (name.groupTitle) assert.equal(name.groupTitle === 'none', hidden === 'titles');
-          if (name.level) assert.notEqual(name.level, 'none');
-          assert.notEqual(name.nickname, 'none');
+          assert.equal(name.title, !hideTitles, 'Custom title visibility');
+          assert.equal(name.badge, !(name.grey ? hideTitles : hideIdentity), 'Group badge visibility');
+          if (name.grey) assert.deepEqual(name.greyText, [!hideTitles, !hideTitles], 'Grey badge level and title visibility');
+          assert.equal(name.nickname, true, 'Nickname visibility');
         }
       }
-      await page.evaluate(() => {
-        document.body.removeAttribute('data-liuli-hide-message-titles');
-        document.body.removeAttribute('data-liuli-hide-message-identity');
-      });
-      if (full && width === 110 && size === 16) await page.screenshot({ path: path.join(output, `name-${style}-narrow-large.png`) });
-      report.cases.push({ style, full, size, width, passed: true });
+      if (full && width === 110 && size === 16) await page.screenshot({ path: path.join(output, `name-${style}-${inside ? 'inside' : 'outside'}-narrow-large.png`) });
+      report.cases.push({ style, inside, full, size, width, bodyGaps: values.map(name => name.bodyGap), passed: true });
     }
     report.passed = true;
   } catch (error) { report.error = error.stack; process.exitCode = 1; }

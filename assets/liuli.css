@@ -90,29 +90,20 @@ body {
  * 语音 / 视频通话窗口（#/av）不铺，免得盖住原生视频层（#9）。
  * 迷你窗（#/mini-fishing）也不铺（#52）：它是 QQ 的透明小窗，铺底会把原生透明区盖住。
  * 要 !important：下面「中间容器全部打透」那条 #app { background: transparent !important } 会压掉它。 */
-body[data-liuli-dark='0']:not([data-hash^='#/av']):not([data-liuli-av]):not([data-hash^='#/mini-fishing']):not([window-name='MiniFishingWindow']) #app {
+body[data-liuli-dark='0']:not([data-hash^='#/av']):not([data-liuli-av]):not([data-hash^='#/mini-fishing']):not([window-name^='MiniFishing']):not([data-liuli-mini-fishing]):not([data-hash^='#/toast-msg']):not([data-hash^='#/tray-notification']) #app {
   background-color: #ffffff !important;
 }
-body[data-liuli-dark='1']:not([data-hash^='#/av']):not([data-liuli-av]):not([data-hash^='#/mini-fishing']):not([window-name='MiniFishingWindow']) #app {
+body[data-liuli-dark='1']:not([data-hash^='#/av']):not([data-liuli-av]):not([data-hash^='#/mini-fishing']):not([window-name^='MiniFishing']):not([data-liuli-mini-fishing]):not([data-hash^='#/toast-msg']):not([data-hash^='#/tray-notification']) #app {
   background-color: #000000 !important;
 }
 
-/* 迷你窗保留透明窗口宿主；内部主题材质由 layout.css 单独应用到 shell。 */
-body[data-hash^='#/mini-fishing'] #app {
+/* 迷你窗与系统浮层 Toast（#/mini-fishing / #/toast-msg / #/tray-notification）保留透明窗口宿主（含其子浮窗）；内部主题材质由 layout.css 单独应用到 shell。 */
+body:is([data-hash^='#/mini-fishing'], [window-name^='MiniFishing'], [data-liuli-mini-fishing], [data-hash^='#/toast-msg'], [data-hash^='#/tray-notification']) #app {
   background-color: transparent !important;
   isolation: auto !important;
 }
-body[data-hash^='#/mini-fishing'] #app::before,
-body[data-hash^='#/mini-fishing'] #app::after {
-  content: none !important;
-}
-/* 迷你窗用 QQ 稳定的 window-name 标记；它的 data-hash 会停留在 #/loading。 */
-body[window-name='MiniFishingWindow'] #app {
-  background-color: transparent !important;
-  isolation: auto !important;
-}
-body[window-name='MiniFishingWindow'] #app::before,
-body[window-name='MiniFishingWindow'] #app::after {
+body:is([data-hash^='#/mini-fishing'], [window-name^='MiniFishing'], [data-liuli-mini-fishing], [data-hash^='#/toast-msg'], [data-hash^='#/tray-notification']) #app::before,
+body:is([data-hash^='#/mini-fishing'], [window-name^='MiniFishing'], [data-liuli-mini-fishing], [data-hash^='#/toast-msg'], [data-hash^='#/tray-notification']) #app::after {
   content: none !important;
   background-image: none !important;
 }

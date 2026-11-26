@@ -128,30 +128,104 @@ test('sender name size slider exposes the same 10-14px range as settings normali
   assert.equal(Number(nameSlider.max), 14);
 });
 
-test('TIM enables both layout controls; TG retains its avatar control; classic disables both without hiding saved choices', () => {
-  const rows = new Map(['avatarPosition', 'timSenderPosition', 'pinColor'].map(key => {
-    const row = { hidden: true, attrs: {}, disabledClass: false, buttons: [{ disabled: false }, { disabled: false }] };
-    row.classList = { toggle: (_name, enabled) => { row.disabledClass = enabled; } };
-    row.setAttribute = (name, value) => { row.attrs[name] = value; };
-    row.querySelectorAll = () => row.buttons;
-    return [key, row];
-  }));
-  const context = { llModeCfg: { chatStyle: 'tim', pinGroup: true }, document: {
-    querySelectorAll: selector => [rows.get(selector.match(/="([^"]+)"/)[1])]
-  } };
+test('TIM、TG 与原版按气泡模式隐藏无关布局设置与说明，切回后保留原配置；pinColor 保持置灰', () => {
+  const makeNode = () => {
+    const node = { hidden: false, attrs: {}, disabledClass: false, buttons: [{ disabled: false }, { disabled: false }] };
+    node.classList = { toggle: (_name, enabled) => { node.disabledClass = enabled; } };
+    node.setAttribute = (name, value) => { node.attrs[name] = value; };
+    node.querySelectorAll = () => node.buttons;
+    return node;
+  };
+  const rows = new Map(['avatarPosition', 'timSenderPosition', 'truncateMessageNames', 'pinColor'].map(key => [key, makeNode()]));
+  const hints = new Map(['truncateMessageNames'].map(key => [key, { hidden: false }]));
+  const context = {
+    llModeCfg: { chatStyle: 'tim', timSenderPosition: 'inside', pinGroup: true },
+    document: {
+      querySelectorAll: selector => {
+        const settingMatch = selector.match(/data-liuli-setting="([^"]+)"/);
+        if (settingMatch) return [rows.get(settingMatch[1])].filter(Boolean);
+        const hintMatch = selector.match(/data-liuli-setting-hint="([^"]+)"/);
+        if (hintMatch) return [hints.get(hintMatch[1])].filter(Boolean);
+        return [];
+      }
+    }
+  };
   vm.createContext(context);
   vm.runInContext(functionSource('llSyncSettingDependencies') + ';globalThis.sync=llSyncSettingDependencies;', context);
-  for (const style of ['tim', 'tg', 'classic']) {
+
+  const cases = [
+    ['tim', 'inside', { avatarPosition: true, timSenderPosition: true, truncateMessageNames: true }],
+    ['tim', 'outside', { avatarPosition: true, timSenderPosition: true, truncateMessageNames: false }],
+    ['tg', 'outside', { avatarPosition: true, timSenderPosition: false, truncateMessageNames: true }],
+    ['classic', 'inside', { avatarPosition: false, timSenderPosition: false, truncateMessageNames: false }]
+  ];
+  for (const [style, timSenderPosition, expected] of cases) {
     context.llModeCfg.chatStyle = style;
+    context.llModeCfg.timSenderPosition = timSenderPosition;
     context.sync();
-    for (const key of ['avatarPosition', 'timSenderPosition']) {
-      const enabled = key === 'avatarPosition' ? style !== 'classic' : style === 'tim';
+    for (const key of ['avatarPosition', 'timSenderPosition', 'truncateMessageNames']) {
+      const enabled = expected[key];
       const row = rows.get(key);
-      assert.equal(row.hidden, false);
-      assert.equal(row.disabledClass, !enabled);
+      assert.equal(row.hidden, !enabled, `${style}/${timSenderPosition} ${key} hidden`);
+      assert.equal(row.disabledClass, !enabled, `${style}/${timSenderPosition} ${key} class`);
       assert.equal(row.attrs['aria-disabled'], String(!enabled));
       assert(row.buttons.every(button => button.disabled === !enabled));
     }
+    assert.equal(hints.get('truncateMessageNames').hidden, !expected.truncateMessageNames);
+  }
+  context.llModeCfg.pinGroup = false;
+  context.sync();
+  assert.equal(rows.get('pinColor').hidden, false);
+  assert.equal(rows.get('pinColor').disabledClass, true);
+});
+
+test('isMiniFishingWindow 识别路由、查询参数和 MiniFishing* 窗口名并同步清除壁纸样式', () => {
+  let renderedWith = 'untouched';
+  const attrs = new Map();
+  const body = {
+    dataset: {},
+    style: { props: {}, getPropertyValue: k => body.style.props[k] || '', setProperty: (k, v) => { body.style.props[k] = v; } },
+    getAttribute: k => attrs.get(k) || null
+  };
+  const listeners = new Map();
+  const context = {
+    location: { hash: '#/loading', pathname: '/renderer/index.html', search: '?auxWinWithIpc=1', protocol: 'app:' },
+    document: { body },
+    window: { __liuliRouteScope: false, dispatchEvent() {} },
+    addEventListener: (name, fn) => listeners.set(name, fn),
+    Event: class Event { constructor(t) { this.type = t; } },
+    llWpLast: { src: 'data:image/png;base64,abc' },
+    renderWallpaper: state => { renderedWith = state; }
+  };
+  vm.createContext(context);
+  vm.runInContext([
+    functionSource('isMiniFishingWindow'),
+    functionSource('installRouteScope'),
+    'globalThis.api = { isMini: isMiniFishingWindow, install: installRouteScope };'
+  ].join('\n'), context);
+
+  assert.equal(context.api.isMini(), false);
+  context.api.install();
+  assert.equal(body.dataset.liuliMiniFishing, undefined);
+
+  attrs.set('window-name', 'MiniFishingOpacityWindow');
+  assert.equal(context.api.isMini(), true);
+  listeners.get('liuli-route')();
+  assert.equal(body.dataset.liuliMiniFishing, '1');
+  assert.deepEqual(renderedWith, context.llWpLast);
+
+  attrs.delete('window-name');
+  context.location.search = '?auxWinWithIpc=1&miniFishingPoolWin=1';
+  assert.equal(context.api.isMini(), true);
+
+  context.location.search = '';
+  for (const h of ['#/toast-msg', '#/tray-notification']) {
+    context.location.hash = h;
+    assert.equal(context.api.isMini(), true, h);
+  }
+  for (const rel of ['assets/liuli.css', 'assets/layout.css', 'assets/integration.css']) {
+    const css = fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+    assert(css.includes('#/toast-msg') && css.includes('#/tray-notification'), rel + ' missing transparent popup routes');
   }
 });
 
@@ -564,4 +638,48 @@ test('scroll timestamp prompt is opt-in and does not change native grouping boun
     assert.deepEqual(h.rows.map(row => row.dataset.liuliG), ['single', 'single']);
     assert.deepEqual(h.rows.map(row => row.dataset.liuliAvatarG), ['single', 'single']);
   }
+});
+
+test('滚动期样式失效热点已消解：无宽屏 :has()、无通配后缀及 [data-liuli-g] 反查，且 syncShellMarkers 同步 data-liuli-wide', () => {
+  const readAsset = rel => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+  for (const rel of ['assets/layout.css', 'assets/layout-custom.css']) {
+    const css = readAsset(rel);
+    assert(!css.includes(':has(.global-container.container--wide)'), rel + ' still uses :has(.global-container.container--wide)');
+    assert(css.includes('[data-liuli-wide]'), rel + ' missing [data-liuli-wide]');
+  }
+  const bubbles = readAsset('assets/bubbles.css');
+  assert(!bubbles.includes("> [class*='avatar']"), "bubbles.css still uses > [class*='avatar']");
+  assert(!/\.message:has\([^)]*\[data-liuli-g\]/.test(bubbles), 'bubbles.css still uses .message:has(...[data-liuli-g])');
+  assert(!bubbles.includes("[data-liuli-quote-root='1'] [class*='name'] *"), 'bubbles.css still uses universal descendant under quote-root name');
+  assert(!bubbles.includes("[data-liuli-quote-root='1'] [class*='nick'] *"), 'bubbles.css still uses universal descendant under quote-root nick');
+
+  for (const rel of ['assets/bubbles.css', 'assets/lists.css', 'assets/avatar-compact.css', 'assets/scroll-time.css', 'assets/markdown.css']) {
+    const activeHas = readAsset(rel).split(/\r?\n/).filter(l => l.includes(':has(') && !/^\s*(?:\/\*|\*)/.test(l));
+    assert.equal(activeHas.length, 0, rel + ' still contains :has(): ' + activeHas[0]);
+  }
+  const customHas = readAsset('assets/layout-custom.css')
+    .split(/\r?\n/)
+    .filter(l => !/^\s*(?:\/\*|\*)/.test(l) && l.replace(/:has\(:focus-visible\)/g, '').includes(':has('));
+  assert.equal(customHas.length, 0, 'assets/layout-custom.css still contains :has(): ' + customHas[0]);
+  const layoutHas = readAsset('assets/layout.css').split(/\r?\n/).filter(l => /body[^ ,{]*:has\(|:not\(:has\(\*\)\)/.test(l));
+  assert.equal(layoutHas.length, 0, 'layout.css still contains hot :has(): ' + layoutHas[0]);
+  assert(source.includes("if (file === 'settings-page.css' && !hash.startsWith('#/setting')) return '';"),
+    'settings-page.css must be route-gated to #/setting');
+
+  assert(!readAsset('assets/motion.css').includes(':has(> .q-context-menu-item):not(#ll) > :not(.q-context-sub-menu__container)'),
+    'motion.css still uses universal > :not(...) under :has()');
+  assert(!/\.q-badge-num[^\n{]*\*/.test(readAsset('assets/lists.css')), 'lists.css still uses universal .q-badge-num ... *');
+  assert(!/\[class\*='text-link'\]\s*\*/.test(readAsset('assets/details.css')), "details.css still uses [class*='text-link'] *");
+  const typo = readAsset('assets/typography.css');
+  assert(!typo.includes("[class*='msg-divider'] > *") && !typo.includes("[class*='unread-divider'] > *"),
+    'typography.css still uses universal divider > *');
+
+  const syncStart = source.indexOf('function syncShellMarkers()');
+  const syncEnd = source.indexOf('const observer = new MutationObserver', syncStart);
+  assert(syncStart > 0 && syncEnd > syncStart);
+  const syncSrc = source.slice(syncStart, syncEnd);
+  assert(syncSrc.includes('container--wide') && syncSrc.includes("'data-liuli-wide'"),
+    'syncShellMarkers must maintain data-liuli-wide');
+  const shellClassLine = source.slice(source.indexOf('const shellClass ='), source.indexOf('\n', source.indexOf('const shellClass =')));
+  assert(shellClassLine.includes('container--wide'), 'shellClass must include container--wide');
 });

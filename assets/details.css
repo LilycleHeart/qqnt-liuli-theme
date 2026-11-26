@@ -134,7 +134,7 @@ body .message-container .msg-content-container:is(.container--self, .container--
 .message-container .msg-content-container.container--self .text-element .text-link,
 .message-container .msg-content-container.container--self .text-element .text--link,
 .message-container .msg-content-container.container--self .text-element [class*='text-link'],
-.message-container .msg-content-container.container--self .text-element [class*='text-link'] * {
+.message-container .msg-content-container.container--self .text-element [class*='text-link'] a {
   color: var(--ll-bubble-self-link, var(--ll-tertiary)) !important;
   text-decoration-color: color-mix(
     in srgb,

@@ -257,7 +257,7 @@ body .q-context-menu.aio-right-click-menu.liuli-menu-sorted > .q-context-menu-se
  * 两个 :not(#ll)（ID 级特异性）+ !important，才能压过 layout.css 里
  * body[data-liuli-scope="main"][data-liuli-r-nav] … 那几条 !important。
  * ════════════════════════════════════════════════════════════ */
-body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
+body[data-liuli-nav-pin][data-liuli-scope='main'][data-liuli-wide]
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll) {
@@ -277,18 +277,18 @@ body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.containe
   --ll-material-opacity: inherit !important;
 }
 /* 左边缘那条 14px 宽的感应区（layout.css:284）在固定模式没有意义，还会伸出卡片外 */
-body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
+body[data-liuli-nav-pin][data-liuli-scope='main'][data-liuli-wide]
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll)::before {
   content: none !important;
 }
 /* 悬停 / 聚焦不再滑出、不再加投影、不再换模糊（layout.css:279-283、323-328、543-554） */
-body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
+body[data-liuli-nav-pin][data-liuli-scope='main'][data-liuli-wide]
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll):hover,
-body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
+body[data-liuli-nav-pin][data-liuli-scope='main'][data-liuli-wide]
   .global-container
   .container-content
   > .container-sidebar:not(#ll):not(#ll):has(:focus-visible) {
@@ -301,7 +301,7 @@ body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.containe
 
 /* 会话列表跟着右移：layout.css:315 把 margin-left 压成 0（导航原本浮在它上面），
  * 固定后要退回「导航卡 + 8px + 会话列表卡」的排版，宽度同步让出这 8px。 */
-body[data-liuli-nav-pin][data-liuli-scope='main']:has(.global-container.container--wide)
+body[data-liuli-nav-pin][data-liuli-scope='main'][data-liuli-wide]
   .two-col-layout__aside
   > .recent-contact:not(#ll) {
   margin-left: var(--ll-dock-gap) !important;

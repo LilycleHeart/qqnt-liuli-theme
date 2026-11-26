@@ -75,7 +75,8 @@ body .q-context-menu.is-pure:has(> .q-context-menu-item):not(#ll)::before {
   animation: liuli-fade-in var(--ll-dur) var(--ll-ease) backwards;
   box-shadow: var(--ll-float-shadow) !important;
 }
-body .q-context-menu.is-pure:has(> .q-context-menu-item):not(#ll) > :not(.q-context-sub-menu__container) {
+body .q-context-menu.is-pure:has(> .q-context-menu-item):not(#ll) > .q-context-menu-item,
+body .q-context-menu.is-pure:has(> .q-context-menu-item):not(#ll) > .q-context-menu-separator {
   animation: liuli-fade-in var(--ll-dur) var(--ll-ease) backwards;
 }
 /* #27.5 标题栏右上角那组下拉（2026-11-06）：

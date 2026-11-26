@@ -112,7 +112,7 @@ body:not([data-liuli-video-wallpaper]) #liuli-video-layer { visibility: hidden; 
 body[data-liuli-video-wallpaper] #app::before { background-image: none !important; }
 body[data-liuli-video-wallpaper] #app > .global-container { position: relative; z-index: 1; }
 body[data-liuli-av] #liuli-video-layer,
-body[data-hash^='#/mini-fishing'] #liuli-video-layer { display: none !important; }
+body:is([data-hash^='#/mini-fishing'], [window-name^='MiniFishing'], [data-liuli-mini-fishing], [data-hash^='#/toast-msg'], [data-hash^='#/tray-notification']) #liuli-video-layer { display: none !important; }
 @media (max-width: 480px) {
   #liuli-settings-dialog #liuli-embedded {
     padding: 12px;

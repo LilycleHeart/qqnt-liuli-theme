@@ -10,7 +10,7 @@ body[data-liuli-avatar-position='bottom']:is([data-liuli-chat-style='tim'], [dat
 }
 
 /* Reserve space before group assignment, even if the avatar is hidden in this row. */
-body[data-liuli-avatar-position='bottom']:is([data-liuli-chat-style='tim'], [data-liuli-chat-style='tg']) .chat-msg-area #ml-root .ml-item .message-container:has(> .avatar-span > .message-container__avatar) {
+body[data-liuli-avatar-position='bottom']:is([data-liuli-chat-style='tim'], [data-liuli-chat-style='tg']) .chat-msg-area #ml-root .ml-item .message-container:is([data-liuli-has-avatar], [data-liuli-avatar-g], [data-liuli-g]) {
   box-sizing: border-box;
   min-block-size: 34px !important;
   align-content: end !important;

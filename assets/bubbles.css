@@ -193,9 +193,7 @@
   ) !important;
 }
 .msg-content-container.container--self [data-liuli-quote-root='1'] [class*='name'],
-.msg-content-container.container--self [data-liuli-quote-root='1'] [class*='nick'],
-.msg-content-container.container--self [data-liuli-quote-root='1'] [class*='name'] *,
-.msg-content-container.container--self [data-liuli-quote-root='1'] [class*='nick'] * {
+.msg-content-container.container--self [data-liuli-quote-root='1'] [class*='nick'] {
   color: var(--ll-bubble-self-fg, var(--ll-on-glass)) !important;
   font-weight: 600 !important;
 }
@@ -220,8 +218,8 @@
  * ⚠️ 不能用 visibility: hidden —— 它会保留 32px 的占位，
  * 而且实测 .avatar-span 的宽度会被拉成 657~770px（跟随容器），
  * 导致整行布局错乱。display: none 才能真正让出空间。 */
-.message-container[data-liuli-g='first'] > [class*='avatar'],
-.message-container[data-liuli-g='mid'] > [class*='avatar'] {
+.message-container[data-liuli-g='first'] > .avatar-span,
+.message-container[data-liuli-g='mid'] > .avatar-span {
   display: none !important;
 }
 
@@ -277,8 +275,7 @@
  * 滚动跟随需要动滚动容器，风险大，先回到稳定布局：
  * 头像与气泡都底部对齐，组内只在最后一条显示。
  */
-.message-container > .avatar-span,
-.message-container > [class*='avatar'] {
+.message-container > .avatar-span {
   position: static !important;
   align-self: end !important;
 }
@@ -308,8 +305,8 @@
 }
 
 /* 头像单独且没有被隐藏时，保证它在行内可见 */
-.message-container[data-liuli-g='last'] > [class*='avatar'],
-.message-container[data-liuli-g='single'] > [class*='avatar'] {
+.message-container[data-liuli-g='last'] > .avatar-span,
+.message-container[data-liuli-g='single'] > .avatar-span {
   display: flex !important;
   align-self: end !important;
   position: static !important;
@@ -408,11 +405,11 @@
 }
 
 /* 头像也要跟着对齐 */
-.message-container--others > [class*='avatar'] {
+.message-container--others > .avatar-span {
   justify-self: start !important;
 }
 
-.message-container--self > [class*='avatar'] {
+.message-container--self > .avatar-span {
   justify-self: end !important;
 }
 
@@ -424,32 +421,32 @@
  * 结果对方消息跑到了右侧。
  * 改用 :has() 按气泡自身的 container--self / container--others 判定。
  * ════════════════════════════════════════════════════════════ */
-.message-container:has(.msg-content-container.container--others) {
+.message-container:is(.message-container--others, [data-liuli-side='others'], :not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self'])) {
   justify-items: start !important;
 }
 
-.message-container:has(.msg-content-container.container--others) .msg-content-container {
+.message-container:is(.message-container--others, [data-liuli-side='others'], :not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self'])) .msg-content-container {
   justify-self: start !important;
   margin-left: 0 !important;
   margin-right: auto !important;
 }
 
-.message-container:has(.msg-content-container.container--self) {
+.message-container:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) {
   justify-items: end !important;
 }
 
-.message-container:has(.msg-content-container.container--self) .msg-content-container {
+.message-container:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) .msg-content-container {
   justify-self: end !important;
   margin-left: auto !important;
   margin-right: 0 !important;
 }
 
 /* 头像跟随气泡方向 */
-.message-container:has(.msg-content-container.container--others) > [class*='avatar'] {
+.message-container:is(.message-container--others, [data-liuli-side='others'], :not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self'])) > .avatar-span {
   justify-self: start !important;
 }
 
-.message-container:has(.msg-content-container.container--self) > [class*='avatar'] {
+.message-container:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) > .avatar-span {
   justify-self: end !important;
 }
 
@@ -461,11 +458,11 @@
  * 这是 QQ 自己算出来的右对齐布局，justify-items / justify-self 都改不动。
  * 只能直接重写列定义：让气泡列紧跟头像列。
  * 2026-11-10：气泡对侧要留出「头像 32 + 缝 14」= 46px，和 QQ 原生列定义里\n * calc(var(--avatar_size_2) + 8px) 那一列同一个作用。以前这一列写成 0，\n * 长链接 / 卡片消息在窄窗口里会一直铺到对侧头像底下。\n * ════════════════════════════════════════════════════════════ */
-.message-container:has(.msg-content-container.container--others) {
+.message-container:is(.message-container--others, [data-liuli-side='others'], :not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self'])) {
   grid-template-columns: 0px 32px 8px minmax(0, 1fr) 46px 0px !important;
 }
 
-.message-container:has(.msg-content-container.container--self) {
+.message-container:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) {
   grid-template-columns: 0px minmax(46px, 1fr) 8px auto 32px 0px !important;
 }
 
@@ -619,11 +616,10 @@
 }
 
 /* Set the base spacing on mount, before the group pass marks a recycled row. */
-.ml-item .message:has(> .message-native > .message-container[data-liuli-g], > .message-container[data-liuli-g]),
-.chat-msg-area .ml-item .message:has(> .message-native > .message-container > .message-content__wrapper, > .message-container > .message-content__wrapper) {
+.ml-item .message[data-liuli-msg-row] {
   padding-bottom: 0 !important;
 }
-.message-container:is([data-liuli-g], .chat-msg-area .ml-item .message > .message-container:has(> .message-content__wrapper), .chat-msg-area .ml-item .message > .message-native > .message-container:has(> .message-content__wrapper)) {
+.message-container:is([data-liuli-g], [data-liuli-msg-row], .chat-msg-area .ml-item .message > .message-container, .chat-msg-area .ml-item .message > .message-native > .message-container) {
   padding-top: 1px !important;
   padding-bottom: 1px !important;
   min-height: 0 !important;
@@ -633,7 +629,7 @@
 }
 /* QQ 的空扩展插槽仍有 4px 下边距，会撑开已隐藏的 nickname 网格行。
  * 插槽有内容时保留原生间距，不影响扩展信息和真实名称。 */
-.message-container:is([data-liuli-g], .chat-msg-area .ml-item .message > .message-container:has(> .message-content__wrapper), .chat-msg-area .ml-item .message > .message-native > .message-container:has(> .message-content__wrapper)) > .message-extra-top:empty {
+.message-container:is([data-liuli-g], [data-liuli-msg-row], .chat-msg-area .ml-item .message > .message-container, .chat-msg-area .ml-item .message > .message-native > .message-container) > .message-extra-top:empty {
   margin-bottom: 0 !important;
 }
 .message-container[data-liuli-g='first'],
@@ -690,15 +686,13 @@
 }
 
 .message-container .msg-content-container.ark-msg-content-container,
-.message-container .msg-content-container:has(.ark-view-message),
-.message-container .msg-content-container:has(.forward-msg) {
+.message-container .msg-content-container[data-liuli-card] {
   background: rgba(var(--ll-acrylic), 0.86) !important;
   border-radius: 16px !important;
   padding: 8px !important;
 }
 .message-container .msg-content-container.ark-msg-content-container::before,
-.message-container .msg-content-container:has(.ark-view-message)::before,
-.message-container .msg-content-container:has(.forward-msg)::before {
+.message-container .msg-content-container[data-liuli-card]::before {
   content: none !important;
 }
 .message-container .msg-content-container .ark-view-message,
@@ -715,10 +709,10 @@
  * "0px 989px 0px 226px" 把卡片推到最右，头像却留在左边（孤立头像）。
  * 改为：不是自己的行一律按「对方」靠左排。
  * ════════════════════════════════════════════════════════════ */
-.message-container:not(.message-container--self):not(.message-container--align-right):not(:has(.container--self)) {
+.message-container:not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self']) {
   grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-.message-container:not(.message-container--self):not(.message-container--align-right):not(:has(.container--self))
+.message-container:not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self'])
   > .message-content__wrapper {
   justify-self: start !important;
 }
@@ -748,12 +742,12 @@
  *   对方：头像与气泡之间只有 8px，尾巴 9px，尖端压进头像 1px。
  * TG 的做法是尾巴落在缝里、离头像还有几像素，这里缝统一 14px。
  * ════════════════════════════════════════════════════════════ */
-:scope .message-container:has(.msg-content-container.container--others):not(#ll) {
+:scope .message-container:is(.message-container--others, [data-liuli-side='others'], :not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self'])):not(#ll) {
   grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
 /* Native file/forward cards may have no .msg-content-container. Reserve the
  * same avatar column even when QQ hides a repeated avatar in those rows. */
-:scope .message-container:is(.message-container--self, .message-container--align-right, :has(.msg-content-container.container--self)):not(#ll) {
+:scope .message-container:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']):not(#ll) {
   grid-template-columns: 0px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 
@@ -897,11 +891,11 @@
  * 未勾选的圈原本只有 20% 透明度的描边，压在壁纸上几乎看不见；
  * 选中的行加一层主色淡底，一眼看出选了哪些。
  * ════════════════════════════════════════════════════════════ */
-:scope .message-container:has(.msg-content-container.container--others):has(.msg-picker):not(#ll),
-:scope .message-container:not(.message-container--self):not(.message-container--align-right):not(:has(.container--self)):has(.msg-picker):not(#ll) {
+:scope .message-container:is(.message-container--others, [data-liuli-side='others'], :not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self']))[data-liuli-picker]:not(#ll),
+:scope .message-container:not(.message-container--self):not(.message-container--align-right):not([data-liuli-side='self'])[data-liuli-picker]:not(#ll) {
   grid-template-columns: 28px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-:scope .message-container:is(.message-container--self, .message-container--align-right, :has(.msg-content-container.container--self)):has(.msg-picker):not(#ll) {
+:scope .message-container:is(.message-container--self, .message-container--align-right, [data-liuli-side='self'])[data-liuli-picker]:not(#ll) {
   grid-template-columns: 28px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 .message-container .msg-picker {
@@ -911,15 +905,12 @@
   background: rgba(var(--ll-acrylic), 0.72) !important;
   border-color: rgba(var(--ll-on-glass-rgb), 0.5) !important;
 }
-.ml-item:has(.msg-picker.is-checked) > .message {
+.ml-item[data-liuli-picker-checked] > .message {
   background: rgba(var(--ll-brand-rgb), 0.12) !important;
   border-radius: 14px !important;
 }
 
-/* #47：纯图片可以单独隐藏昵称/头衔，正文仍保留完整图片与头像。 */
-:scope[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] > .user-name {
-  display: none !important;
-}
+/* 保留开启隐藏昵称时纯图片原有的气泡内边距。 */
 :scope[data-liuli-hide-image-names] .msg-content-container[data-liuli-image-only] {
   padding: 3px !important;
 }
@@ -929,7 +920,7 @@
 
 } /* 非原版气泡外观 */
 
-/* 显式设置独立于气泡风格：原版仍可调字体、宽度和纯图片昵称。 */
+/* 显式设置独立于气泡风格：原版仍可调字体、宽度和非文字消息昵称。 */
 /* 消息正文、昵称、头衔分别调节；昵称不参与气泡的横向固有宽度计算。 */
 body .message-container .msg-content-container .message-content,
 body .message-container .msg-content-container .text-element,
@@ -945,6 +936,17 @@ body .message-container .msg-content-container > .user-name {
   font-size: var(--ll-name-font-size, 12px) !important;
   line-height: 1.4 !important;
   gap: 5px !important;
+}
+body:is([data-liuli-chat-style='tg'], [data-liuli-chat-style='tim']) .message-container .msg-content-container > .user-name {
+  line-height: 1.2 !important;
+}
+/* Let the line boxes provide spacing in a two-row bubble. Preserve the
+ * flex gap between content elements when the bubble has additional siblings. */
+body:is([data-liuli-chat-style='tg'], [data-liuli-chat-style='tim'][data-liuli-tim-sender-position='inside']) .message-container .msg-content-container > .user-name[data-liuli-name-before] {
+  margin-bottom: 0 !important;
+}
+body:is([data-liuli-chat-style='tg'], [data-liuli-chat-style='tim'][data-liuli-tim-sender-position='inside']) .message-container .msg-content-container[data-liuli-name-only-content] {
+  row-gap: 0 !important;
 }
 body .message-container .msg-content-container > .user-name > .text-ellipsis {
   min-width: 0 !important;
@@ -979,22 +981,22 @@ body .message-container .msg-content-container > .user-name .q-tag {
   --ll-tim-inner-round: calc(4px * var(--ll-bubble-scale, 1));
   --ll-tim-radius: var(--ll-tim-round);
 }
-:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='first']:has(.container--self) {
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='first']:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) {
   --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-inner-round) var(--ll-tim-round);
 }
-:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='mid']:has(.container--self) {
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='mid']:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) {
   --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-inner-round) var(--ll-tim-inner-round) var(--ll-tim-round);
 }
-:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='last']:has(.container--self) {
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='last']:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) {
   --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-inner-round) var(--ll-tim-round) var(--ll-tim-round);
 }
-:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='first']:has(.container--others) {
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='first']:is(.message-container--others, [data-liuli-side='others']) {
   --ll-tim-radius: var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-inner-round);
 }
-:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='mid']:has(.container--others) {
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='mid']:is(.message-container--others, [data-liuli-side='others']) {
   --ll-tim-radius: var(--ll-tim-inner-round) var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-inner-round);
 }
-:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='last']:has(.container--others) {
+:scope[data-liuli-chat-style='tim'] .message-container[data-liuli-g='last']:is(.message-container--others, [data-liuli-side='others']) {
   --ll-tim-radius: var(--ll-tim-inner-round) var(--ll-tim-round) var(--ll-tim-round) var(--ll-tim-round);
 }
 :scope[data-liuli-chat-style='tim'] .message-container[data-liuli-tim-text] > .message-content__wrapper > .msg-content-container:not(#ll) {
@@ -1010,10 +1012,10 @@ body .message-container .msg-content-container > .user-name .q-tag {
 }
 /* Preserve the full native grid for every group position, so hiding the
  * repeated name never moves the straight edge or avatar column. */
-:scope[data-liuli-chat-style='tim'] .message-container:has(.container--others):not(#ll) {
+:scope[data-liuli-chat-style='tim'] .message-container:is(.message-container--others, [data-liuli-side='others']):not(#ll) {
   grid-template-columns: 0px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-:scope[data-liuli-chat-style='tim'] .message-container:is(.message-container--self, .message-container--align-right, :has(.container--self)):not(#ll) {
+:scope[data-liuli-chat-style='tim'] .message-container:is(.message-container--self, .message-container--align-right, :is(.message-container--self, .message-container--align-right, [data-liuli-side='self'])):not(#ll) {
   grid-template-columns: 0px minmax(46px, 1fr) 8px auto 14px 32px !important;
 }
 :scope[data-liuli-chat-style='tim'] .message-container .msg-content-container:is(.mix-message__container--pic, .mix-message__container--image, .mix-message__container--market-face, .mix-message__container--lottie-face, .markdown-message__container--lottie-face):not(.container--personalization):not(#ll) {
@@ -1023,6 +1025,11 @@ body .message-container .msg-content-container > .user-name .q-tag {
 :scope[data-liuli-chat-style='tim'] .message-container > .avatar-span {
   display: block !important;
   align-self: end !important;
+}
+/* #84：转发/聊天记录弹窗（#/forward/...）没有 .chat-msg-area 分组标记，仍需跟随头像位置设置 */
+:scope[data-liuli-avatar-position='top']:is([data-liuli-chat-style='tg'], [data-liuli-chat-style='tim']) .message-container > .avatar-span {
+  align-self: start !important;
+  transform: none !important;
 }
 :scope[data-liuli-chat-style='tim'] .message-container .msg-content-container:not(#ll)::before {
   content: none !important;
@@ -1045,19 +1052,19 @@ body .message-container .msg-content-container > .user-name .q-tag {
 :scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container .msg-content-container::before {
   display: none !important;
 }
-:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single']) .msg-content-container.container--others:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single'], :not([data-liuli-g])) .msg-content-container.container--others:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not([data-liuli-card]) {
   border-radius: 0 16px 16px 16px !important;
 }
-:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single']) .msg-content-container.container--self:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single'], :not([data-liuli-g])) .msg-content-container.container--self:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not([data-liuli-card]) {
   border-radius: 16px 0 16px 16px !important;
 }
-:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] .msg-content-container.container--others:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] .msg-content-container.container--others:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not([data-liuli-card]) {
   border-radius: 6px 16px 16px 16px !important;
 }
-:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] .msg-content-container.container--self:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg)) {
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container[data-liuli-g='last'] .msg-content-container.container--self:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not([data-liuli-card]) {
   border-radius: 16px 6px 16px 16px !important;
 }
-:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single']) .msg-content-container:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not(:has(.ark-view-message, .forward-msg))::before {
+:scope[data-liuli-chat-style='tg'][data-liuli-avatar-position='top'] .message-container:is([data-liuli-g='first'], [data-liuli-g='single'], :not([data-liuli-g])) .msg-content-container:not(.container--personalization):not(.ark-msg-content-container):not(.mix-message__container--pic):not(.mix-message__container--image):not([data-liuli-image-only]):not([data-liuli-card])::before {
   content: '' !important;
   display: block !important;
   position: absolute !important;
@@ -1093,8 +1100,7 @@ body .message-container .msg-content-container > .user-name .q-tag {
   font-size: var(--ll-title-font-size, 10px) !important;
   line-height: 1.4 !important;
 }
-:scope[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container--self > .user-name,
-:scope[data-liuli-hide-image-names] .message-container[data-liuli-image-only] > .user-name {
+:scope[data-liuli-chat-style]:not([data-liuli-chat-style='tg']) .message-container--self > .user-name {
   display: none !important;
 }
 
@@ -1169,7 +1175,7 @@ body .message-container .msg-content-container:is(.container--self, .container--
   --icon_primary: var(--ll-chat-fg);
   --icon_secondary: var(--ll-chat-fg-2);
 }
-body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not([data-liuli-image-only]):not([data-liuli-video-only]):not(.ark-msg-content-container):not(:has(.ark-view-message, .forward-msg, .market-face-element, [class*='lottie'])):not(#ll) {
+body .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not([data-liuli-image-only]):not([data-liuli-video-only]):not(.ark-msg-content-container):not([data-liuli-non-bubble]):not(#ll) {
   background: var(--ll-chat-bg) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -1203,7 +1209,7 @@ body .message-container .msg-content-container:not(.container--personalization) 
   color: var(--ll-chat-link, inherit) !important;
 }
 /* Card surfaces match TG without borrowing its corner/padding layout. */
-body .message-container .msg-content-container:is(.container--self, .container--others):is(.ark-msg-content-container, :has(.ark-view-message, .forward-msg)):not(.container--personalization):not(#ll) {
+body .message-container .msg-content-container:is(.container--self, .container--others):is(.ark-msg-content-container, [data-liuli-card]):not(.container--personalization):not(#ll) {
   background: var(--ll-chat-bg) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -1214,7 +1220,7 @@ body .message-container .msg-content-container:is(.container--self, .container--
 }
 /* Unsupported native Ark previews still draw their own host/guest bubble.
  * Keep one sender-role surface, including when that surface is translucent. */
-body .message-container .msg-content-container:is(.container--self, .container--others):is(.ark-msg-content-container, :has(.ark-view-message)):not(.container--personalization) .ark-view-message_not-support {
+body .message-container .msg-content-container:is(.container--self, .container--others):is(.ark-msg-content-container, [data-liuli-card]):not(.container--personalization) .ark-view-message_not-support {
   background: transparent !important;
   color: var(--ll-chat-fg) !important;
 }
@@ -1232,7 +1238,7 @@ body .chat-msg-area .message-container .forward-msg {
   color: var(--ll-forward-fg) !important;
   text-shadow: none !important;
 }
-body .chat-msg-area .message-container:is(.message-container--self, .message-container--align-right, :has(.msg-content-container.container--self)) .forward-msg {
+body .chat-msg-area .message-container:is(.message-container--self, .message-container--align-right, [data-liuli-side='self']) .forward-msg {
   --ll-forward-bg: var(--ll-bubble-self, color-mix(in srgb, rgb(var(--ll-brand-rgb)) 34%, rgb(var(--ll-acrylic))));
   --ll-forward-fg: var(--ll-bubble-self-fg, var(--ll-chat-surface-fg));
   --ll-forward-fg-2: var(--ll-forward-fg);
@@ -1244,7 +1250,7 @@ body .chat-msg-area .message-container .message-content__wrapper > .forward-msg 
   box-shadow: 0 1px 2px rgba(var(--ll-shadow-rgb), 0.16) !important;
   border: none !important;
 }
-body .chat-msg-area .message-container .msg-content-container:has(.forward-msg):not(.container--personalization):not(#ll) {
+body .chat-msg-area .message-container .msg-content-container[data-liuli-card]:not(.container--personalization):not(#ll) {
   background: var(--ll-chat-bg) !important;
 }
 body .chat-msg-area .message-container .msg-content-container .forward-msg {
@@ -1259,8 +1265,8 @@ body .chat-msg-area .message-container .forward-msg :is(.count, [class*='footer'
 }
 /* Hide only the outer message's sender metadata. Names quoted inside the
  * native history preview are part of the card content and remain visible. */
-body .chat-msg-area .message-container:has(> .message-content__wrapper .forward-msg) > .user-name,
-body .chat-msg-area .message-container > .message-content__wrapper > .msg-content-container:has(.forward-msg) > .user-name {
+body .chat-msg-area .message-container[data-liuli-forward] > .user-name,
+body .chat-msg-area .message-container[data-liuli-forward] > .message-content__wrapper > .msg-content-container > .user-name {
   display: none !important;
 }
 
@@ -1297,7 +1303,10 @@ body[data-liuli-chat-style='classic'] .message-container > .user-name {
 body[data-liuli-chat-style='classic'] .message-container > .user-name .q-tag {
   font-size: var(--ll-title-font-size, 10px) !important;
 }
-body[data-liuli-hide-image-names] .message-container[data-liuli-image-only] > .user-name {
+/* #47：只隐藏本行的发送者，不匹配引用或卡片内部的名称。 */
+body[data-liuli-hide-image-names] .message-container[data-liuli-media-only] > .user-name,
+body[data-liuli-hide-image-names] .message-container[data-liuli-media-only] > .message-content__wrapper > .msg-content-container > .user-name,
+body[data-liuli-hide-image-names] .message-container[data-liuli-media-only] > .msg-content-container > .user-name {
   display: none !important;
 }
 
@@ -1315,7 +1324,7 @@ body .chat-msg-area .message-content__wrapper > .forward-msg {
   box-sizing: border-box !important;
   min-width: 0 !important;
 }
-body[data-liuli-scaled-bubbles] .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not([data-liuli-image-only]):not([data-liuli-video-only]):not(.ark-msg-content-container):not(:has(.ark-view-message, .forward-msg, .market-face-element, [class*='lottie'])):not(#ll) {
+body[data-liuli-scaled-bubbles] .message-container .msg-content-container:is(.container--self, .container--others):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not([data-liuli-image-only]):not([data-liuli-video-only]):not(.ark-msg-content-container):not([data-liuli-non-bubble]):not(#ll) {
   padding: calc(var(--ll-bubble-padding-y) * var(--ll-bubble-scale, 1)) calc(var(--ll-bubble-padding-x) * var(--ll-bubble-scale, 1)) !important;
 }
 
@@ -1355,10 +1364,10 @@ body .chat-msg-area .message-container.ptt-message:not(#ll) {
 body .chat-msg-area .message-container.ptt-message.message-container--self:not(#ll) {
   grid-template-columns: 0px 46px 8px minmax(0, 1fr) 14px 32px !important;
 }
-body .chat-msg-area .message-container.ptt-message:has(.msg-picker):not(#ll) {
+body .chat-msg-area .message-container.ptt-message[data-liuli-picker]:not(#ll) {
   grid-template-columns: 28px 32px 14px minmax(0, 1fr) 46px 0px !important;
 }
-body .chat-msg-area .message-container.ptt-message.message-container--self:has(.msg-picker):not(#ll) {
+body .chat-msg-area .message-container.ptt-message.message-container--self[data-liuli-picker]:not(#ll) {
   grid-template-columns: 28px 46px 8px minmax(0, 1fr) 14px 32px !important;
 }
 body .chat-msg-area .message-container.ptt-message > .message-content__wrapper {
@@ -1647,44 +1656,30 @@ body .chat-msg-area .message-container .user-name :is(.q-tag, .user-label, .grou
   color: inherit !important;
 }
 
-/* ════════════════════════════════════════════════════════════
- * 自己消息的文字对齐（设置 → 自己消息的文字对齐）
- * ------------------------------------------------------------
- * 背景：QQ 的气泡宽度跟着内容收缩（实测同一条会话里 782 / 1282 / 126 / 98px），
- * 多行文本按最长行定宽，短行就贴在气泡右侧 —— 连续代码、表格、日志这类
- * 等宽内容看起来参差不齐（用户反馈）。
- *
- * 要让气泡撑满，必须同时改三层（少一层都不行，逐层实测过）：
- *   1. 消息行 grid 的第 4 列：auto → minmax(0, 1fr)，否则列宽由内容决定；
- *   2. .message-content__wrapper：它是 display:flex，默认收缩到内容宽度，
- *      要 width: 100% 才会占满那一列；
- *   3. .msg-content-container 自身：justify-self: end + flex: 0 1 auto
- *      会继续收缩到内容宽度，也要 width: 100%。
- * 只改 1 时气泡仍是 126px；改 1+2 时 wrapper 到 568px 但气泡仍 126px；
- * 三层齐改后气泡 568px、正文左对齐。
- *
- * 注意 text-align 单独没用：.msg-content-container 是 display:flex，
- * flex 容器的 text-align 不继承给子元素，正文一直是左对齐的
- * （实测 .text-element 的 computed text-align 恒为 left）。
- *
- * 三条规则都必须放在文件末尾、@scope 块外面，并且带 :not(#ll)：
- *   - 本文件主体包在 @scope (body:not([data-liuli-chat-style='classic'])) 里，
- *     @scope 只匹配 scope 根的后代，body 自身不是后代 —— 带 body[data-…]
- *     前缀的规则写在 @scope 内不生效（实测：规则在样式表里、
- *     选择器 matches() 为 true，但计算值不变；换 :scope 前缀同样不匹配）；
- *   - @scope 内的规则带隐式 :scope 前缀，特异性比 scope 外的高，
- *     所以这里用 :not(#ll) 把特异性提到 ID 级才压得住。
- * 只作用于纯文本气泡，媒体 / 卡片 / 语音保持原宽度。
- * ════════════════════════════════════════════════════════════ */
-body[data-liuli-self-text-align='left'] .message-container:has(.msg-content-container.container--self):not(#ll) {
-  grid-template-columns: 0px minmax(46px, 1fr) 8px minmax(0, 1fr) 14px 32px !important;
+/* 只对齐自己消息的正文和原生卡片中的文字，保留气泡与媒体的排版。 */
+body[data-liuli-self-text-align='left'] {
+  --ll-self-text-align: left;
 }
-body[data-liuli-self-text-align='left'] .message-container:has(.msg-content-container.container--self):not(#ll) > .message-content__wrapper {
-  width: 100% !important;
+body[data-liuli-self-text-align] :is(.message-container, .message-container > .message-content__wrapper)
+  > .msg-content-container.container--self {
+  & > .message-content[data-liuli-has-text],
+  & > .markdown-message__inner,
+  & .reply-element > .reply-content,
+  & .link-info :is(.link-info__title, .link-info__desc),
+  & .forward-msg > :is(.fwd-title, .fwd-content),
+  & .normal-file .file-name,
+  & .ptt-element__bottom-area-text {
+    text-align: var(--ll-self-text-align, right) !important;
+  }
 }
-body[data-liuli-self-text-align='left'] .message-container .msg-content-container.container--self:not(#ll):not(.container--personalization):not(.mix-message__container--pic):not(.mix-message__container--image):not(.mix-message__container--market-face):not(.mix-message__container--lottie-face):not(.markdown-message__container--lottie-face):not(.ark-msg-content-container):not([data-liuli-image-only]):not([data-liuli-video-only]):not(:has(.ark-view-message, .forward-msg, .file-element, .pic-element, .market-face-element, .video-element, [class*='lottie'])) {
-  width: 100% !important;
-}
-body[data-liuli-self-text-align='left'] .message-container .msg-content-container.container--self :is(.text-element, .text-normal, .message-content) {
-  text-align: left !important;
+body[data-liuli-self-text-align] :is(
+  .message-container--self,
+  .message-container--align-right:not(.message-container--others)
+) {
+  & > .message-content__wrapper > .forward-msg > :is(.fwd-title, .fwd-content),
+  & > .forward-msg > :is(.fwd-title, .fwd-content),
+  & > .message-content__wrapper > .file-message--content .normal-file .file-name,
+  & > .file-message--content .normal-file .file-name {
+    text-align: var(--ll-self-text-align, right) !important;
+  }
 }

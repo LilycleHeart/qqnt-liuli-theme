@@ -3,7 +3,7 @@ body[data-liuli-scroll-time] .chat-msg-area :is(.message__timestamp, .message-co
   display: none !important;
 }
 /* A standalone divider has no message body; remove its wrapper spacing too. */
-body[data-liuli-scroll-time] .chat-msg-area .ml-item > .message:has(> .message__timestamp:only-child) {
+body[data-liuli-scroll-time] .chat-msg-area .ml-item > .message[data-liuli-ts-only] {
   padding-block: 0 !important;
   margin-block: 0 !important;
   min-height: 0 !important;

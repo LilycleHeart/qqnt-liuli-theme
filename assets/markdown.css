@@ -99,7 +99,7 @@ body[data-liuli-dark='0'] .ll-inline-md .text-normal .ll-spoiler {
    * 别人的消息头像在左，自己的消息头像在右。 */
   transform-origin: 0 100%;
 }
-.ml-item.ll-enter:has(.message-container--self) {
+.ml-item.ll-enter.ll-enter-self {
   transform-origin: 100% 100%;
 }
 @media (prefers-reduced-motion: reduce) {

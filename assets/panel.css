@@ -39,7 +39,8 @@
 }
 
 /* ── 渐进展开：原生 details 保留键盘语义和内部控件实例 ── */
-.liuli-mode-row[hidden] {
+.liuli-mode-row[hidden],
+.liuli-field__hint[hidden] {
   display: none !important;
 }
 .liuli-page-guide {
